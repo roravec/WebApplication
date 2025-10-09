@@ -17,6 +17,7 @@ class SubApplication
     public $languageCode = 'en';
     public $userAuth = false;
     public $uriSegments = array();
+    public $headers = array();
     public $rootApplication = null;
 
     public function __construct($rootApplication)
@@ -46,6 +47,22 @@ class Application
 		
         /** Resolves Application to load and its DB prefix (internally) */
 		$this->resolveApp($appConfig);
+        if ($this->subApplication->file === '')
+        {
+            http_response_code(500);
+            echo "<br>Subapplication file is not defined.";
+            return;
+        }
+
+        /* Enable debugging */
+        if ($this->getHeader('debug') == 'true') 
+        {
+            $this->debug = true;
+
+            /* Print subApplication as array */
+            echo "<br>SubApplication: ";
+            print_r($this->subApplication);
+        }
 
         if ($this->subApplication->userAuth)
         {
@@ -54,6 +71,29 @@ class Application
         $router = new HttpRouter($this->subApplication);
         echo $router->handle($_SERVER['REQUEST_METHOD']);
 	}
+
+    /**
+     * Summary of getUriSegment
+     * @param mixed $index
+     * @return string|null
+     */
+    public function getUriSegment($index) : ?string
+    {
+        return $this->subApplication->uriSegments[$index] ?? null;
+    }
+
+    public function getHeader($headerName) : ?string
+    {
+        $headerNameLower = strtolower($headerName);
+        foreach ($this->subApplication->headers as $key => $value)
+        {
+            if (strtolower($key) === $headerNameLower)
+            {
+                return $value;
+            }
+        }
+        return null;
+    }
 
 	/**
      * Detects the current page path segments from the request URI.
@@ -140,6 +180,7 @@ class Application
             $this->subApplication->path = /*require*/ __DIR__ .'/../applications/'. $this->subApplication->folder;
             $this->subApplication->userAuth = $appConfig[$path]['userEnable'] ?? $this->subApplication->userAuth;
             $this->subApplication->uriSegments = $uriSegments;
+            $this->subApplication->headers = getallheaders();
         }
         else
         {
@@ -158,6 +199,7 @@ class Application
             echo "<br>applicationClass: " . $this->subApplication->class;
             echo "<br>applicationPath: " . $this->subApplication->path;
             echo "<br>appUserEnable: " . $this->subApplication->userAuth;
+            echo "<br>appHeaders: ";print_r($this->subApplication->headers);
             echo "<br><br>";
         }
     }
