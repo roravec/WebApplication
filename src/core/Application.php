@@ -52,7 +52,7 @@ class Application
             $this->user = new UserAuth($this);
         }
         $router = new HttpRouter($this->subApplication);
-        $router->handle($_SERVER['REQUEST_METHOD']);
+        echo $router->handle($_SERVER['REQUEST_METHOD']);
 	}
 
 	/**
@@ -83,6 +83,7 @@ class Application
         {
             echo "<br><strong>DetectPage:</strong>";
             echo "<br>HTTP_REFERER: " . ($_SERVER['HTTP_REFERER'] ?? '') . "<br>";
+            echo "REQUEST_METHOD: " . ($_SERVER['REQUEST_METHOD'] ?? '') . "<br>";
             echo "PHP_SELF: " . ($_SERVER['PHP_SELF'] ?? '') . "<br>";
             echo "SERVER_NAME: " . ($_SERVER['SERVER_NAME'] ?? '') . "<br>";
             echo "HTTP_HOST: " . ($_SERVER['HTTP_HOST'] ?? '') . "<br>";
@@ -106,19 +107,26 @@ class Application
         $uriSegments = $this->detectPage(); // e.g. ['localhost', 'foo']
         $host = $_SERVER['SERVER_NAME'] ?? 'localhost';
         $path = '';
-
+        
         if ($host !== 'localhost')
         {
             // Use domain name directly (e.g. erma.sk -> erma)
             $domainParts = explode('.', $host);
             $path = $domainParts[0]; // 'erma' from 'erma.sk'
+
+            $hostParts = explode('.', $host);
+            $path = count($hostParts) > 2 ? $hostParts[0] : $hostParts[0]; // 'branchmanager' from 'branchmanager.erma.sk'
         }
         else
         {
             // Use first segment after localhost (e.g. localhost/app/foo -> 'app')
             $path = $uriSegments[0] ?? $this->subApplication->name;
-        }
 
+            $host = $_SERVER['SERVER_NAME'] ?? 'localhost';
+            $hostParts = explode('.', $host);
+            $path = count($hostParts) > 2 ? $hostParts[0] : $hostParts[0]; // 'branchmanager' from 'branchmanager.erma.sk'
+        }
+        error_log("Resolved app path: " . $path);
         //print_r($appConfig);
         if (isset($appConfig[$path]))
         {

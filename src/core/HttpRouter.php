@@ -8,15 +8,23 @@ class HttpRouter {
         $this->subApp = $subApp;
     }
 
-    public function handle($method)
+    public function handle($method): string
     {
+        $method = $_SERVER['REQUEST_METHOD'];
+
+        // Optional: handle method override headers (e.g. X-HTTP-Method-Override)
+        if (isset($_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE']))
+        {
+            $method = $_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'];
+        }
+
         $fullPath = $this->subApp->path . DIRECTORY_SEPARATOR . $this->subApp->file;
 
         if (!file_exists($fullPath))
         {
             http_response_code(500);
-            echo "Subapplication file not found: $fullPath";
-            return;
+            echo "<br>Subapplication file not found: $fullPath";
+            return "Subapplication file not found: $fullPath";
         }
 
         require_once $fullPath;
@@ -24,8 +32,8 @@ class HttpRouter {
         if (!class_exists($this->subApp->class))
         {
             http_response_code(500);
-            echo "Subapplication class not found: {$this->subApp->class}";
-            return;
+            echo "<br>Subapplication class not found: {$this->subApp->class}";
+            return "Subapplication class not found: {$this->subApp->class}";
         }
 
         $instance = new $this->subApp->class();
@@ -33,26 +41,26 @@ class HttpRouter {
         if (!($instance instanceof IWebApp))
         {
             http_response_code(500);
-            echo "Class does not implement IWebApp";
-            return;
+            echo "<br>Class does not implement IWebApp";
+            return "Class does not implement IWebApp";
         }
 
         $instance->name = $this->subApp->name;
 
-        $this->dispatch($instance, $method);
+        return $this->dispatch($instance, $method);
     }
 
-    private function dispatch(IWebApp $app, $method)
+    private function dispatch(IWebApp $app, $method): string
     {
         switch (strtoupper($method))
         {
-            case 'GET': $app->get($this->subApp->rootApplication); break;
-            case 'POST': $app->post($this->subApp->rootApplication); break;
-            case 'PUT': $app->put($this->subApp->rootApplication); break;
-            case 'DELETE': $app->delete($this->subApp->rootApplication); break;
+            case 'GET': return $app->get($this->subApp->rootApplication);
+            case 'POST': return $app->post($this->subApp->rootApplication);
+            case 'PUT': return $app->put($this->subApp->rootApplication);
+            case 'DELETE': return $app->delete($this->subApp->rootApplication);
             default:
                 http_response_code(405);
-                echo "Method Not Allowed";
+                return "Method Not Allowed";
         }
     }
 }
