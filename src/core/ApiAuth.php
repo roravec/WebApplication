@@ -48,6 +48,23 @@ class ApiAuth implements IAuth
         return null;
     }
 
+    public function getRefreshTokenFromHeader(): ?string
+    {
+        $headers = getallheaders();
+        if (isset($headers['X-Refresh-Token']))
+        {
+            return $headers['X-Refresh-Token'];
+        }
+        return null;
+    }
+
+    /**
+     * Creates a new access token and refresh token for the authenticated client.
+     * @param mixed $identifier
+     * @param mixed $secret
+     * @param mixed $storeLogin
+     * @return bool
+     */
     public function login($identifier, $secret, $storeLogin=false) : bool
     {
         $this->client->login($identifier, $secret);
@@ -61,66 +78,95 @@ class ApiAuth implements IAuth
         }
         return false;
 
-        // $accessToken = $client->generateAccessToken($jwtSecret);
-        // $refreshToken = $client->generateRefreshToken()->token;
-
         // echo json_encode([
         //     'access_token' => $accessToken,
         //     'refresh_token' => $refreshToken,
         //     'expires_in' => 3600
         // ]);
     }
+
+    /**
+     * Refreshes the access token for the authenticated client.
+     * @return bool
+     */
     public function refresh(): bool
     {
-        if (!$this->client->getLoginVerified()) {
+        if (!$this->client->getLoginVerified())
+        {
+            return false;
+        }
+        // read refreshToken from request (e.g. Authorization header or body)
+        // validate refreshToken
+        $refreshToken = $this->getRefreshTokenFromHeader();
+
+        // TODO
+        if ($refreshToken === null || !JwtUtils::isValid($refreshToken, $this->rootApplication->getJwtSecret()))
+        {
             return false;
         }
         $this->saveAuthorization($this->client->id, $this->client->identifier);
         return true;
 
-        // $accessToken = $client->generateAccessToken($jwtSecret);
         // echo json_encode([
         //     'access_token' => $newAccessToken,
         //     'refresh_token' => $newRefreshToken,
         //     'expires_in' => 3600
         // ]);
     }
+
+    /**
+     * Revokes the token for future use.
+     * @return bool
+     */
     public function logout(): bool
     {
         // For API auth, logout is typically handled client-side by deleting the token.
-        // Optionally, you could implement token revocation here.
+        // TODO: Implement token revocation.
         return true;
     }
     public function isLoggedIn(): bool
     {
-        $cookieName = 'ApiAuth_' . $this->rootApplication->getApplicationName();
-        if (isset($_COOKIE[$cookieName]))
-        {
-            $token = $_COOKIE[$cookieName];
-            $payload = JwtHelper::validateToken($token, $this->rootApplication->getJwtSecret());
-            if ($payload !== null &&
-                isset($payload['userId']) &&
-                isset($payload['username']) &&
-                isset($payload['appid']) &&
-                $payload['appid'] === $this->rootApplication->getApplicationName())
-            {
-                // Token is valid, restore client state
-                $this->client->manualLogin(
-                    $payload['userId'],
-                    $payload['username'],
-                    '', // Name not stored in token
-                    0,  // Rights not stored in token
-                    0,  // Type not stored in token
-                    0   // Status not stored in token
-                );
-                return true;
-            }
-        }
-        return false;
+        return $this->client->getLoginVerified();
     }
 
-    public function saveAuthorization($userID, $login): void
+    /**
+     * Saves login state by generating JWT access and refresh tokens.
+     * @param int $userID
+     * @param string $identifier
+     * @return void
+     */
+    public function saveAuthorization($userID, $identifier): bool
     {
+        // TODO
+
+    }
+
+    private $accessToken = null;
+    /** Returns a JWT access token for the authenticated client.
+     * @return string|null The JWT access token, or null if not logged in.
+     */
+    public function getAccessToken(): ?string
+    {
+        if ($this->accessToken === null && $this->client->getLoginVerified())
+        {
+            $this->accessToken = $this->client->generateAccessToken($this->rootApplication->getJwtSecret());
+        }
+        return $this->accessToken;
+    }
+
+    private $refreshToken = null;
+    /** Returns a refresh token for the authenticated client.
+     * @return string|null The refresh token, or null if not logged in.
+     */
+    public function getRefreshToken(): ?string
+    {
+        if ($this->refreshToken === null && $this->client->getLoginVerified())
+        {
+            // generates and also stores refresh token in database
+            $this->refreshToken = $this->client->generateRefreshToken();
+            return $this->refreshToken->token;
+        }
+        return $this->refreshToken;
     }
 }
 

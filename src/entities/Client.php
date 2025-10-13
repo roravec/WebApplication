@@ -405,7 +405,7 @@ class Client extends BaseEntity implements ICrud
         return JwtUtils::encode($payload, $secret);
     }
 
-    /** Create a Client instance from a JWT token */
+    /** Create a Client instance from a JWT access token */
     public static function fromToken(Database $db, string $token, string $secret): ?Client
     {
         $payload = JwtUtils::decode($token, $secret);
