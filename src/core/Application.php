@@ -2,6 +2,7 @@
 require_once "Database.php";
 require_once "HttpRouter.php";
 require_once "UserAuth.php";
+require_once "ApiAuth.php";
 require_once __DIR__ . '/../interfaces/IWebApp.php';
 
 define("URL_BASE", "/");
@@ -15,7 +16,7 @@ class SubApplication
     public $file = '';
     public $class = '';
     public $languageCode = 'en';
-    public $userAuth = false;
+    public $clientAuth = 'user'; // 'user' or 'api'
     public $uriSegments = array();
     public $headers = array();
     public $rootApplication = null;
@@ -64,9 +65,22 @@ class Application
             print_r($this->subApplication);
         }
 
-        if ($this->subApplication->userAuth)
+        /*
+        Handle preauthorization
+        Webuser - restore user from session/cookies
+        API - check JWT short-access token from Authorization header
+        */
+        if ($this->subApplication->clientAuth === 'user')
         {
-            $this->user = new UserAuth($this);
+            $this->client = new UserAuth($this);
+        }
+        else if ($this->subApplication->clientAuth === 'api')
+        {
+            $this->client = new ApiAuth($this);
+        }
+        else
+        {
+            // no authentication required by the configuration
         }
         $router = new HttpRouter($this->subApplication);
         echo $router->handle($_SERVER['REQUEST_METHOD']);
@@ -178,7 +192,7 @@ class Application
             $this->subApplication->file = $appConfig[$path]['file'] ?? $this->subApplication->file;
             $this->subApplication->class = $appConfig[$path]['class'] ?? $this->subApplication->class;
             $this->subApplication->path = /*require*/ __DIR__ .'/../applications/'. $this->subApplication->folder;
-            $this->subApplication->userAuth = $appConfig[$path]['userEnable'] ?? $this->subApplication->userAuth;
+            $this->subApplication->clientAuth = $appConfig[$path]['clientAuth'] ?? $this->subApplication->clientAuth;
             $this->subApplication->uriSegments = $uriSegments;
             $this->subApplication->headers = getallheaders();
         }
@@ -198,7 +212,7 @@ class Application
             echo "<br>applicationFile: " . $this->subApplication->file;
             echo "<br>applicationClass: " . $this->subApplication->class;
             echo "<br>applicationPath: " . $this->subApplication->path;
-            echo "<br>appUserEnable: " . $this->subApplication->userAuth;
+            echo "<br>clientAuth: " . $this->subApplication->clientAuth;
             echo "<br>appHeaders: ";print_r($this->subApplication->headers);
             echo "<br><br>";
         }
@@ -268,7 +282,7 @@ class Application
         return file_exists($fullPath) ? $fullPath : null;
     }
 
-    private $user; // user authorization object
+    private $client; // client authorization object
     private $database; // database object
     private $subApplication; // subapplication object
     public $debug = true;

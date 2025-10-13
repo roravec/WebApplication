@@ -5,7 +5,7 @@ return [
         'file'  =>      'App.php',      // file name where the root class is defined
         'class'  =>     'App',          // class name (implements interface IWebApp)
         'dbPrefix' =>   'app_',         // database table prefix for the subapplication
-        'userEnable' => true,           // enable/disable user handling by the root application
+        'clientAuth' => 'api',           // 'user' or 'api' for client authentication type
     ],
     'debugEnabled' => true
 ];

@@ -1,16 +1,23 @@
 <?php
-require_once __DIR__ . '/../entities/User.php';
+require_once __DIR__ . '/JwtHelper.php';
+require_once __DIR__ . '/../interfaces/IAuth.php';
+require_once __DIR__ . '/../entities/Client.php';
 
-class UserAuth
+/**
+ * Class UserAuth
+ * 
+ * Manages user authentication using JWTs and sessions.
+ */
+class UserAuth implements IAuth
 {
     private $rootApplication = null;
-    private $user = null;
+    private $client = null;
 	public function __construct($rootApplication)
 	{
         $this->rootApplication = $rootApplication;
 
-        $this->user = new User($this->rootApplication->getDatabase());
-		$this->checkIfUserIsLoggedIn();
+        $this->client = new Client($this->rootApplication->getDatabase());
+		$this->restoreLoginState();
 	}
 
 
@@ -20,32 +27,61 @@ class UserAuth
     */
 	public function login($login, $password, $storeLogin=false) : bool
 	{
-		$this->user->login($login, $password);
-    	if ($this->user->getLoginVerified()) // user verified
+		$this->client->login($login, $password);
+    	if ($this->client->getLoginVerified()) // user verified
     	{
             session_regenerate_id(true);
-			$_SESSION['User_Id'] = $this->user->id;
-			$_SESSION['User_Login'] = $this->user->login;
-			$_SESSION['User_Name'] = $this->user->name;
+			$_SESSION['User_Id'] = $this->client->id;
+			$_SESSION['User_Login'] = $this->client->identifier;
+			$_SESSION['User_Name'] = $this->client->name;
 			$_SESSION['User_AppId'] = $this->rootApplication->getApplicationName();
-			$_SESSION['User_Rights'] = $this->user->getRights();
+			$_SESSION['User_Rights'] = $this->client->getRights();
 			if ($storeLogin)
 			{
-				$this->saveLogin($this->user->id, $this->user->login);
+				$this->saveAuthorization($this->client->id, $this->client->identifier);
 			}
 			return true;
     	}
     	$this->Logout();
     	return false;
   	}
-	private function saveLogin($userID, $login)
+
+    /**
+     * Saves login state by generating a JWT and setting it as a secure cookie.
+     * @param int $userID
+     * @param string $login
+     * @return void
+     */
+	private function saveAuthorization($userID, $login): void
 	{
+        $payload = [
+            'userId' => $userID,
+            'username' => $login,
+            'appid' => $this->rootApplication->getApplicationName(),
+            'exp' => time() + 86400 * 30
+        ];
 		// During login, generate and set a JWT as a secure cookie
-		$token = $this->generateJWT($userID, $login); // Implement your token generation logic
+		$token = JwtUtils::encode($payload, $this->getJwtSecret());
 		$cookieName = 'auth_token_' . $this->rootApplication->getApplicationName();
         setcookie($cookieName, $token, time() + 86400 * 30, "/", "", true, true);
 	}
-	private function checkIfUserIsLoggedIn()
+
+    public function refresh(): bool
+    {
+        if (!$this->client->getLoginVerified())
+        {
+            return false;
+        }
+        $this->saveAuthorization($this->client->id, $this->client->identifier);
+        return true;
+    }
+
+    /**
+     * Checks if user is logged in by verifying session or JWT token.
+     * If valid, restores user state.
+     * @return void
+     */
+	private function restoreLoginState(): void
 	{
 		if (
 			isset($_SESSION["User_Id"]) 
@@ -55,7 +91,7 @@ class UserAuth
 		&& isset($_SESSION['User_Name'])
 		)
 		{
-			$this->user->manualLogin(
+			$this->client->manualLogin(
 				$_SESSION["User_Id"],
 				$_SESSION["User_Login"],
 				$_SESSION['User_Name'],
@@ -65,21 +101,36 @@ class UserAuth
 		else if (isset($_COOKIE['auth_token'])) 
 		{
 			$token = $_COOKIE['auth_token'];
-    		$userData = $this->validateJWT($token);
+    		$userData = JwtUtils::decode($token, $this->getJwtSecret());
 			if ($userData !== null) 
 			{
 				// User is authenticated
 				// Access the user data
 				$userId = $userData['userId'];
 				$username = $userData['username'];
-				$this->user->read($userId);
-
-				$_SESSION['User_Id'] = $this->user->id;
-				$_SESSION['User_Login'] = $this->user->login;
-				$_SESSION['User_Name'] = $this->user->name;
+				$appId = $userData['appid'];
+                $expiration = $userData['exp'];
+                if ($appId !== $this->rootApplication->getApplicationName() || $expiration < time()) {
+                    // Invalid app ID or token expired
+                    return;
+                }
+				$this->client->read($userId);
+                if ($this->client->id <= 0)
+                {
+                    // User not found
+                    return;
+                }
+                else if ($this->client->status <= 0)
+                {
+                    // User inactive
+                    return;
+                }
+				$_SESSION['User_Id'] = $this->client->id;
+				$_SESSION['User_Login'] = $this->client->identifier;
+				$_SESSION['User_Name'] = $this->client->name;
 				$_SESSION['User_AppId'] = $this->rootApplication->getApplicationName();
-				$_SESSION['User_Rights'] = $this->user->getRights();
-				$this->user->manualLogin(
+				$_SESSION['User_Rights'] = $this->client->getRights();
+				$this->client->manualLogin(
 					$_SESSION["User_Id"],
 					$_SESSION["User_Login"],
 					$_SESSION['User_Name'],
@@ -96,9 +147,13 @@ class UserAuth
 			// user is not authenticated
 		}
 	}
-  	public function logout()
+    /**
+     * Destroys session and clears authentication cookies.
+     * @return void
+     */
+    public function logout(): bool
   	{
-		$this->user->logout();
+		$this->client->logout();
     	unset($_SESSION['User_Id']);
 		unset($_SESSION['User_Login']);
 		unset($_SESSION['User_Name']);
@@ -111,79 +166,26 @@ class UserAuth
 
 		// Clear the client-side token (if stored in a cookie)
 		setcookie('auth_token', '', time() - 3600, '/', '', true, true);
+        return true;
   	}
 
-  	public function isLoggedIn()
+    /**
+     * Checks if user is logged in.
+     * @return bool True if logged in, false otherwise.
+     */
+  	public function isLoggedIn(): bool
   	{
-		return $this->user->getLoginVerified();
+		return $this->client->getLoginVerified();
   	}
 
+    /**
+     * Retrieves the JWT secret from configuration.
+     * @return string The JWT secret key.
+     */
     private function getJwtSecret() : string
     {
         $config = require __DIR__ . '/../config/JwtSecret.php';
         return $config['jwt_secret'];
-    }
-
-    // Function to encode user data as a JWT
-	private function generateJWT($userId, $username) 
-	{
-		$header = json_encode(['typ' => 'JWT', 'alg' => 'HS256']);
-		$payload = json_encode([
-            'userId' => $userId,
-            'username' => $username,
-            'appid' => $this->rootApplication->getApplicationName(),
-            'exp' => time() + 60 * 60 * 24 * 30
-        ]);
-
-		// Base64 URL encode the header and payload
-		$base64UrlHeader = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($header));
-		$base64UrlPayload = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($payload));
-
-		// Create the signature using HMAC and SHA-256
-		$signature = hash_hmac('sha256', $base64UrlHeader . '.' . $base64UrlPayload, $this->getJwtSecret(), true);
-		$base64UrlSignature = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($signature));
-
-		// Combine the base64 URL encoded components to form the JWT
-		$jwt = $base64UrlHeader . '.' . $base64UrlPayload . '.' . $base64UrlSignature;
-
-		return $jwt;
-	}
-
-// Function to decode user data from a JWT
-	private function validateJWT($token): ?array
-    {
-        $parts = explode('.', $token);
-        if (count($parts) !== 3) {
-            return null; // Malformed token
-        }
-
-        list($base64UrlHeader, $base64UrlPayload, $base64UrlSignature) = $parts;
-
-        // Decode components
-        $payload = base64_decode(str_pad(strtr($base64UrlPayload, '-_', '+/'), strlen($base64UrlPayload) % 4, '=', STR_PAD_RIGHT));
-        $signature = base64_decode(str_pad(strtr($base64UrlSignature, '-_', '+/'), strlen($base64UrlSignature) % 4, '=', STR_PAD_RIGHT));
-        $expectedSignature = hash_hmac('sha256', $base64UrlHeader . '.' . $base64UrlPayload, $this->getJwtSecret(), true);
-
-        if (!hash_equals($signature, $expectedSignature)) {
-            return null; // Invalid signature
-        }
-
-        // Decode payload
-        $decodedData = json_decode($payload, true);
-        if (!is_array($decodedData)) {
-            return null; // Invalid payload
-        }
-        if ($decodedData['appid'] !== $this->rootApplication->getApplicationName())
-        {
-            return null; // Token is for a different app
-        }
-
-        // Check expiration
-        if (isset($decodedData['exp']) && time() > $decodedData['exp']) {
-            return null; // Token expired
-        }
-
-        return $decodedData;
     }
 }
 
