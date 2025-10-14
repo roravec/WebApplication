@@ -15,11 +15,16 @@ class ApiAuth implements IAuth
 	public function __construct($rootApplication)
 	{
         $this->rootApplication = $rootApplication;
-        $token = $this->getAccessTokenFromHeader();
         $this->client = new Client($this->rootApplication->getDatabase());
-        if ($token !== null)
+        $this->restoreLoginStateFromAccessToken();
+	}
+
+    public function restoreLoginStateFromAccessToken(): void
+    {
+        $accessToken = $this->getAccessTokenFromHeader();
+        if ($accessToken !== null)
         {
-            $decodedToken = JwtUtils::decode($token, $this->rootApplication->getJwtSecret());
+            $decodedToken = JwtUtils::decode($accessToken, $this->rootApplication->getJwtSecret());
 
             if ($decodedToken !== null &&
                 isset($decodedToken['sub']) &&
@@ -30,10 +35,11 @@ class ApiAuth implements IAuth
                 if ($this->client->read($decodedToken['sub']) && $this->client->status > 0)
                 {
                     $this->client->setLoginVerified(true);
+                    $this->accessToken = $accessToken;
                 }
             }
         }
-	}
+    }
 
     function getAccessTokenFromHeader(): ?string
     {
@@ -72,7 +78,7 @@ class ApiAuth implements IAuth
         {
             if ($storeLogin)
             {
-                $this->saveAuthorization($this->client->id, $this->client->identifier);
+                $this->saveAuthorization();
             }
             return true;
         }
@@ -91,21 +97,22 @@ class ApiAuth implements IAuth
      */
     public function refresh(): bool
     {
-        if (!$this->client->getLoginVerified())
-        {
-            return false;
-        }
         // read refreshToken from request (e.g. Authorization header or body)
         // validate refreshToken
         $refreshToken = $this->getRefreshTokenFromHeader();
-
-        // TODO
-        if ($refreshToken === null || !JwtUtils::isValid($refreshToken, $this->rootApplication->getJwtSecret()))
+        $tokenFromDb = Token::validateRefreshToken($this->rootApplication->getDatabase(), $refreshToken);
+        if ($tokenFromDb === null || $tokenFromDb->userid !== $this->client->id)
         {
             return false;
         }
-        $this->saveAuthorization($this->client->id, $this->client->identifier);
-        return true;
+        else
+        {
+            $tokenFromDb->revoked = 1;
+            $tokenFromDb->update();
+            $this->client = Client::readById($this->rootApplication->getDatabase(), $tokenFromDb->userid);
+            $this->saveAuthorization();
+            return true;
+        }
 
         // echo json_encode([
         //     'access_token' => $newAccessToken,
@@ -120,8 +127,16 @@ class ApiAuth implements IAuth
      */
     public function logout(): bool
     {
-        // For API auth, logout is typically handled client-side by deleting the token.
-        // TODO: Implement token revocation.
+        // revoke provided refresh token in database
+        if ($this->client->getLoginVerified())
+        {
+            $refreshToken = $this->getRefreshTokenFromHeader();
+            if ($refreshToken !== null)
+            {
+                Token::revokeByValue($this->rootApplication->getDatabase(), $refreshToken, $this->client->id);
+            }
+            $this->client->setLoginVerified(false);
+        }
         return true;
     }
     public function isLoggedIn(): bool
@@ -130,28 +145,29 @@ class ApiAuth implements IAuth
     }
 
     /**
-     * Saves login state by generating JWT access and refresh tokens.
-     * @param int $userID
-     * @param string $identifier
+     * Saves client's login state by generating JWT access and refresh tokens.
      * @return void
      */
-    public function saveAuthorization($userID, $identifier): bool
+    public function saveAuthorization(): void
     {
-        // TODO
-
+        // Generate new access token
+        $this->accessToken = $this->client->generateAccessToken($this->rootApplication->getJwtSecret());
+        // Generate new refresh token and store in database
+        $this->refreshToken = $this->client->generateRefreshToken();
+        $this->client->setLoginVerified(true);
     }
 
     private $accessToken = null;
-    /** Returns a JWT access token for the authenticated client.
-     * @return string|null The JWT access token, or null if not logged in.
+    /** Returns an access token for the authenticated client.
+     * @return string|null The access token, or null if not logged in.
      */
     public function getAccessToken(): ?string
     {
-        if ($this->accessToken === null && $this->client->getLoginVerified())
+        if ($this->accessToken !== null && $this->client->getLoginVerified())
         {
-            $this->accessToken = $this->client->generateAccessToken($this->rootApplication->getJwtSecret());
+            return $this->accessToken;
         }
-        return $this->accessToken;
+        return null;
     }
 
     private $refreshToken = null;
@@ -160,13 +176,11 @@ class ApiAuth implements IAuth
      */
     public function getRefreshToken(): ?string
     {
-        if ($this->refreshToken === null && $this->client->getLoginVerified())
+        if ($this->refreshToken !== null && $this->client->getLoginVerified())
         {
-            // generates and also stores refresh token in database
-            $this->refreshToken = $this->client->generateRefreshToken();
-            return $this->refreshToken->token;
+            return $this->refreshToken;
         }
-        return $this->refreshToken;
+        return null;
     }
 }
 

@@ -106,6 +106,12 @@ class Token extends BaseEntity implements ICrud
         return $result !== false;
     }
 
+    /**
+     * Validates a refresh token and returns the corresponding Token object if valid.
+     * @param Database $db
+     * @param string $tokenValue
+     * @return Token|null
+     */
     public static function validateRefreshToken(Database $db, string $tokenValue): ?Token
     {
         $query = '
@@ -129,6 +135,13 @@ class Token extends BaseEntity implements ICrud
         return null;
     }
 
+    /**
+     * Revokes a token by its value. Optionally, can restrict revocation to a specific user.
+     * @param Database $db
+     * @param string $tokenValue
+     * @param int $userId
+     * @return bool
+     */
     public static function revokeByValue(Database $db, string $tokenValue, int $userId = 0): bool
     {
         $query = '
