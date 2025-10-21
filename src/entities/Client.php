@@ -74,9 +74,9 @@ class Client extends BaseEntity implements ICrud
         }
         $params = [intval($this->id)];
         $result = $this->database->query($query, $params);
-        if ($this->database->getNumRows($result) > 0)
+        if ($result && count($result) > 0)
         {
-            $row = $result->fetch_assoc();
+            $row = $result[0];
             $this->identifier = $row['identifier'];
             $this->secret_hash = $row['secret_hash'];
             $this->name = $row['name'];
@@ -85,8 +85,9 @@ class Client extends BaseEntity implements ICrud
             $this->type = $row['type'];
             $this->last_seen = $row['last_seen'];
             $this->created_at = $row['created_at'];
+            return true;
         }
-        return $this->database->getNumRows($result) > 0;
+        return false;
 	}
 
     /**
@@ -274,7 +275,7 @@ class Client extends BaseEntity implements ICrud
         $result = $database->query($query);
         $users = [];
         if ($result) {
-            while ($row = $result->fetch_assoc())
+            foreach ($result as $row)
             {
                 $user = new Client($database);
                 $user->id = $row['id'];
