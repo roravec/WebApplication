@@ -80,6 +80,10 @@ class ApiAuth implements IAuth
             {
                 $this->saveAuthorization();
             }
+            else
+            {
+                $this->saveAuthorization(true);
+            }
             return true;
         }
         return false;
@@ -148,12 +152,12 @@ class ApiAuth implements IAuth
      * Saves client's login state by generating JWT access and refresh tokens.
      * @return void
      */
-    public function saveAuthorization(): void
+    public function saveAuthorization($dontGenerateRefreshToken = false): void
     {
         // Generate new access token
         $this->accessToken = $this->client->generateAccessToken($this->rootApplication->getJwtSecret());
         // Generate new refresh token and store in database if not already set
-        if ($this->getRefreshToken() === null)
+        if ($this->getRefreshToken() === null && !$dontGenerateRefreshToken)
         {
             $this->refreshToken = $this->client->generateRefreshToken();
         }

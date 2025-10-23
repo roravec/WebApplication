@@ -160,8 +160,7 @@ class Client extends BaseEntity implements ICrud
      */
 	public function login($identifier, $secret): bool
 	{
-        $hashedSecret = Client::hashSecret($secret);
-        $client = Client::readByIdentifierAndSecret($this->database, $identifier, $hashedSecret);
+        $client = Client::readByIdentifierAndSecret($this->database, $identifier, $secret);
         // get all data from client if login was successful
         if ($client !== null)
         {
@@ -315,11 +314,10 @@ class Client extends BaseEntity implements ICrud
         $params = [$identifier];
         $result = $database->query($query, $params);
 
-        if ($result && $database->getNumRows($result) > 0)
+        if (!empty($result))
         {
-            $row = $result->fetch_assoc();
-            $hashedSecret = Client::hashSecret($secret);
-            if (!password_verify($hashedSecret, $row['secret_hash']))
+            $row = $result[0]; // first row
+            if (!password_verify($secret, $row['secret_hash']))
             {
                 return null;
             }
@@ -360,6 +358,7 @@ class Client extends BaseEntity implements ICrud
             $client->id = $row['id'];
             $client->identifier = $row['identifier'];
             $client->name = $row['name'];
+            //$client->secret_hash = $row['secret_hash'];
             $client->rights = $row['rights'];
             $client->type = $row['type'];
             $client->status = $row['status'];
@@ -458,7 +457,6 @@ class Client extends BaseEntity implements ICrud
     /** Database columns section ends ********/
 
     /** Privates */
-    private $rawSecret = '';
 	private $hashedSecret = '';
 	private $loginVerified = false;
 }

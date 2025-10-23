@@ -33,7 +33,10 @@ class Application
 	{
 		session_start();
         $appConfig = require __DIR__ . '/../config/ApplicationConfig.php';
+        $jwtConfig = require __DIR__ . '/../config/JwtSecret.php';
         $dbConfig =  require __DIR__ . '/../config/DatabaseConfig.php';
+
+        $this->jwtSecret = $jwtConfig['jwt_secret'] ?? '';
 
 		$this->debug = $appConfig['debugEnabled'] ?? false;
 
@@ -262,6 +265,11 @@ class Application
         return $this->debug;
     }
 
+    public function getJwtSecret() : string
+    {
+        return $this->jwtSecret;
+    }
+
     /**
      * Resolves a URL path to a physical HTML file.
      * @param string $path URL path (e.g. /foo/bar)
@@ -286,6 +294,7 @@ class Application
     private $clientAuth; // client authorization object
     private $database; // database object
     private $subApplication; // subapplication object
+    private $jwtSecret = '';
     public $debug = true;
 }
 
