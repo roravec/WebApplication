@@ -437,8 +437,8 @@ class Client extends BaseEntity implements ICrud
         $token = new Token($this->database);
         $token->userid = $this->id;
         $token->token = bin2hex(random_bytes(32));
-        $token->issued_at = time();
-        $token->expires_at = time() + 86400 * 30; // 30 days
+        $token->issued_at = date('Y-m-d H:i:s');
+        $token->expires_at = date('Y-m-d H:i:s', time() + 86400 * 30); // 30 days
         $token->revoked = 0;
         $token->create();
         return $token->token;

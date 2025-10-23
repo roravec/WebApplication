@@ -119,7 +119,7 @@ class Token extends BaseEntity implements ICrud
         WHERE token = ? AND revoked = 0 AND expires_at > ?
         LIMIT 1;
         ';
-        $params = [$tokenValue, time()];
+        $params = [$tokenValue, date('Y-m-d H:i:s')];
         $result = $db->query($query, $params);
         if ($result && count($result) > 0) {
             $row = $result[0];
