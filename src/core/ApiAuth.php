@@ -152,8 +152,11 @@ class ApiAuth implements IAuth
     {
         // Generate new access token
         $this->accessToken = $this->client->generateAccessToken($this->rootApplication->getJwtSecret());
-        // Generate new refresh token and store in database
-        $this->refreshToken = $this->client->generateRefreshToken();
+        // Generate new refresh token and store in database if not already set
+        if ($this->getRefreshToken() === null)
+        {
+            $this->refreshToken = $this->client->generateRefreshToken();
+        }
         $this->client->setLoginVerified(true);
     }
 
@@ -181,6 +184,15 @@ class ApiAuth implements IAuth
             return $this->refreshToken;
         }
         return null;
+    }
+
+    /**
+     * Returns the authenticated client if logged in.
+     * @return Client|null The authenticated client, or null if not logged in.
+     */
+    public function getClient()
+    {
+        return $this->client;
     }
 }
 

@@ -34,7 +34,7 @@ class LogEntry extends BaseEntity implements ICrud
             $this->status,
             $this->message
         ];
-        $result = $this->database->query($query, $params);
+        $result = $this->database->execute($query, $params);
         return $result !== false;
     }
 
@@ -90,7 +90,7 @@ class LogEntry extends BaseEntity implements ICrud
             $this->message,
             $this->id
         ];
-        $result = $this->database->query($query, $params);
+        $result = $this->database->execute($query, $params);
         return $result !== false;
     }
 
@@ -105,7 +105,7 @@ class LogEntry extends BaseEntity implements ICrud
         WHERE id = ?;
         ';
         $params = [$this->id];
-        $result = $this->database->query($query, $params);
+        $result = $this->database->execute($query, $params);
         return $result !== false;
     }
 

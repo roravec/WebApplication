@@ -30,7 +30,7 @@ class Token extends BaseEntity implements ICrud
             $this->revoked,
             $this->issued_at
         ];
-        $result = $this->database->query($query, $params);
+        $result = $this->database->execute($query, $params);
         return $result !== false;
     }
 
@@ -83,7 +83,7 @@ class Token extends BaseEntity implements ICrud
             $this->issued_at,
             $this->id
         ];
-        $result = $this->database->query($query, $params);
+        $result = $this->database->execute($query, $params);
         return $result !== false;
     }
 
@@ -102,7 +102,7 @@ class Token extends BaseEntity implements ICrud
         WHERE id = ?;
         ';
         $params = [$this->id];
-        $result = $this->database->query($query, $params);
+        $result = $this->database->execute($query, $params);
         return $result !== false;
     }
 
@@ -156,7 +156,7 @@ class Token extends BaseEntity implements ICrud
             $params[] = $userId;
         }
 
-        $result = $db->query($query, $params);
+        $result = $db->execute($query, $params);
         return $result !== false;
     }
 

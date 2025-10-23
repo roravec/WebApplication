@@ -72,15 +72,16 @@ class Application
         */
         if ($this->subApplication->clientAuth === 'user')
         {
-            $this->client = new UserAuth($this);
+            $this->clientAuth = new UserAuth($this);
         }
         else if ($this->subApplication->clientAuth === 'api')
         {
-            $this->client = new ApiAuth($this);
+            $this->clientAuth = new ApiAuth($this);
         }
         else
         {
             // no authentication required by the configuration
+            //$this->clientAuth = new ApiAuth($this);
         }
         $router = new HttpRouter($this->subApplication);
         echo $router->handle($_SERVER['REQUEST_METHOD']);
@@ -251,9 +252,9 @@ class Application
     {
         return $this->subApplication->name;
     }
-    public function getUser()
+    public function getClientAuth()
     {
-        return $this->user;
+        return $this->clientAuth;
     }
 
     public function isDebugEnabled() : bool
@@ -282,7 +283,7 @@ class Application
         return file_exists($fullPath) ? $fullPath : null;
     }
 
-    private $client; // client authorization object
+    private $clientAuth; // client authorization object
     private $database; // database object
     private $subApplication; // subapplication object
     public $debug = true;

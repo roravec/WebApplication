@@ -31,14 +31,16 @@ class Client extends BaseEntity implements ICrud
 	public function create(): bool
 	{
         $this->generateSecretHash();
+        $this->created_at = date('Y-m-d H:i:s');
+        $this->last_seen = date('Y-m-d H:i:s');
         $query = '
         INSERT INTO 
         '.$this->getTableName().'
         (
-            identifier, secret_hash, name, rights, status, type, last_seen
+            identifier, secret_hash, name, rights, status, type, last_seen, created_at
         )
         VALUES (
-            ?, ?, ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?, ?, ?, ?
         );
         ';
         $params = [
@@ -48,9 +50,10 @@ class Client extends BaseEntity implements ICrud
             $this->rights,
             $this->status,
             $this->type,
-            $this->last_seen
+            $this->last_seen,
+            $this->created_at
         ];
-        $result = $this->database->query($query, $params);
+        $result = $this->database->execute($query, $params);
         return $result !== false;
 	}
 
@@ -78,7 +81,7 @@ class Client extends BaseEntity implements ICrud
         {
             $row = $result[0];
             $this->identifier = $row['identifier'];
-            $this->secret_hash = $row['secret_hash'];
+            //$this->secret_hash = $row['secret_hash'];
             $this->name = $row['name'];
             $this->rights = $row['rights'];
             $this->status = $row['status'];
@@ -96,7 +99,6 @@ class Client extends BaseEntity implements ICrud
      */
     public function update(): bool
 	{
-		$this->generateSecretHash();
         $query = '
         UPDATE
         '.$this->getTableName().'
@@ -104,6 +106,8 @@ class Client extends BaseEntity implements ICrud
         identifier = ?,'; 
         $params = [$this->identifier];
         if ($this->secret_hash != '') { // update password only if it is not blank
+            // secret should be in raw form this time
+            $this->generateSecretHash();
             $query .= ' secret_hash = ?,';
             $params[] = $this->hashedSecret;
         }
@@ -118,7 +122,7 @@ class Client extends BaseEntity implements ICrud
         $params[] = $this->type;
         $params[] = $this->last_seen;
         $params[] = $this->id;
-        $result = $this->database->query($query, $params);
+        $result = $this->database->execute($query, $params);
         return $result !== false;
 	}
 
@@ -141,13 +145,14 @@ class Client extends BaseEntity implements ICrud
         LIMIT 1;
         ';
         $params = [intval($this->id)];
-        $result = $this->database->query($query, $params);
+        $result = $this->database->execute($query, $params);
         return $result !== false;
 	}
     /** CRUD functions section ends */
 
     /**
      * Reads user data and verifies password.
+     * Use raw password.
      * Returns true if login is successful, false otherwise.
      * @param string $identifier
      * @param string $secret
@@ -155,13 +160,14 @@ class Client extends BaseEntity implements ICrud
      */
 	public function login($identifier, $secret): bool
 	{
-        $client = Client::readByIdentifierAndSecret($this->database, $identifier, $secret);
+        $hashedSecret = Client::hashSecret($secret);
+        $client = Client::readByIdentifierAndSecret($this->database, $identifier, $hashedSecret);
         // get all data from client if login was successful
         if ($client !== null)
         {
             $this->id = $client->id;
             $this->identifier = $client->identifier;
-            $this->secret_hash = $client->secret_hash;
+            //$this->secret_hash = $client->secret_hash;
             $this->name = $client->name;
             $this->rights = $client->rights;
             $this->status = $client->status;
@@ -259,10 +265,7 @@ class Client extends BaseEntity implements ICrud
 
 	private function generateSecretHash(): void
 	{
-		if ($this->hashedSecret == '')
-		{
-			$this->hashedSecret = Client::hashSecret($this->secret_hash);
-		}
+		$this->hashedSecret = Client::hashSecret($this->secret_hash);
 	}
 
 	public static function readAll($database, $addCond= ""): array
@@ -280,7 +283,7 @@ class Client extends BaseEntity implements ICrud
                 $user = new Client($database);
                 $user->id = $row['id'];
                 $user->identifier = $row['identifier'];
-                $user->secret_hash = $row['secret_hash'];
+                //$user->secret_hash = $row['secret_hash'];
                 $user->name = $row['name'];
                 $user->rights = $row['rights'];
                 $user->status = $row['status'];
@@ -293,6 +296,13 @@ class Client extends BaseEntity implements ICrud
         return $users;
 	}
 
+    /**
+     * Summary of readByIdentifierAndSecret - Secret should be in raw form
+     * @param mixed $database
+     * @param mixed $identifier
+     * @param mixed $secret
+     * @return ?Client
+     */
     public static function readByIdentifierAndSecret($database, $identifier, $secret): ?Client
     {
         $query = '
@@ -308,7 +318,8 @@ class Client extends BaseEntity implements ICrud
         if ($result && $database->getNumRows($result) > 0)
         {
             $row = $result->fetch_assoc();
-            if (!password_verify($secret, $row['secret_hash']))
+            $hashedSecret = Client::hashSecret($secret);
+            if (!password_verify($hashedSecret, $row['secret_hash']))
             {
                 return null;
             }
@@ -316,7 +327,7 @@ class Client extends BaseEntity implements ICrud
             $client = new Client($database);
             $client->id = $row['id'];
             $client->identifier = $row['identifier'];
-            $client->secret_hash = $row['secret_hash'];
+            //$client->secret_hash = $row['secret_hash'];
             $client->name = $row['name'];
             $client->rights = $row['rights'];
             $client->type = $row['type'];
@@ -342,13 +353,12 @@ class Client extends BaseEntity implements ICrud
         $params = [$identifier];
         $result = $database->query($query, $params);
 
-        if ($result && $database->getNumRows($result) > 0)
+        if (!empty($result))
         {
-            $row = $result->fetch_assoc();
+            $row = $result[0]; // first row
             $client = new Client($database);
             $client->id = $row['id'];
             $client->identifier = $row['identifier'];
-            $client->secret_hash = $row['secret_hash'];
             $client->name = $row['name'];
             $client->rights = $row['rights'];
             $client->type = $row['type'];
@@ -379,7 +389,7 @@ class Client extends BaseEntity implements ICrud
             $client = new Client($database);
             $client->id = $row['id'];
             $client->identifier = $row['identifier'];
-            $client->secret_hash = $row['secret_hash'];
+            //$client->secret_hash = $row['secret_hash'];
             $client->name = $row['name'];
             $client->rights = $row['rights'];
             $client->type = $row['type'];
@@ -448,6 +458,7 @@ class Client extends BaseEntity implements ICrud
     /** Database columns section ends ********/
 
     /** Privates */
+    private $rawSecret = '';
 	private $hashedSecret = '';
 	private $loginVerified = false;
 }
