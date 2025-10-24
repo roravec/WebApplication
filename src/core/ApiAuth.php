@@ -19,25 +19,26 @@ class ApiAuth implements IAuth
         $this->restoreLoginStateFromAccessToken();
 	}
 
+    /**
+     * Restores login state from the access token in the Authorization header.
+     * @return void
+     */
     public function restoreLoginStateFromAccessToken(): void
     {
         $accessToken = $this->getAccessTokenFromHeader();
         if ($accessToken !== null)
         {
+            // Validate access token
             $decodedToken = JwtUtils::decode($accessToken, $this->rootApplication->getJwtSecret());
-            // show debug info
-            //echo "Token: $accessToken<br>";
-            //echo "Decoded Token: " . json_encode($decodedToken) . "<br>";
             if ($decodedToken !== null &&
                 isset($decodedToken['sub']) &&
                 isset($decodedToken['appid']) &&
                 $decodedToken['appid'] === $this->rootApplication->getApplicationName() &&
                 !JwtUtils::isExpired($decodedToken))
             {
-                //echo "Valid token for user ID: " . $decodedToken['sub'] . "<br>";
+                // token is valid. Read user from token
                 if ($this->client->read($decodedToken['sub']) && $this->client->status > 0)
                 {
-                    //echo "Client found and active<br>";
                     $this->client->setLoginVerified(true);
                     $this->accessToken = $accessToken;
                 }
@@ -45,6 +46,10 @@ class ApiAuth implements IAuth
         }
     }
 
+    /**
+     * Retrieves the access token from the Authorization header.
+     * @return string|null The access token, or null if not present.
+     */
     function getAccessTokenFromHeader(): ?string
     {
         $headers = getallheaders();
@@ -58,6 +63,10 @@ class ApiAuth implements IAuth
         return null;
     }
 
+    /**
+     * Retrieves the refresh token from the X-Refresh-Token header.
+     * @return string|null The refresh token, or null if not present.
+     */
     public function getRefreshTokenFromHeader(): ?string
     {
         $headers = getallheaders();
@@ -175,7 +184,7 @@ class ApiAuth implements IAuth
         // Generate new access token
         $this->accessToken = $this->client->generateAccessToken($this->rootApplication->getJwtSecret(), $this->rootApplication->getApplicationName());
         // Generate new refresh token and store in database if not already set
-        if ($this->getRefreshToken() === null && !$dontGenerateRefreshToken)
+        if (!$dontGenerateRefreshToken)
         {
             $this->refreshToken = $this->client->generateRefreshToken();
         }
