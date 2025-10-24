@@ -109,6 +109,39 @@ class LogEntry extends BaseEntity implements ICrud
         return $result !== false;
     }
 
+    public function exists(): bool
+    {
+        return $this->timestamp != "" && $this->id > 0;
+    }
+
+    public static function readAll($database): array
+    {
+        $query = '
+        SELECT * FROM '.self::$TABLE_NAME.'
+        ORDER BY id DESC;
+        ';
+        $result = $database->query($query, []);
+        $logEntries = [];
+        if ($result && count($result) > 0)
+        {
+            foreach ($result as $row)
+            {
+                $logEntry = new LogEntry($database);
+                $logEntry->id = $row['id'];
+                $logEntry->timestamp = $row['timestamp'];
+                $logEntry->userId = $row['userId'];
+                $logEntry->clientIp = $row['clientIp'];
+                $logEntry->action = $row['action'];
+                $logEntry->targetType = $row['targetType'];
+                $logEntry->targetId = $row['targetId'];
+                $logEntry->status = $row['status'];
+                $logEntry->message = $row['message'];
+                $logEntries[] = $logEntry;
+            }
+        }
+        return $logEntries;
+    }
+
 	/** Database columns  *******************/
     public $id=0;
     public $timestamp="";

@@ -155,6 +155,11 @@ class Client extends BaseEntity implements ICrud
 	}
     /** CRUD functions section ends */
 
+    public function exists(): bool
+    {
+        return $this->identifier != "" && $this->id > 0;
+    }
+
     /**
      * Reads user data and verifies password.
      * Use raw password.
