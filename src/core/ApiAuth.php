@@ -25,15 +25,19 @@ class ApiAuth implements IAuth
         if ($accessToken !== null)
         {
             $decodedToken = JwtUtils::decode($accessToken, $this->rootApplication->getJwtSecret());
-
+            // show debug info
+            //echo "Token: $accessToken<br>";
+            //echo "Decoded Token: " . json_encode($decodedToken) . "<br>";
             if ($decodedToken !== null &&
                 isset($decodedToken['sub']) &&
                 isset($decodedToken['appid']) &&
                 $decodedToken['appid'] === $this->rootApplication->getApplicationName() &&
                 !JwtUtils::isExpired($decodedToken))
             {
+                //echo "Valid token for user ID: " . $decodedToken['sub'] . "<br>";
                 if ($this->client->read($decodedToken['sub']) && $this->client->status > 0)
                 {
+                    //echo "Client found and active<br>";
                     $this->client->setLoginVerified(true);
                     $this->accessToken = $accessToken;
                 }
@@ -105,12 +109,26 @@ class ApiAuth implements IAuth
         // validate refreshToken
         $refreshToken = $this->getRefreshTokenFromHeader();
         $tokenFromDb = Token::validateRefreshToken($this->rootApplication->getDatabase(), $refreshToken);
-        if ($tokenFromDb === null || $tokenFromDb->userid !== $this->client->id)
+        //echo "Refresh token from header: $refreshToken<br>";
+        //echo "Token from DB: " . json_encode($tokenFromDb) . "<br>";
+
+        if ($tokenFromDb === null)
         {
+            //echo "Invalid refresh token<br>";
             return false;
         }
         else
         {
+            if ($this->client->getLoginVerified())
+            {
+                if ($this->client->id !== $tokenFromDb->userid)
+                {
+                    // Refresh token does not belong to the logged in client
+                    //echo "Refresh token does not belong to the logged in client<br>";
+                    return false;
+                }
+            }
+            //echo "Valid refresh token for user ID: " . $tokenFromDb->userid . "<br>";
             $tokenFromDb->revoked = 1;
             $tokenFromDb->update();
             $this->client = Client::readById($this->rootApplication->getDatabase(), $tokenFromDb->userid);
@@ -155,7 +173,7 @@ class ApiAuth implements IAuth
     public function saveAuthorization($dontGenerateRefreshToken = false): void
     {
         // Generate new access token
-        $this->accessToken = $this->client->generateAccessToken($this->rootApplication->getJwtSecret());
+        $this->accessToken = $this->client->generateAccessToken($this->rootApplication->getJwtSecret(), $this->rootApplication->getApplicationName());
         // Generate new refresh token and store in database if not already set
         if ($this->getRefreshToken() === null && !$dontGenerateRefreshToken)
         {

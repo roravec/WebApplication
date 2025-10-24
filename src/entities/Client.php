@@ -6,6 +6,11 @@ require_once __DIR__ . '/../entities/Token.php';
 
 class Client extends BaseEntity implements ICrud
 {
+    /** How long is access token valid (in seconds) */
+    public static $ACCESS_TOKEN_VALID_FOR = 900; // 15 minutes
+
+    public static $REFRESH_TOKEN_VALID_FOR = 86400 * 30; // 30 days
+
     /**
      * Summary of TABLE_NAME
      * @var string
@@ -382,9 +387,9 @@ class Client extends BaseEntity implements ICrud
         $params = [intval($id)];
         $result = $database->query($query, $params);
 
-        if ($result && $database->getNumRows($result) > 0)
+        if (!empty($result))
         {
-            $row = $result->fetch_assoc();
+            $row = $result[0]; // first row
             $client = new Client($database);
             $client->id = $row['id'];
             $client->identifier = $row['identifier'];
@@ -402,15 +407,15 @@ class Client extends BaseEntity implements ICrud
     }
 
     /** Generate a short-lived JWT token for the client */
-    public function generateAccessToken(string $secret): string
+    public function generateAccessToken(string $secret, string $appId): string
     {
         $payload = [
             'sub' => $this->id,
             'identifier' => $this->identifier,
             'type' => $this->type,
             'role' => $this->rights,
-            'appid' => $this->database->getPrefix(),
-            'exp' => time() + 3600
+            'appid' => $appId,
+            'exp' => time() + Client::$ACCESS_TOKEN_VALID_FOR,
         ];
         return JwtUtils::encode($payload, $secret);
     }
@@ -438,7 +443,7 @@ class Client extends BaseEntity implements ICrud
         $token->userid = $this->id;
         $token->token = bin2hex(random_bytes(32));
         $token->issued_at = date('Y-m-d H:i:s');
-        $token->expires_at = date('Y-m-d H:i:s', time() + 86400 * 30); // 30 days
+        $token->expires_at = date('Y-m-d H:i:s', time() + Client::$REFRESH_TOKEN_VALID_FOR);
         $token->revoked = 0;
         $token->create();
         return $token->token;
