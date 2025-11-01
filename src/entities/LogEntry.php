@@ -117,7 +117,7 @@ class LogEntry extends BaseEntity implements ICrud
     public static function readAll($database): array
     {
         $query = '
-        SELECT * FROM '.self::$TABLE_NAME.'
+        SELECT * FROM '.$database->getPrefix().self::$TABLE_NAME.'
         ORDER BY id DESC;
         ';
         $result = $database->query($query, []);
