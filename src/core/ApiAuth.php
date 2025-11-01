@@ -2,6 +2,8 @@
 require_once __DIR__ . '/JwtHelper.php';
 require_once __DIR__ . '/../interfaces/IAuth.php';
 require_once __DIR__ . '/../entities/Client.php';
+require_once __DIR__ . '/../entities/LogEntry.php';
+require_once __DIR__ . '/../entities/Token.php';
 
 /**
  * Class ApiAuth
@@ -28,7 +30,6 @@ class ApiAuth implements IAuth
         $accessToken = $this->getAccessTokenFromHeader();
         if ($accessToken !== null)
         {
-            // Validate access token
             $decodedToken = JwtUtils::decode($accessToken, $this->rootApplication->getJwtSecret());
             if ($decodedToken !== null &&
                 isset($decodedToken['sub']) &&
@@ -36,14 +37,45 @@ class ApiAuth implements IAuth
                 $decodedToken['appid'] === $this->rootApplication->getApplicationName() &&
                 !JwtUtils::isExpired($decodedToken))
             {
-                // token is valid. Read user from token
+                // echo json_encode([
+                //     'success' => 'valid token',
+                //     'description' => 'The access token is valid.',
+                //     'token_data' => $decodedToken
+                // ]);
                 if ($this->client->read($decodedToken['sub']) && $this->client->status > 0)
                 {
+                    //echo "Client read successfully. User ID: " . $this->client->id . "<br>";
                     $this->client->setLoginVerified(true);
                     $this->accessToken = $accessToken;
                 }
             }
+            else
+            {
+                // echo json_encode([
+                //     'error' => 'invalid_token',
+                //     'error_description' => 'The access token is invalid or has expired.',
+                //     'token_data' => $decodedToken
+                // ]);
+            }
         }
+        else
+        {
+            //echo "Access token is invalid<br>";
+            echo json_encode([
+                'error' => 'invalid_token',
+                'error_description' => 'The access token is non-existent.'
+            ]);
+        }
+
+        // save everything to log, mainly all headers, raw message, everything
+        $log = new LogEntry($this->rootApplication->getDatabase());
+        $log->action = 'auth';
+        $log->message = json_encode([
+            'headers' => getallheaders(),
+            'client_id' => $this->client->id,
+            'is_logged_in' => $this->client->getLoginVerified()
+        ]);
+        $log->create();
     }
 
     /**
@@ -53,9 +85,10 @@ class ApiAuth implements IAuth
     function getAccessTokenFromHeader(): ?string
     {
         $headers = getallheaders();
-        if (isset($headers['Authorization']))
+
+        if (isset($headers['Authorization']) || isset($headers['authorization']))
         {
-            if (preg_match('/Bearer\s(\S+)/', $headers['Authorization'], $matches))
+            if (preg_match('/Bearer\s(\S+)/', $headers['Authorization'] ?? $headers['authorization'], $matches))
             {
                 return $matches[1];
             }
@@ -70,9 +103,9 @@ class ApiAuth implements IAuth
     public function getRefreshTokenFromHeader(): ?string
     {
         $headers = getallheaders();
-        if (isset($headers['X-Refresh-Token']))
+        if (isset($headers['X-Refresh-Token']) || isset($headers['x-refresh-token']))
         {
-            return $headers['X-Refresh-Token'];
+            return $headers['X-Refresh-Token'] ?? $headers['x-refresh-token'];
         }
         return null;
     }
@@ -132,12 +165,9 @@ class ApiAuth implements IAuth
             {
                 if ($this->client->id !== $tokenFromDb->userid)
                 {
-                    // Refresh token does not belong to the logged in client
-                    //echo "Refresh token does not belong to the logged in client<br>";
                     return false;
                 }
             }
-            //echo "Valid refresh token for user ID: " . $tokenFromDb->userid . "<br>";
             $tokenFromDb->revoked = 1;
             $tokenFromDb->update();
             $this->client = Client::readById($this->rootApplication->getDatabase(), $tokenFromDb->userid);
