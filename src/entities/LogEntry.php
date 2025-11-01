@@ -25,7 +25,7 @@ class LogEntry extends BaseEntity implements ICrud
         );
         ';
         $params = [
-            $this->timestamp,
+            date('Y-m-d H:i:s'),
             $this->userId,
             $this->clientIp,
             $this->action,
