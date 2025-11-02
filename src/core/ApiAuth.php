@@ -61,10 +61,10 @@ class ApiAuth implements IAuth
         else
         {
             //echo "Access token is invalid<br>";
-            echo json_encode([
-                'error' => 'invalid_token',
-                'error_description' => 'The access token is non-existent.'
-            ]);
+            // echo json_encode([
+            //     'error' => 'invalid_token',
+            //     'error_description' => 'The access token is non-existent.'
+            // ]);
         }
 
         // save everything to log, mainly all headers, raw message, everything
