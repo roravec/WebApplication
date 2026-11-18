@@ -1,0 +1,46 @@
+# Dev environment for the framework.
+#   docker compose up -d --build                     web on http://<host>:8090 (PHP 7.3)
+#   docker compose run --rm test                     run tests on PHP 7.3
+#   PHP_VERSION=8.4 docker compose run --rm test     run tests on PHP 8.4
+#   docker compose exec web php /dev-tools/seed.php  create tables + user admin/admin for the demo app
+services:
+  db:
+    image: mariadb:10.6
+    environment:
+      MARIADB_DATABASE: webapp
+      MARIADB_USER: webapp
+      MARIADB_PASSWORD: webapp
+      MARIADB_ROOT_PASSWORD: root
+    command: [--character-set-server=utf8mb4, --collation-server=utf8mb4_general_ci, --innodb-buffer-pool-size=64M]
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 3s
+      retries: 30
+    volumes:
+      - db:/var/lib/mysql
+    mem_limit: 384m
+
+  web:
+    build: { context: ., args: { PHP_VERSION: "${PHP_VERSION:-7.3}" } }
+    image: webapplication-php:${PHP_VERSION:-7.3}
+    ports: ["${WEB_PORT:-8090}:80"]
+    environment: { WA_CONFIG_FILE: /dev-tools/config.php }
+    volumes:
+      - ../src:/var/www/html
+      - .:/dev-tools:ro
+      - ../sql:/sql:ro
+    depends_on: { db: { condition: service_healthy } }
+    mem_limit: 256m
+
+  test:
+    profiles: [test]
+    image: webapplication-php:${PHP_VERSION:-7.3}
+    build: { context: ., args: { PHP_VERSION: "${PHP_VERSION:-7.3}" } }
+    working_dir: /app
+    volumes: ["..:/app"]
+    environment: { DB_HOST: db, DB_NAME: webapp, DB_USER: webapp, DB_PASS: webapp }
+    entrypoint: [php, tests/run.php]
+    depends_on: { db: { condition: service_healthy } }
+
+volumes:
+  db:

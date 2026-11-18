@@ -1,0 +1,5 @@
+body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; color: #222; }
+header { display: flex; gap: 1rem; align-items: center; border-bottom: 1px solid #ddd; padding-bottom: .5rem; }
+header form { display: inline; }
+label { display: block; margin: .5rem 0; }
+.flash { background: #e6f4ea; padding: .5rem; } .error { background: #fde8e8; padding: .5rem; }

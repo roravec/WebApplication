@@ -471,3 +471,11 @@ composer.lock
 *.css.map
 *.sass.map
 *.scss.map
+# --- WebApplication: never commit real configuration or runtime data ---
+/src/config/config.php
+/src/config/ApplicationConfig.php
+/src/config/DatabaseConfig.php
+/src/config/JwtSecret.php
+/src/var/log/*
+!/src/var/log/.gitkeep
+/src/var/cache/

@@ -1,0 +1,11 @@
+# App folders: static assets (css, js, images) are public; code and data files are not.
+# PHP files run only through /index.php.
+<FilesMatch "\.(php|phtml|inc|sql|md|log|ini|sh)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
