@@ -18,8 +18,12 @@ The owner's own PHP framework. One installation on shared hosting serves several
 ## Owner & environment
 - Owner works on Windows + VS Code, repos in `C:\Users\orras\git\`. Communicates in Slovak or English.
   Prefers doing over explaining; dislikes manual steps. **Does not want hosts-file edits.**
+- **The owner makes ALL commits himself. Never commit, push, amend, tag or create repositories** — leave changes in the
+  working tree and tell him what changed. **Don't use `git add -N`** either: the owner commits with Eclipse/EGit, which
+  kept the intent-to-add flag in the index after his commit (all files then showed as "DA"; fixed by rebuilding the index). (Exception that already happened: the shop-code repo on the home server
+  `~/webstore/shop.git` was created and committed by Claude on 2026-11-18 before this rule was stated.)
 - Global rule: after editing files in a git repo run `python -X utf8 ~/.claude/tools/to_checkout_eol.py <repo>` (CRLF
-  checkout; `.gitattributes` keeps Dockerfile/*.sh LF). Commit/push only when the owner asks.
+  checkout; `.gitattributes` keeps Dockerfile/*.sh LF).
 - Home server (dev): `ssh -i ~/.ssh/id_ed25519_homeserver rasto@192.168.0.11` (Ubuntu, Docker, LAN only, standing
   permission for these projects). Don't touch the owner's other services there (Nextcloud :80, Minecraft, messenger, camstream…).
   Framework dev copy: `~/webapplication-dev` (copied by tar over ssh, not a git clone), web on **:8090**, tests via
@@ -50,6 +54,8 @@ The owner's own PHP framework. One installation on shared hosting serves several
   + central invoicing → 4) port hbkpravotice, bnhl.
 - Invoicing is done **only** in the ERMA system, centrally, for all e-shops; PrestaShop stops issuing invoices
   (`add_faktura` removed). Built **from scratch** — do not investigate or repair the old shop invoicing/numbering.
-- Invoices must meet Slovak law, be ready for **e-faktúra (EN 16931 / Peppol BIS 3.0 / UBL 2.1)**, exportable to the
-  accountant's **Omega (KROS)**, and everything configurable (multiple companies, number series, B2B/B2C, invoice look).
-  ERMA Group s.r.o. is currently **not a VAT payer**. Details: docs/fakturacia-specifikacia.md.
+- **The system is not only for ERMA Group** — other/new companies may use it. Nothing hard-coded: companies, VAT mode
+  (payer / non-payer, with validity dates), number series, B2B/B2C, invoice look, exports, e-invoice provider per company.
+- Invoices must meet Slovak law; **issuing e-invoices (EN 16931 / Peppol BIS 3.0 / UBL 2.1, sent via a Peppol access
+  point configured per company) is a full feature from day one** for VAT-payer companies — even though ERMA Group
+  itself is currently not a VAT payer. Exportable to the accountant's **Omega (KROS)**. Details: docs/fakturacia-specifikacia.md.

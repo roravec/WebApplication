@@ -5,9 +5,8 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
 ## Last update: 2026-11-18
 
 ### Done
-1. **Framework rework** on branch `rework` — **NOT committed yet** (owner has not said to commit). Files are staged as
-   deletions (`git rm` of old `src/core`, `src/entities`, `src/interfaces`, old config templates) and intent-to-add (`git add -N`)
-   for new files. Line endings normalised (CRLF; Dockerfile LF via `.gitattributes`).
+1. **Framework rework** on branch `rework` — committed by the owner as `dce2116 Major rework` (2026-11-18).
+   Line endings normalised (CRLF; Dockerfile LF via `.gitattributes`).
    - 26 tests pass on PHP 7.3.33 and 8.4.27 (`tests/run.php`, DB tests against MariaDB 10.6 in docker).
    - End-to-end over Apache verified: demo app pages, login (CSRF, wrong password, remember-me, logout), cookie flags
      (HttpOnly, SameSite=Lax, Secure on HTTPS), 403 for config/framework/app code/logs, CSS served.
@@ -18,7 +17,8 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
    able to receive) and Omega import options (TXT import / ISDOC / KROS eFaktúra — to be confirmed).
 
 ### Waiting for the owner
-- Permission to commit (and later push) branch `rework`.
+- Docs changed after `dce2116` (CLAUDE.md, HANDOVER.md, docs/fakturacia-specifikacia.md: commit rule, multi-company,
+  e-invoices per company) — uncommitted, for the owner to commit.
 - Answers in docs/fakturacia-specifikacia.md chapter 6: OR registration (súd/oddiel/vložka), first number + format of the
   new series, which Omega import the accountant uses (+ sample file), auto/manual invoice from order + e-mail,
   path of the employee section.
