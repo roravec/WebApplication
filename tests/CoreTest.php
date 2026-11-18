@@ -64,6 +64,15 @@ test('resolver: * is the default app', function () {
     eq('erma', $r->resolve(req('erma.sk'))->name);
 });
 
+test('resolver: */path matches any host; more specific path wins; exact host beats *', function () {
+    $r = new AppResolver(resolverConfig(['routes' => ['erma.sk' => 'erma', '*/panel' => 'panel', '*' => 'bnhl', 'other.sk/panel' => 'erma']]));
+    eq('panel', $r->resolve(req('erma.sk', '/panel/orders'))->name);
+    eq('/panel', $r->resolve(req('anything.test', '/panel'))->basePath);
+    eq('erma', $r->resolve(req('erma.sk', '/about'))->name);
+    eq('erma', $r->resolve(req('other.sk', '/panel'))->name, 'exact host with same path beats */panel');
+    eq('bnhl', $r->resolve(req('x.sk', '/'))->name);
+});
+
 // ---------------------------------------------------------------- request
 test('request: path normalisation, segments and app-relative path', function () {
     $r = req('erma.sk', '//panel//invoices/5/')->withBasePath('/panel');

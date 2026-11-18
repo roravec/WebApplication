@@ -4,8 +4,12 @@
 > Keep these files up to date — the owner wants everything written down so a new session loses nothing.
 
 ## What this is
-The owner's own PHP framework. One installation on shared hosting serves several web apps, chosen by domain
-(and optionally path). Reworked in Nov 2026 (branch `rework`), see README.md for the full description.
+The owner's own PHP framework. **One instance of WebApplication on the shared hosting** (one `index.php`, one
+`framework/`, one `config/config.php` in the web root) serves **all** the owner's web apps, each in
+`applications/<name>/`, chosen by domain (and optionally path): erma.sk (+ employee section erma.sk/panel),
+hbkpravotice.sk, bnhl.sk, later LedBoard… (confirmed with the owner 2026-11-19). The PrestaShop shop in `/store/` is
+separate software and is not part of it. Reworked in Nov 2026, see README.md for the full description.
+VS Code workspace with all related repos: `C:\Users\orras\git\ERMA.code-workspace`.
 
 - PHP **7.3 – 8.4**. Must stay **PHP 7.3 compatible**: the hosting runs 7.3 and the PrestaShop shop on the same
   hosting blocks a PHP upgrade until the shop is upgraded (see `C:\Users\orras\git\Web_store`). No typed properties,
@@ -41,8 +45,8 @@ The owner's own PHP framework. One installation on shared hosting serves several
 ## Apps and their sources
 | App | Domain | Source of truth | Notes |
 |---|---|---|---|
-| erma | erma.sk | `C:\Users\orras\git\Web_ERMA\WebApp_erma\WebApp.php` (newest, already for new framework) + rest of `StadiumControl\WebServer\webapp\WebApp_erma` | **Public frontpage for customers** + employee section |
-| panel (new) | erma.sk/panel (path TBD) | — | employee section: shop orders, central invoicing, later more |
+| erma | erma.sk | `src/applications/erma` — **new placeholder** (owner 2026-11-19: the old erma site is not needed) | public frontpage for customers; real site later |
+| panel | erma.sk/panel (path may change) | `src/applications/panel` | employee section: shop orders (read-only), employees; invoicing next |
 | hbkpravotice | hbkpravotice.sk | `C:\Users\orras\git\StadiumControl\WebServer\webapp\WebApp_hbkpravotice` | ~11k lines, old core API (mysqli) → use LegacyDatabase |
 | bnhl | bnhl.sk | `...\StadiumControl\WebServer\webapp\WebApp_bnhl` | ~10k lines, uses `hbkpravotice_` tables |
 | LedBoard | ? | repo `C:\Users\orras\git\WEB_LedBoard` (spec in `Prj_LedBoard`) | website fits; server part depends on its DEC-003 (needs realtime?) |
@@ -50,8 +54,8 @@ The owner's own PHP framework. One installation on shared hosting serves several
 `C:\Users\orras\git\WebApplications` = identical copy of StadiumControl apps (owner may delete).
 
 ## Decisions (owner)
-- Order: 1) framework rework ✅ (uncommitted) → 2) port erma.sk (frontpage) → 3) employee section with shop orders
-  + central invoicing → 4) port hbkpravotice, bnhl.
+- Order: 1) framework rework ✅ → 2) erma.sk placeholder ✅ → 3) **employee section** (orders ✅, invoicing next) — current
+  focus → 4) port hbkpravotice, bnhl → later the real erma.sk site.
 - Invoicing is done **only** in the ERMA system, centrally, for all e-shops; PrestaShop stops issuing invoices
   (`add_faktura` removed). Built **from scratch** — do not investigate or repair the old shop invoicing/numbering.
 - **The system is not only for ERMA Group** — other/new companies may use it. Nothing hard-coded: companies, VAT mode

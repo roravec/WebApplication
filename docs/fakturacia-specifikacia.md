@@ -88,7 +88,9 @@ pečiatka, zobrazenie stĺpcov DPH, formát čísel a dátumov. Prvá šablóna 
 ## 4. Vzor vzhľadu (FA2026-000198.pdf od majiteľa)
 
 A4 na výšku, akcentová farba červená (ERMA):
-- **Hlavička:** logo vľavo, slogan v strede („Smart IoT solutions“), web/e-mail/telefón vpravo; pod tým červená čiara.
+- **Hlavička:** logo vľavo (`brand/erma-logo-sro.png` — vodorovné logo „ERMA Group s.r.o.“; logo je nastavenie firmy),
+  slogan v strede („Smart IoT solutions“), web/e-mail/telefón vpravo; pod tým červená čiara. Farby loga: červená #F74040,
+  zelená #55F264, modrá #44C5E5.
 - „Faktúra“ (veľké) vľavo, číslo (veľké) vpravo.
 - Dva stĺpce s červeným záhlavím: **Dodávateľ** | **Odberateľ** — meno (červené, tučné), adresa, IČO, DIČ, IČ DPH / „Nie sme platiteľmi DPH.“
 - **Platobné údaje** (červené záhlavie): názov účtu, IBAN, variabilný symbol, forma úhrady + **QR kód PAY by square**;

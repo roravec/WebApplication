@@ -6,8 +6,9 @@ use WebApplication\Http\Request;
 /**
  * Chooses the application for a request.
  *
- * 1. config 'routes': "host" or "host/path" => app name. Longest match wins.
- *    'erma.sk' => 'erma', 'www.erma.sk' => 'erma', 'erma.sk/panel' => 'panel', '*' => default app.
+ * 1. config 'routes': "host" or "host/path" => app name. The most specific path wins, then an exact host beats '*'.
+ *    'erma.sk' => 'erma', 'www.erma.sk' => 'erma', 'erma.sk/panel' => 'panel',
+ *    host '*' with a path = any host, e.g. key "*" . "/panel" => 'panel'; key '*' alone => default app.
  * 2. 'devPathSelect' (development only): http://localhost/<app>/... — first path segment names the app.
  * 3. Legacy fallback: first label of the host name without "www." (erma.sk → erma).
  */
@@ -45,13 +46,15 @@ class AppResolver
             if ($pPath === '') {
                 $pPath = '/';
             }
-            if ($pHost !== $host || !self::pathStartsWith($path, $pPath)) {
+            $anyHost = $pHost === '*';
+            if ((!$anyHost && $pHost !== $host) || !self::pathStartsWith($path, $pPath)) {
                 continue;
             }
-            $len = strlen($pattern);
-            if ($len > $bestLen) {
+            // longer (more specific) path wins; with equal paths an exact host beats '*'
+            $score = strlen($pPath) * 2 + ($anyHost ? 0 : 1);
+            if ($score > $bestLen) {
                 $best = [$appName, $pPath];
-                $bestLen = $len;
+                $bestLen = $score;
             }
         }
         if ($best !== null && isset($apps[$best[0]])) {
