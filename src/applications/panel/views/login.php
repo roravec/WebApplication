@@ -20,7 +20,7 @@
     <?php if ($error): ?><p class="flash err"><?= $e($error) ?></p><?php endif ?>
     <?= Csrf::field() ?>
     <input type="hidden" name="next" value="<?= $e($next) ?>">
-    <label>Prihlasovacie meno <input name="login" autocomplete="username" required autofocus></label>
+    <label>E-mail <input name="login" type="text" inputmode="email" autocomplete="username" required autofocus></label>
     <label>Heslo <input name="password" type="password" autocomplete="current-password" required></label>
     <label class="check"><input type="checkbox" name="remember" value="1"> Zapamätať si ma na 30 dní</label>
     <button class="primary">Prihlásiť</button>

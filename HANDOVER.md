@@ -396,6 +396,14 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
 4. Deploy procedure to the hosting: zip + unpack script like the shop's tools; never overwrite the root `.htaccess`;
    `config/config.php` created on the server; first admin account on production (no SSH → one-time setup page or
    SQL in phpMyAdmin); verify `.htaccess` deny rules behind the hosting's nginx.
+   **Done 2026-11-20 (phase A switched):** all sites OK, deny rules work (403). Panel first gave 500 — migration 001
+   reads `{p}client`, which only `dev/seed.php` created → new `sql/000_framework_tables.sql` (framework tables
+   client/token/log/text; on an existing install it is skipped because MAX(version) ≥ latest) + test "migrations on an
+   EMPTY database" + e2e replay on the dev server (half-applied 001 → fix → migrations 0–12, setup, login, dashboard).
+   First admin: `SetupController` `/setup?key=<SetupController::key(jwtSecret)>` — only while no employee account
+   exists (then 404 forever), owner picks his own password. Every new migration must work on an EMPTY database.
+   **Login = e-mail** (owner 2026-11-20): `EmployeesController::normalizeEmail/emailError` (lower-case, FILTER_VALIDATE_EMAIL)
+   in setup, employee form and login; the login field is plain text, so old dev accounts like `admin` still log in.
    **TODO at deploy (owner 2026-11-19) — invoices only from the panel:** in the PrestaShop admin set **Orders →
    Invoices → "Enable invoices" = No** (`PS_INVOICE` = 0) for all shops. Today (dev1 copy of 18. 11.) it is ON: the
    shop still numbers its own invoices and attaches its PDF to the state e-mails (states with "attach invoice":

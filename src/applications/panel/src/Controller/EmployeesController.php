@@ -14,6 +14,18 @@ class EmployeesController
 {
     const MIN_PASSWORD = 10;
 
+    /** Employees log in with their e-mail (owner 2026-11-20) — stored lower-case in panel_client.identifier. */
+    public static function normalizeEmail(string $email): string
+    {
+        return strtolower(trim($email));
+    }
+
+    public static function emailError(string $email): ?string
+    {
+        return strlen($email) <= 191 && filter_var($email, FILTER_VALIDATE_EMAIL) !== false
+            ? null : 'Zadajte platný e-mail — slúži na prihlásenie.';
+    }
+
     /** @var PanelContext */
     private $ctx;
 
@@ -62,7 +74,7 @@ class EmployeesController
             return Response::html($this->ctx->page('notfound', [], 'Zamestnanec neexistuje', 'employees'), 404);
         }
         $v = [
-            'identifier' => trim((string)$req->post('identifier', '')),
+            'identifier' => self::normalizeEmail((string)$req->post('identifier', '')),
             'name' => trim((string)$req->post('name', '')),
             'admin' => (bool)$req->post('admin'),
             'status' => $req->post('status') ? 1 : 0,
@@ -71,12 +83,12 @@ class EmployeesController
         ];
         $password = (string)$req->post('password', '');
         $errors = [];
-        if (!preg_match('/^[A-Za-z0-9._@+-]{3,100}$/', $v['identifier'])) {
-            $errors['identifier'] = 'Prihlasovacie meno: 3–100 znakov (písmená, čísla, . _ @ + -).';
+        if (($msg = self::emailError($v['identifier'])) !== null) {
+            $errors['identifier'] = $msg;
         } else {
             $other = Client::readByIdentifier($db, $v['identifier']);
             if ($other !== null && $other->getId() !== $client->getId()) {
-                $errors['identifier'] = 'Toto prihlasovacie meno už existuje.';
+                $errors['identifier'] = 'S týmto e-mailom už existuje iný účet.';
             }
         }
         if ($v['name'] === '') {

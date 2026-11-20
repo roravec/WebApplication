@@ -42,6 +42,9 @@ VS Code workspace with all related repos: `C:\Users\orras\git\ERMA.code-workspac
   permission for these projects). Don't touch the owner's other services there (Nextcloud :80, Minecraft, messenger, camstream…).
   Framework dev copy: `~/webapplication-dev` (copied by tar over ssh, not a git clone), web on **:8090**, tests via
   `cd ~/webapplication-dev/dev && COMPOSE_PROJECT_NAME=webapplication PHP_VERSION=7.3|8.4 docker compose run --rm test`.
+  Disks (2026-11-20): system SSD `/` 437 GB (extended by the owner); **RAID1 2× 1 TB at `/mnt/storage`** — backups of
+  the hosting live in `/mnt/storage/erma/backups` (`~/webstore/backups` is a symlink to it). Large/long-lived data
+  (backups, archives) goes to `/mnt/storage/erma/`, not to the SSD. `/mnt/storage/minecraft` is the owner's — don't touch.
 
 ## Hosting (production)
 - Shared hosting, **FTP only**, nginx proxy in front of Apache. FTP root = web root shared by all domains.
@@ -54,6 +57,10 @@ VS Code workspace with all related repos: `C:\Users\orras\git\ERMA.code-workspac
   flip over to `ermaskretail` (framework apps: phase A2 = copy `panel_*` + `hbkpravotice_*`, switch config.php; the
   upgraded shop goes into `ermaskretail` directly in phase C). `molesk` stays as the test database afterwards.
   Plan: docs/nasadenie-a-udrzba.md "Databázy".
+  **`ermaskretail` is already used by other live services** (found in the 2026-11-20 backup): `aqua_*` (aqua.erma.sk,
+  repo `Web_AquaErma`), `lcs_*` (mobileservice.erma.sk, repo `DB2020_revival`), `branchmanager_*` (owner's old school project, unused — may be dropped in phase D) → only ADD
+  tables with our own prefixes there; never drop/overwrite/import the whole DB. aqua.erma.sk and mobileservice.erma.sk
+  have their own folders on the hosting (not in the FTP root, not in the root backup).
   The ERMA system may READ `ps_*` directly (shop orders); it NEVER writes into them by SQL — changes in a shop (stock,
   order state) go only through the PrestaShop Webservice API (owner 2026-11-19, docs/sklad-specifikacia.md).
 

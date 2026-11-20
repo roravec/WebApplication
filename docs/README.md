@@ -13,8 +13,10 @@ hostingu sa doplní táto stránka.
 | Klub HBK Pravotice + StadiumControl (administrácia zápasov, časomiera, JSON API) | hbkpravotice.sk | `StadiumControl\WebServer\apps\hbkpravotice` (+ statické stránky v koreni `WebServer\webapp\*.html`) | jeho `README.md`, `../HANDOVER.md` bod 22 | prenesené, čaká na nasadenie (A) |
 | Bánovecká hokejbalová liga | bnhl.sk | `StadiumControl\WebServer\apps\bnhl` | `../HANDOVER.md` bod 22 | prenesené, čaká na nasadenie (A) |
 | **E-shopy** Howies Hockey, AmerickeSPZ, CarPlates, ERMA (PrestaShop multistore) | howieshockey.sk, americkespz.sk, carplates.shop, erma.sk/store | kód: `~/webstore/shop.git` na domácom serveri (klon `C:\Users\orras\git\shop`); vlastné moduly, nástroje: `C:\Users\orras\git\Web_store` | Web_store `docs/upgrade-plan.md`, `module-replacements.md`, `pravne-nalezitosti.md`, `angartheme.md`, `HANDOVER.md` | beží 1.7.6.7; 8.2.9 nacvičené (C) |
-| Zavlažovanie (web) | aqua12.erma.sk (overiť) | `C:\Users\orras\git\Web_AquaErma` | jeho README | mimo tohto plánu — overiť, kde beží |
-| Zariadenia ESP32 (LED tabuľa, zavlažovanie) | `/fw` (firmvér), `/api/device_sync.php` — bez https | firmvér: `SW_LedControlBoard`, `SW_WaterIrrigationController_esp32`; `device_sync.php` je len na FTP | LedBoard: `WEB_LedBoard`, `Prj_LedBoard` | beží, nemeniť |
+| Zavlažovanie (web + API pre ESP32 + mobilná appka) | aqua.erma.sk (vlastný priečinok na hostingu, nie v koreni FTP; `aqua12.erma.sk` v `.htaccess` je pozostatok) | `C:\Users\orras\git\Web_AquaErma` (`WaterIrrigationWeb/`, `api/device_sync.php`; `aquaerma_app/`) | jeho README, `WaterIrrigationWeb/DEVICE_COMMUNICATION.md` | beží (tabuľky `aqua_*` v `ermaskretail`), mimo tohto plánu |
+| LCS hub pre staré telefóny (Sony Ericsson) | mobileservice.erma.sk (vlastný priečinok, PHP 8) + agent/messenger na domácom serveri (`~/lcs-*`) | `C:\Users\orras\git\DB2020_revival` | jeho README, CLAUDE.md | beží (tabuľky `lcs_*` v `ermaskretail`), mimo tohto plánu |
+| branchmanager — školský projekt (majiteľ 20. 11. 2026) | — | — | — | **nepoužíva sa**; zostali tabuľky `branchmanager_*` v `ermaskretail` + `branchmanager_users` v `molesk` — dajú sa zmazať pri upratovaní (fáza D), sú v zálohe z 20. 11. |
+| Zariadenia ESP32 (LED tabuľa, zavlažovanie) | `/fw` v koreni (firmvér, bez https); zavlažovanie komunikuje s aqua.erma.sk | firmvér: `SW_LedControlBoard`, `SW_WaterIrrigationController_esp32` | LedBoard: `WEB_LedBoard`, `Prj_LedBoard` | beží, nemeniť |
 | Staré nástroje na hostingu | `admin/`, `sklad/`, `beta/`, `psc/`, `albums/` | len na FTP | — | používajú `molesk`; rozhodnúť: preniesť alebo zrušiť |
 | Staré jadro (dnes obsluhuje erma.sk, hbkpravotice.sk, bnhl.sk) | koreňový `index.php`, `core/`, `WebApp_*` | z repozitára StadiumControl odstránené 20. 11. 2026 (je v histórii gitu); na hostingu do fázy D | — | nahradí ho fáza A, zmaže sa vo fáze D |
 
@@ -29,7 +31,9 @@ rovnako ako predtým — všetko v `applications/`.
   domén. Koreňový `.htaccess` je spoločný — nikdy ho neprepisovať. Lokálna snímka FTP: `C:\Users\orras\git\ftp`
   (štruktúra spoľahlivá, obsah starý — nie je to záloha).
 - **`ermaskretail` = ostrá databáza**, **`molesk` = testovacia** (najprv sa nasadzuje na ňu, potom sa preklopí) —
-  podrobne `nasadenie-a-udrzba.md`, „Databázy“.
+  podrobne `nasadenie-a-udrzba.md`, „Databázy“. `ermaskretail` už používajú aj aqua a LCS (+ staré tabuľky školského projektu branchmanager) → do nej sa
+  len pridávajú tabuľky s vlastným prefixom, nikdy sa celá neprepisuje.
+- Subdomény `aqua.erma.sk` a `mobileservice.erma.sk` majú na hostingu vlastné priečinky (nie sú v koreni FTP).
 - Heslá sú len v `config/config.php` frameworku a `app/config/parameters.php` e-shopu na hostingu, nikdy v git.
 
 ## Plán a údržba
@@ -46,6 +50,6 @@ rovnako ako predtým — všetko v `applications/`.
 | framework, panel, weby | http://192.168.0.11:8090/ (`/panel`, login admin/admin), hbkpravotice / bnhl: `http://hbkpravotice.sk.192-168-0-11.sslip.io:8090/`, `http://bnhl.sk.192-168-0-11.sslip.io:8090/`; testy `dev/` (PHP 7.3 aj 8.4) |
 | e-shopy — kópie | `~/webstore/devN`: dev1 = dnešný ostrý stav (1.7.6, :8081), dev5 = 8.2.9 (:8085), dev4 = 9.2.1 (:8084); dev2, dev3 = staršie skúšky (vypnuté) |
 | e-maily z kópií | Mailpit http://192.168.0.11:8025 (nič neodíde von) |
-| zálohy z hostingu | `~/webstore/backups/` |
+| zálohy z hostingu | `/mnt/storage/erma/backups/` (zrkadlené disky RAID1 2× 1 TB; `~/webstore/backups` je odkaz naň) |
 
 Súbor `hosts` sa nikdy needituje — kópie majú adresy cez sslip.io.

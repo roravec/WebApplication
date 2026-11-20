@@ -1,7 +1,7 @@
 <?php use Panel\Rights; /** @var WebApplication\Entity\Client[] $employees */ ?>
 <p><a class="button primary" href="<?= $e($ctx->url('/employees/new')) ?>">+ Nový zamestnanec</a></p>
 <table class="grid">
-  <thead><tr><th>Meno</th><th>Prihlasovacie meno</th><th>Rola</th><th>Stav</th><th>Naposledy</th></tr></thead>
+  <thead><tr><th>Meno</th><th>E-mail</th><th>Rola</th><th>Stav</th><th>Naposledy</th></tr></thead>
   <tbody>
   <?php foreach ($employees as $c): ?>
     <tr class="<?= $c->isActive() ? '' : 'inactive' ?>">

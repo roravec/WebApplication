@@ -7,7 +7,13 @@ v `C:\Users\orras\git\Web_store\docs\upgrade-plan.md` (časť „Production proc
 
 - Jeden FTP priečinok = koreň webu pre všetky domény. Koreňový `index.php` je **najstaršie jadro** (`core/`,
   `WebApp_*`): obsluhuje erma.sk, hbkpravotice.sk, bnhl.sk. E-shopy sú v `/store/` (PrestaShop 1.7.6.7).
-- Na hostingu je aj staršia kópia frameworku (`core_new/`, `applications/`, `config/`), ktorú nič nevolá.
+- Na hostingu je aj staršia kópia frameworku (`applications/`, `config/`, `interfaces/`, `entities/` z 23. 3. 2026;
+  `core_new/` už na hostingu nie je), ktorú nič nevolá (overené zo zálohy 20. 11. 2026: koreňový `index.php` =
+  `require "core/Application.php"`, `.htaccess` zhodný so snímkou).
+- **Na tom istom hostingu sú aj subdomény s VLASTNÝM priečinkom** (nie sú v koreni FTP, záloha koreňa ich nemá):
+  `aqua.erma.sk` (zavlažovanie, repozitár `Web_AquaErma`, aj `api/device_sync.php` pre ESP32) a
+  `mobileservice.erma.sk` (LCS hub pre staré telefóny, repozitár `DB2020_revival`, beží na PHP 8 — hosting teda vie
+  nastaviť verziu PHP pre doménu). Fáza A ich nemení.
 - Koreňový `.htaccess` je spoločný (presmerovanie na https, e-shopy do `/store/`, zariadenia ESP32 `/fw` a
   `/api/device_sync.php` bez https, všetko ostatné na `/index.php`) — **nikdy sa neprepisuje**, pre nový framework
   netreba v ňom nič meniť.
@@ -26,14 +32,20 @@ v `C:\Users\orras\git\Web_store\docs\upgrade-plan.md` (časť „Production proc
   | erma.sk (dočasná stránka) | — | databázu nepoužíva | — |
   | e-shopy (PrestaShop 8.2.9) | `ps_*` | **fáza C rovno do `ermaskretail`** — nový e-shop je aj tak nová kópia a pred prepnutím sa testuje na `/store_new/` | v rámci C |
 
+- **`ermaskretail` NIE JE prázdna** (zistené zo zálohy 20. 11. 2026, 42 tabuliek): `aqua_*` (zavlažovanie — zapisuje
+  sa doň neustále), `lcs_*` (LCS hub `mobileservice.erma.sk` + agent na domácom serveri), `branchmanager_*`
+  (školský projekt, už sa nepoužíva — zmazať vo fáze D). Preto sa do nej **len pridávajú vlastné tabuľky** (`panel_*`,
+  `hbkpravotice_*`, `ps_*` — žiadna sa s týmito prefixmi nebije); nikdy „zmazať všetko a nahrať“, nikdy import celej
+  zálohy cez ňu. Kopírovanie pri A2 musí brať len vymenované prefixy.
 - Prečo e-shop nejde cez `molesk`: v `molesk` už sú tabuľky starého e-shopu `ps_*`; nový by potreboval iný prefix a
   potom ešte jedno sťahovanie (premenovanie) — zbytočné riziko. Test e-shopu je `/store_new/` pred prepnutím.
 - Kým sú panel a e-shop v rôznych databázach (A2 pred C, alebo naopak), panel číta e-shop **cez Webservice** (vie to,
   odskúšané na dev): v administrácii e-shopu zapnúť Webservice a vytvoriť kľúč pre panel. Keď sú v tej istej
   (`ermaskretail`), v paneli sa spojenie označí „táto databáza“ (rýchlejšie čítanie).
-- Staré nástroje na hostingu (`admin/`, `sklad/`, `beta/`, `psc/`, `albums/`, `/api/device_sync.php` pre zariadenia —
-  ten nie je v žiadnom repozitári, treba ho stiahnuť z FTP) bežia na `molesk`; o každom sa rozhodne: preniesť do
-  frameworku (→ `ermaskretail`) alebo zrušiť.
+- Staré nástroje na hostingu (`admin/`, `sklad/`, `beta/`, `psc/`, `albums/`) bežia na `molesk`; o každom sa
+  rozhodne: preniesť do frameworku (→ `ermaskretail`) alebo zrušiť. (`device_sync.php` pre zariadenia nie je v koreni
+  FTP — je na `aqua.erma.sk`, zdroj v `Web_AquaErma/WaterIrrigationWeb/api/`; pravidlo v koreňovom `.htaccess` pre
+  `/api/device_sync.php` je pozostatok, nechať ho.)
 - Prístupy do databáz (používateľ + heslo) sú len v `config.php` frameworku a v `parameters.php` e-shopu.
 
 ## Čo sa nasadzuje
@@ -61,18 +73,36 @@ Prepnutie je výmena jedného súboru (`index.php`), návrat späť tiež — pr
 
 **Urobíš ty (raz, kedykoľvek vopred):**
 1. Schránka na hostingu na odosielanie faktúr (napr. `faktury@erma.sk`) — jej SMTP údaje.
-2. V `config.php` doplniť prístup do databázy **`molesk`** (to isté ako v dnešnom `config/DatabaseConfig.php`)
-   a SMTP heslo. Heslá neposielaj Claudovi, zapíš ich priamo do súboru.
-3. Zistiť, čo je `aqua12.erma.sk` (je v `.htaccess`, ale nie v konfigurácii starého jadra) — ak beží z koreňa,
-   povedz, doplníme ho.
+2. ~~V `config.php` doplniť prístup do databázy `molesk` a SMTP~~ — **hotové 20. 11.** (na žiadosť majiteľa doplnil
+   Claude skriptom bez zobrazenia hesiel): databáza = rovnaký prístup ako `config/DatabaseConfig.php`, `Config.php` aj
+   `store/.../parameters.php` na hostingu (všetky tri sa zhodujú); SMTP = `info@erma.sk` cez `email.active24.com:465`
+   SSL, ten istý účet, ktorým dnes posiela e-shop AmerickeSPZ. Iná schránka pre faktúry (napr. `faktury@erma.sk`) sa
+   dá neskôr zmeniť v `config.php`.
+3. ~~Zistiť, čo je `aqua12.erma.sk`~~ — zistené 20. 11.: dnes ukazuje len hlášku starého jadra „Web application was
+   not configured“, skutočné zavlažovanie je `aqua.erma.sk` (vlastný priečinok). Po fáze A ukáže stránku 404 — nič sa
+   nestratí. (Rovnako `erma.sk` bez www dnes vracia chybu 500 — opraví to fáza A.)
 
 **Pred každým nasadením (A aj C) — celá záloha:**
-- `Web_store/tools/ps-pack.php` (nastaviť v ňom `SECRET`) nahrať do **koreňa FTP** (nie do `store/`) — zabalí
-  všetky súbory všetkých webov aj e-shopu (bez cache) a celú databázu `molesk` (prístup číta zo `store/`).
-- Otvoriť `https://erma.sk/ps-pack.php?key=…` → „Dump database“, „Pack files“ → stiahnuť 2 súbory → „Delete
-  everything“ (zmaže archívy aj skript z hostingu). Na hostingu musí byť voľné miesto aspoň na archív
-  (e-shop sám mal 2,2 GB); ak nie je, v skripte je voľba bez obrázkov produktov.
-- Súbory uložiť na domáci server (`~/webstore/backups/`) — sú v nich osobné údaje zákazníkov, nedávať do cloudu.
+- `Web_store/tools/ps-pack.php`: nastaviť v ňom `SECRET` a do `$EXTRA_DATABASES` doplniť prístup do
+  **`ermaskretail`** (riadok so vzorom je v skripte; heslo sa na stránke nikdy neukáže a skript sa do archívu nebalí).
+  Nahrať do **koreňa FTP** (nie do `store/`) — zabalí všetky súbory všetkých webov aj e-shopu (bez cache) a
+  **všetky databázy**: tie, ktorých prístup nájde na serveri (`molesk` zo `store/`, starého jadra `Config.php`,
+  `config/DatabaseConfig.php`, po nasadení aj z `config/config.php`), + `ermaskretail` z `$EXTRA_DATABASES`.
+  Keď už `config/config.php` panelu ukazuje na `ermaskretail` (po fáze A2), `$EXTRA_DATABASES` netreba.
+- Otvoriť `https://erma.sk/ps-pack.php?key=…` → skontrolovať tabuľku **Databases** (musia tam byť `molesk` aj
+  `ermaskretail`) → „Dump databases“, „Pack files“ → stiahnuť 3 súbory (`database-molesk.sql.gz`,
+  `database-ermaskretail.sql.gz`, `files.tar.gz`) → „Delete everything“ (zmaže archívy aj skript z hostingu). Na
+  hostingu musí byť voľné miesto aspoň na archív (e-shop sám mal 2,2 GB); ak nie je, v skripte je voľba bez obrázkov
+  produktov. Ak jedna databáza zlyhá (napr. zlé heslo), ostatné sa aj tak uložia a pri úlohe je napísané, ktorá a prečo.
+- Súbory uložiť na domáci server (`~/webstore/backups/` = odkaz na `/mnt/storage/erma/backups/`, zrkadlené disky
+  RAID1 — pri poruche jedného disku sa záloha nestratí; ako `database-<meno>-<dátum>.sql.gz` a
+  `ftp-<dátum>.tar.gz` — celé FTP; `files-<dátum>.tar.gz` je len e-shop, keď ps-pack beží v `store/`;
+  `devserver/setup-copy.sh` vie oba) — sú v nich osobné údaje zákazníkov, nedávať do cloudu.
+- Záloha koreňa **neobsahuje** priečinky subdomén `aqua.erma.sk` a `mobileservice.erma.sk` (ich dáta sú v
+  `ermaskretail`, tá v zálohe je; kód je v repozitároch `Web_AquaErma`, `DB2020_revival`). Fáza A sa ich nedotýka.
+- **Hotové 20. 11. 2026 (pred fázou A):** `molesk` 377 tabuliek, `ermaskretail` 42 tabuliek, celé FTP 3,2 GB
+  (70 594 položiek, e-shop bez cache) — na domácom serveri `~/webstore/backups/*-2026-11-20-*`, kontrolné súčty
+  sedia; kópia aj v `C:\Users\orras\git\Web_store\backups\`.
 - Claude zálohu skontroluje (archív sa dá otvoriť, databáza obsahuje všetky tabuľky).
 
 **Večer prepnutia (ty cez FTP, ~30 min, väčšinu času trvá nahrávanie):**
@@ -84,7 +114,18 @@ Prepnutie je výmena jedného súboru (`index.php`), návrat späť tiež — pr
    (aj StadiumControl prihlásenie), bnhl.sk, erma.sk/panel (prihlásenie, objednávky, koncept faktúry), zariadenia
    (`/fw`, časomiera).
 4. Ak niečo nejde: premenovať späť (`index_oldcore.php` → `index.php`) = starý stav za pár sekúnd.
-5. Prvé prihlásenie do panelu: vytvoriť zamestnancov, vyplniť firmu (ERMA Group, číselné rady — prvé číslo faktúry,
+   **Stav 20. 11. 2026 večer:** prepnuté; erma.sk (aj bez www — chyba 500 starého jadra zmizla), hbkpravotice.sk,
+   StadiumControl, bnhl.sk, statické stránky, `/fw`, e-shopy, aqua — OK; `/config`, `/vendor`, `/framework` → 403.
+   **Panel dal 500:** prvá migrácia čítala tabuľku používateľov `panel_client`, ktorú nikto nevytvoril (na dev ju robil
+   `dev/seed.php`, testy ju mali vždy pripravenú). Oprava: migrácia `000_framework_tables.sql` (tabuľky frameworku
+   client/token/log/text) + test na úplne prázdnej databáze + skúška presne tejto situácie na dev serveri (polovične
+   prebehnutá 001 → oprava → všetko dobehne). Nahrať 4 súbory panela: `App.php`, `sql/000_framework_tables.sql`,
+   `src/Controller/SetupController.php`, `views/setup.php` (v balíku sú už opravené).
+5. **Prvý správca panela:** jednorazová stránka `/panel/setup?key=…` — funguje len kým v paneli nie je žiadny účet a len
+   s kľúčom odvodeným z `jwtSecret` (`SetupController::key()`, adresu vypočíta Claude z `config.php`). Majiteľ si tam
+   zvolí e-mail a heslo sám; potom stránka navždy vráti 404. Ostatných zamestnancov pridáva správca v paneli.
+   **Prihlasovacie meno = e-mail** (majiteľ 20. 11. 2026) — v paneli všade, uložený malými písmenami.
+6. Prvé prihlásenie do panelu: vytvoriť zamestnancov, vyplniť firmu (ERMA Group, číselné rady — prvé číslo faktúry,
    e-mail účtovníka, „posielať automaticky“), napojiť e-shop cez Webservice (kľúč z administrácie e-shopu).
 
 Po prepnutí: používatelia hbkpravotice s „Remember me“ sa raz prihlásia znova (nový podpis prihlásenia).
@@ -182,7 +223,7 @@ stanú funkciami panela namiesto samostatných skriptov — práca navyše teda 
 
 | Kedy | Čo | Kto |
 |---|---|---|
-| každý mesiac | záloha: `tools/ps-pack.php` na hostingu (celá databáza + súbory) → stiahnuť na domáci server; **faktúry sú len v databáze a musia sa uchovať 10 rokov** | ty spustíš, Claude skontroluje a uloží |
+| každý mesiac | záloha: `tools/ps-pack.php` na hostingu (obe databázy + všetky súbory) → stiahnuť na domáci server; **faktúry sú len v databáze a musia sa uchovať 10 rokov** | ty spustíš, Claude skontroluje a uloží |
 | každý mesiac | balík pre účtovníka odíde sám; skontrolovať, že prišiel | automaticky / účtovníčka |
 | každý mesiac | pozrieť logy (`var/log/` frameworku, logy PrestaShopu) | Claude z FTP kópie |
 | pri vydaní opravy PrestaShopu 8.2.x (bezpečnostné) | nácvik na kópii (`upgrade-run.sh`), potom hosting | Claude pripraví, ty nahráš |

@@ -77,6 +77,24 @@ function panelUser($db, string $login, int $rights): Client
     return $u;
 }
 
+test('panel: migrations on an EMPTY database (fresh hosting) create the framework tables too', function () {
+    $db = testDb('pt_');
+    foreach ($db->query("SHOW TABLES LIKE 'pt\\_%'") as $row) {
+        $db->pdo()->exec('DROP TABLE `' . reset($row) . '`');
+    }
+    ok(in_array('000_framework_tables.sql', Schema::migrate($db, __DIR__ . '/../src/applications/panel/sql'), true));
+    foreach (['client', 'token', 'log', 'text', 'invoice', 'accounting_package'] as $t) {
+        eq(1, count($db->query("SHOW TABLES LIKE 'pt\\_$t'")), "pt_$t exists");
+    }
+    eq(32, strlen(Panel\Controller\SetupController::key('secret')));
+    // employees log in with their e-mail (lower-case)
+    eq('jan.novak@erma.sk', Panel\Controller\EmployeesController::normalizeEmail('  Jan.Novak@ERMA.sk '));
+    eq(null, Panel\Controller\EmployeesController::emailError('jan.novak@erma.sk'));
+    ok(Panel\Controller\EmployeesController::emailError('admin') !== null, 'plain name is not a login');
+    ok(Panel\Controller\EmployeesController::emailError('jan@') !== null);
+    ok(Panel\Controller\SetupController::key('a') !== Panel\Controller\SetupController::key('b'));
+});
+
 test('panel: migrations run once and convert old rights levels', function () {
     $db = panelDb();
     $viewer = panelUser($db, 'viewer', 10);

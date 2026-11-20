@@ -19,6 +19,7 @@ use Panel\Controller\EmployeesController;
 use Panel\Controller\InvoicesController;
 use Panel\Controller\LegislationController;
 use Panel\Controller\OrdersController;
+use Panel\Controller\SetupController;
 use Panel\Controller\ShopsController;
 use Panel\Controller\StockController;
 use Panel\PanelContext;
@@ -67,6 +68,10 @@ class PanelApp implements RequestHandler
         // automatic monthly package for the accountant without a logged-in employee (token in config; 404 without it)
         $accounting = new AccountingController($ctx);
         $r->get('/cron/accounting', [$accounting, 'cron']);
+        // first administrator of a new installation (only while there is no account; key from jwtSecret)
+        $setup = new SetupController($ctx);
+        $r->get('/setup', [$setup, 'form']);
+        $r->post('/setup', [$setup, 'save']);
 
         // everything below requires a logged-in employee with the given permission ('' = any employee)
         $guard = function (string $permission, callable $handler) use ($ctx) {

@@ -32,7 +32,8 @@ class AuthController
             return Response::html($this->render('Formulár vypršal, skúste to znova.', $next), 400);
         }
         $ok = $this->ctx->app->getClientAuth()->login(
-            trim((string)$req->post('login', '')), (string)$req->post('password', ''), (bool)$req->post('remember')
+            EmployeesController::normalizeEmail((string)$req->post('login', '')), (string)$req->post('password', ''),
+            (bool)$req->post('remember')
         );
         if (!$ok) {
             $this->ctx->app->getLogger()->warning('Panel login failed', ['login' => (string)$req->post('login', ''), 'ip' => $req->ip()]);

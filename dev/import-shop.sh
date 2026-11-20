@@ -3,10 +3,18 @@
 # so the panel can show real orders. Visitor-statistics tables are imported without rows.
 # Customer e-mails are anonymised (customer<id>@example.invalid).
 #
-#   ./import-shop.sh [dump.sql.gz]     default: newest ~/webstore/backups/database-*.sql.gz
+#   ./import-shop.sh [dump.sql.gz]     default: newest ~/webstore/backups/database-*.sql.gz that holds the shop
+#                                      (ps-pack dumps every database — molesk, ermaskretail … — into its own file)
 set -euo pipefail
 cd "$(dirname "$0")"
-DUMP=${1:-$(ls -t "$HOME"/webstore/backups/database-*.sql.gz | grep -v TRUNCATED | head -1)}
+newest_shop_dump() {
+    local f
+    for f in $(ls -t "$HOME"/webstore/backups/database-*.sql.gz | grep -v TRUNCATED); do
+        if zgrep -q 'CREATE TABLE `ps_configuration`' "$f"; then echo "$f"; return; fi
+    done
+}
+DUMP=${1:-$(newest_shop_dump)}
+[ -n "$DUMP" ] || { echo "no dump with the shop tables in ~/webstore/backups"; exit 1; }
 export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-webapplication}
 NODATA="ps_connections ps_connections_page ps_connections_source ps_guest ps_pagenotfound ps_page_viewed ps_statssearch ps_log"
 

@@ -7,7 +7,7 @@ $action = $client ? '/employees/' . $client->getId() : '/employees';
 <form class="card form" method="post" action="<?= $e($ctx->url($action)) ?>">
   <?= Csrf::field() ?>
   <label>Meno a priezvisko <input name="name" value="<?= $e($values['name']) ?>" required><?= $err('name') ?></label>
-  <label>Prihlasovacie meno <input name="identifier" value="<?= $e($values['identifier']) ?>" required autocomplete="off"><?= $err('identifier') ?></label>
+  <label>E-mail (prihlasovacie meno) <input name="identifier" type="email" value="<?= $e($values['identifier']) ?>" required autocomplete="off"><?= $err('identifier') ?></label>
   <fieldset>
     <legend>Oprávnenia</legend>
     <label class="check"><input type="checkbox" name="admin" value="1" data-toggles="#perms"<?= $values['admin'] ? ' checked' : '' ?>>
