@@ -76,5 +76,35 @@ Zoradiť sa dá len podľa jedného poľa, zoznam nemá celkový počet, filtre 
 = viac dopytov naraz. Položky nemajú sadzbu DPH → počíta sa z ich súm. Pomalé (0,3–1 s na dopyt) → súbežné dopyty a
 krátka vyrovnávacia pamäť (tabuľka shop_cache).
 
+**Správa objednávok a e-shopu (hotové 21. 11. 2026)** — všetko cez štandardný Webservice, overené na kópiách
+PrestaShop 1.7.6.7 (dev1) aj 9.2.1 (dev4); **každé volanie posiela `id_shop`** (PrestaShop 9 inak objednávku / adresu
+„nenájde“):
+- *Detail objednávky:* číslo zásielky (`order_carriers` PUT; PrestaShop ho skopíruje do objednávky, e-mail o odoslaní
+  s odkazom na sledovanie) + voliteľne zmena stavu; **zmena dodacej / fakturačnej adresy** = nová adresa zákazníka
+  (kópia so zmenami, `addresses` POST) a objednávka sa na ňu prepne (`orders` PUT — zmení sa len adresa, položky
+  a sumy nie; overené porovnaním); **interné poznámky** (len v paneli); **správa zákazníkovi** e-mailom v štýle e-shopu
+  (logo, meno e-shopu, adresa firmy; v zozname „E-maily zákazníkovi“); **výdajné miesto Zásielkovne** (modul
+  `shaim_zasilkovna_widget`, tabuľka `ps_shaim_zasilkovna_widget_data` podľa košíka; na faktúru nie — majiteľ 21. 11.);
+  **dodací list** (PDF).
+- *Vrátenie tovaru:* vybrané kusy (nie viac, ako ostáva) → naskladnenie späť do e-shopu (`stock_availables`, aktuálne
+  množstvo + vrátené), **koncept dobropisu len z vrátených položiek** (+ doprava; párovanie podľa kódu a názvu na
+  faktúre), zmena stavu; záznam vrátenia s problémami, ak niektorý krok zlyhal. Peniaze sa vracajú v GoPay / bankou ručne.
+- *Objednávky → Expedícia* (`/shipping`): objednávky v stavoch „na vybavenie“ (predvolene zaplatené a neodoslané +
+  dobierka; výber sa dá zapamätať), hromadne: dodacie listy, vychystávací zoznam (súčet kusov podľa produktu), čísla
+  zásielok, zmena stavu s e-mailom (max. 100 naraz).
+- *Produkty a ceny* (Sklad → E-shopy → produkt): predajná cena bez DPH (zobrazí aj s DPH podľa daňového pravidla pre SK),
+  aktívny áno/nie, príplatok kombinácie; **akcie** (`specific_prices`): % alebo € (s / bez DPH), od–do, kombinácia,
+  od počtu kusov — pridať / zrušiť; akcie nastavené v e-shope pre skupinu / zákazníka / krajinu sa len zobrazia.
+- **Úprava položiek objednávky (produkty, množstvá, ceny) cez Webservice nie je** — Webservice neprepočíta sumy, dane
+  ani sklad. Možnosti: robiť ich v administrácii PrestaShopu, alebo malý vlastný modul s bezpečným endpointom (rozhodne
+  majiteľ). Rovnako odovzdanie zásielok do Packety (API + štítky) — po inštalácii oficiálneho modulu Packeta.
+- Kľúč Webservice potrebuje (formulár pripojenia): GET+PUT products, combinations, stock_availables, orders,
+  order_carriers; GET+POST order_histories, addresses; GET+POST+PUT+DELETE specific_prices; GET product_options,
+  product_option_values, languages, shops, shop_groups, order_details, order_states, order_payments, customers, countries,
+  currencies, carriers, taxes, tax_rules, tax_rule_groups, categories.
+- Kód: `Shop\ShopOrderEdit`, `Shop\OrderLog`, `Shop\ShopStock::addQuantity`, `Shop\ShopProducts` (ceny, akcie),
+  `Controller\OrderToolsController`, `ShopsController::sale*`, `views/orders/*` (message, address, return, shipping,
+  delivery-note, picking-list), migrácia 017; testy „order tools…“, „returns…“.
+
 ## 5. Otvorené
 - Účtovanie skladu v Omege (export pohybov — formát T02/T03 je v popise KROS ImportExport) — po kroku 1.

@@ -49,8 +49,20 @@ class InvoiceRenderer
         } catch (\Throwable $e) {
             $qrError = $e->getMessage();
         }
+        // document from an order of an e-shop of this database: the shop's name, web, e-mail, phone and invoice logo
+        // (the old shop invoices had them — owner 2026-11-21); an issued document is archived as PDF, so it stays as issued
+        $shop = null;
+        if (!empty($inv['shop_id']) && (int)($inv['shop_connection_id'] ?? 0) === 0 && $this->ctx->shopOrders()->available()) {
+            $b = $this->ctx->shopOrders()->brand((int)$inv['shop_id'], 'invoice');
+            if ($b['name'] !== '') {
+                $b['logo'] = $b['logo'] !== '' ? 'data:' . $b['logo_mime'] . ';base64,' . base64_encode($b['logo']) : '';
+                $shop = $b;
+            }
+        }
+        $bankRow = $inv['bank_account_id'] ? $companies->bank((int)$inv['bank_account_id']) : null;
         return $this->ctx->view->render(Templates::viewFor($inv), [
             'inv' => $inv, 'supplier' => $supplier, 'original' => $original, 'legal' => $legal,
+            'shop' => $shop, 'bankName' => $bankRow ? (string)($bankRow['bank'] ?? '') : '',
             'logo' => $img('logo'), 'stamp' => $img('stamp'), 'qr' => $qr, 'qrError' => $qrError,
             'forPdf' => $forPdf, 'fontBase' => $forPdf ? Pdf::fontDir() : $this->ctx->app->asset('fonts'),
             'title' => Invoices::typeLabel($inv['doc_type']) . ' ' . ($inv['number'] ?: '(koncept)'),

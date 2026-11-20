@@ -15,6 +15,8 @@ namespace Panel\Shop;
 class ShopProducts
 {
     const PRODUCT_FIELDS = [
+        'price' => 'Predajná cena bez DPH',
+        'active' => 'Aktívny (v predaji)',
         'minimal_quantity' => 'Minimálne množstvo na objednávku',
         'low_stock_threshold' => 'Upozorniť pri množstve (nízky stav)',
         'low_stock_alert' => 'Posielať e-mail pri nízkom stave',
@@ -22,7 +24,7 @@ class ShopProducts
         'available_now' => 'Text — na sklade',
         'available_later' => 'Text — keď nie je na sklade',
     ];
-    const COMBINATION_FIELDS = ['minimal_quantity', 'low_stock_threshold', 'wholesale_price'];
+    const COMBINATION_FIELDS = ['minimal_quantity', 'low_stock_threshold', 'wholesale_price', 'price'];   // price = impact on the product price
     const LANG_FIELDS = ['available_now', 'available_later'];
 
     /** @var PrestaShopApi */ private $api;
@@ -39,7 +41,7 @@ class ShopProducts
         $ctx = ['id_shop' => $shop['id']];
         $p = $this->api->get('products/' . $productId, $ctx)->product;
         $out = ['id' => $productId, 'name' => PrestaShopApi::text($p->name, $langId), 'reference' => (string)$p->reference,
-                'ean' => (string)$p->ean13, 'active' => (int)$p->active === 1, 'combinations' => []];
+                'ean' => (string)$p->ean13, 'combinations' => [], 'tax_rate' => $this->taxRate($shop, (int)$p->id_tax_rules_group)];
         foreach (array_keys(self::PRODUCT_FIELDS) as $f) {
             $out[$f] = in_array($f, self::LANG_FIELDS, true) ? self::langValue($p->$f, $langId) : (string)$p->$f;
         }
@@ -96,6 +98,82 @@ class ShopProducts
         }
         self::makeSafe($c, array_merge($this->readOnlyFields('combinations'), ['associations']));
         $this->api->put('combinations', $combinationId, $doc, $ctx);
+    }
+
+    /**
+     * VAT rate of a tax rules group for Slovakia (to show the price with VAT next to the price without it); 0 = no tax
+     * (e.g. a shop of a non-payer). Read from the shop: tax_rules (country SK) → taxes.
+     */
+    public function taxRate(array $shop, int $groupId): float
+    {
+        if ($groupId <= 0) {
+            return 0.0;
+        }
+        try {
+            $ctx = ['id_shop' => $shop['id']];
+            $country = $this->api->get('countries', $ctx + ['display' => '[id]', 'filter' => ['iso_code' => '[SK]']])->countries->country[0] ?? null;
+            if ($country === null) {
+                return 0.0;
+            }
+            $rule = $this->api->get('tax_rules', $ctx + ['display' => '[id_tax]', 'filter' => ['id_tax_rules_group' => '[' . $groupId . ']',
+                'id_country' => '[' . (int)$country->id . ']']])->tax_rules->tax_rule[0] ?? null;
+            if ($rule === null || !(int)$rule->id_tax) {
+                return 0.0;
+            }
+            return (float)$this->api->get('taxes/' . (int)$rule->id_tax, $ctx)->tax->rate;
+        } catch (\Throwable $e) {
+            return 0.0;   // key without tax resources: the price with VAT is just not shown
+        }
+    }
+
+    /** Sales (specific prices) of a product in this shop: id, combination, reduction, type, with VAT, from, to, from quantity. */
+    public function specificPrices(array $shop, int $productId): array
+    {
+        $out = [];
+        $list = $this->api->get('specific_prices', ['id_shop' => $shop['id'], 'display' => 'full', 'filter' => ['id_product' => '[' . $productId . ']']]);
+        foreach ($list->specific_prices->specific_price ?? [] as $sp) {
+            if ((int)$sp->id_shop !== 0 && (int)$sp->id_shop !== (int)$shop['id']) {
+                continue;
+            }
+            $out[] = ['id' => (int)$sp->id, 'combination' => (int)$sp->id_product_attribute, 'reduction' => (float)$sp->reduction,
+                'type' => (string)$sp->reduction_type, 'tax' => (int)$sp->reduction_tax === 1, 'price' => (float)$sp->price,
+                'from' => (string)$sp->from, 'to' => (string)$sp->to, 'from_quantity' => (int)$sp->from_quantity,
+                'all_shops' => (int)$sp->id_shop === 0, 'limited' => (int)$sp->id_group || (int)$sp->id_customer || (int)$sp->id_country
+                    || (int)$sp->id_currency || (int)$sp->id_cart];
+        }
+        return $out;
+    }
+
+    /**
+     * New sale for everybody in this shop. @param string $type percentage | amount @param float $value 10 = 10 % or 10 €
+     * @param bool $taxIncl amount with VAT (amount only) @param string $from / $to Y-m-d or '' (unlimited)
+     */
+    public function addSpecificPrice(array $shop, int $productId, int $combinationId, string $type, float $value, bool $taxIncl,
+                                     string $from, string $to, int $fromQuantity = 1): int
+    {
+        if (!in_array($type, ['percentage', 'amount'], true) || $value <= 0 || ($type === 'percentage' && $value >= 100)) {
+            throw new \InvalidArgumentException('Zľava: percento 0–100 alebo suma > 0.');
+        }
+        $x = function ($v) { return htmlspecialchars((string)$v, ENT_XML1, 'UTF-8'); };
+        $xml = '<?xml version="1.0" encoding="UTF-8"?><prestashop><specific_price>'
+            . '<id_shop_group>0</id_shop_group><id_shop>' . (int)$shop['id'] . '</id_shop><id_cart>0</id_cart><id_product>' . $productId . '</id_product>'
+            . '<id_product_attribute>' . $combinationId . '</id_product_attribute><id_currency>0</id_currency><id_country>0</id_country>'
+            . '<id_group>0</id_group><id_customer>0</id_customer><price>-1</price><from_quantity>' . max(1, $fromQuantity) . '</from_quantity>'
+            . '<reduction>' . $x($type === 'percentage' ? round($value / 100, 4) : round($value, 6)) . '</reduction>'
+            . '<reduction_tax>' . ($type === 'amount' && !$taxIncl ? 0 : 1) . '</reduction_tax><reduction_type>' . $x($type) . '</reduction_type>'
+            . '<from>' . $x($from !== '' ? $from . ' 00:00:00' : '0000-00-00 00:00:00') . '</from>'
+            . '<to>' . $x($to !== '' ? $to . ' 23:59:59' : '0000-00-00 00:00:00') . '</to>'
+            . '</specific_price></prestashop>';
+        return (int)$this->api->post('specific_prices', $xml, ['id_shop' => $shop['id']])->specific_price->id;
+    }
+
+    public function deleteSpecificPrice(array $shop, int $specificPriceId, int $productId): void
+    {
+        $sp = $this->api->get('specific_prices/' . $specificPriceId, ['id_shop' => $shop['id']])->specific_price;
+        if ((int)$sp->id_product !== $productId || ((int)$sp->id_shop !== 0 && (int)$sp->id_shop !== (int)$shop['id'])) {
+            throw new \RuntimeException('Akcia nepatrí k tomuto produktu / e-shopu.');
+        }
+        $this->api->delete('specific_prices', $specificPriceId, ['id_shop' => $shop['id']]);
     }
 
     /** Read-only fields of a resource as the shop declares them (schema=synopsis), else the known ones. */

@@ -136,6 +136,9 @@ class PanelApp implements RequestHandler
 
         $r->get('/', $guard('', [$dashboard, 'index']));
         $r->get('/orders', $guard(Rights::ORDERS_VIEW, [$orders, 'index']));
+        $tools = new \Panel\Controller\OrderToolsController($ctx);
+        $r->get('/shipping', $guard(Rights::ORDERS_VIEW, [$tools, 'shipping']));
+        $r->post('/shipping', $guard(Rights::ORDERS_VIEW, [$tools, 'shippingAction']));   // writes check orders.edit inside
         // /orders/{id} = order in the shop tables of this database; /orders/{src}/{id} = order of shop connection {src}
         foreach (['/orders/{id:\d+}', '/orders/{src:\d+}/{id:\d+}'] as $o) {
             $r->get($o, $guard(Rights::ORDERS_VIEW, [$orders, 'show']));
@@ -143,6 +146,15 @@ class PanelApp implements RequestHandler
             $r->post($o . '/invoice/issue', $guard($EDIT, [$invoices, 'issueFromOrder']));
             $r->post($o . '/invoice/send', $guard($EDIT, [$invoices, 'sendFromOrder']));
             $r->post($o . '/state', $guard(Rights::ORDERS_EDIT, [$orders, 'changeState']));
+            $r->post($o . '/tracking', $guard(Rights::ORDERS_EDIT, [$tools, 'tracking']));
+            $r->post($o . '/note', $guard(Rights::ORDERS_VIEW, [$tools, 'note']));
+            $r->get($o . '/message', $guard(Rights::ORDERS_EDIT, [$tools, 'messageForm']));
+            $r->post($o . '/message', $guard(Rights::ORDERS_EDIT, [$tools, 'message']));
+            $r->get($o . '/address/{type:[a-z]+}', $guard(Rights::ORDERS_EDIT, [$tools, 'addressForm']));
+            $r->post($o . '/address/{type:[a-z]+}', $guard(Rights::ORDERS_EDIT, [$tools, 'address']));
+            $r->get($o . '/return', $guard(Rights::ORDERS_EDIT, [$tools, 'returnForm']));
+            $r->post($o . '/return', $guard(Rights::ORDERS_EDIT, [$tools, 'returnSave']));
+            $r->get($o . '/delivery-note', $guard(Rights::ORDERS_VIEW, [$tools, 'deliveryNote']));
         }
 
         $r->get('/invoices', $guard($VIEW, [$invoices, 'index']));
@@ -197,6 +209,8 @@ class PanelApp implements RequestHandler
         $r->post('/stock/shops/{cid:\d+}/{sid:\d+}', $guard($SE, [$shops, 'stockSave']));
         $r->get('/stock/shops/{cid:\d+}/{sid:\d+}/product/{pid:\d+}', $guard($SV, [$shops, 'product']));
         $r->post('/stock/shops/{cid:\d+}/{sid:\d+}/product/{pid:\d+}', $guard($SE, [$shops, 'productSave']));
+        $r->post('/stock/shops/{cid:\d+}/{sid:\d+}/product/{pid:\d+}/sale', $guard($SE, [$shops, 'saleAdd']));
+        $r->post('/stock/shops/{cid:\d+}/{sid:\d+}/product/{pid:\d+}/sale/{spid:\d+}/delete', $guard($SE, [$shops, 'saleDelete']));
 
         $r->get('/customers', $guard($VIEW, [$customers, 'index']));
         $r->get('/customers/lookup', $guard($EDIT, [$customers, 'lookup']));

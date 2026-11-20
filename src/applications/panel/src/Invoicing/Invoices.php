@@ -583,9 +583,17 @@ class Invoices
         return 'card';   // payment gateways (GoPay, cards, PayPal …): already paid
     }
 
-    /** Draft credit note for an issued invoice: same buyer, all lines with negative quantity (edit to a partial one). */
-    public function createCreditNote(int $invoiceId, Client $user): int
+    /**
+     * Draft credit note for an issued invoice: same buyer, all lines with negative quantity (edit to a partial one).
+     * @param array|null $pick only these lines: list of ['sku' => , 'name' => , 'quantity' => ] (returned goods; matched by
+     *                   code + name, each invoice line once) and/or ['shipping' => true] (the "Doprava…" line); null = all
+     * @param string $reason reason of the correction (printed on the credit note)
+     */
+    public function createCreditNote(int $invoiceId, Client $user, ?array $pick = null, string $reason = ''): int
     {
+        if ($pick !== null) {
+            return $this->createPartialCreditNote($invoiceId, $user, $pick, $reason);
+        }
         $inv = $this->find($invoiceId);
         if ($inv === null || $inv['status'] !== 'issued' || $inv['doc_type'] !== 'invoice') {
             throw new \RuntimeException('Dobropis sa dá vytvoriť len k vystavenej faktúre.');
@@ -605,6 +613,55 @@ class Invoices
         }
         $id = $this->saveDraft(null, $h, $lines, $user, ['original_invoice_id' => $invoiceId]);
         Audit::log($this->db, $user, 'invoice', $invoiceId, 'credit_note', 'koncept dobropisu #' . $id);
+        return $id;
+    }
+
+    /** Credit note draft with only the returned goods (+ shipping) — see createCreditNote(). */
+    private function createPartialCreditNote(int $invoiceId, Client $user, array $pick, string $reason): int
+    {
+        $inv = $this->find($invoiceId);
+        if ($inv === null || $inv['status'] !== 'issued' || $inv['doc_type'] !== 'invoice') {
+            throw new \RuntimeException('Dobropis sa dá vytvoriť len k vystavenej faktúre.');
+        }
+        $available = $inv['lines'];
+        $lines = [];
+        $missing = [];
+        foreach ($pick as $p) {
+            $found = null;
+            foreach ($available as $i => $l) {
+                $isShipping = mb_strpos((string)$l['name'], 'Doprava', 0, 'UTF-8') === 0;
+                if (!empty($p['shipping']) ? $isShipping
+                        : (!$isShipping && (string)$l['sku'] === (string)($p['sku'] ?? '') && (string)$l['name'] === (string)($p['name'] ?? ''))) {
+                    $found = $i;
+                    break;
+                }
+            }
+            if ($found === null) {
+                $missing[] = !empty($p['shipping']) ? 'doprava' : (string)($p['name'] ?? '');
+                continue;
+            }
+            $l = $available[$found];
+            unset($available[$found]);   // each invoice line once
+            $qty = !empty($p['shipping']) ? (float)$l['quantity'] : min((float)$p['quantity'], (float)$l['quantity']);
+            $l['quantity'] = -$qty;
+            $lines[] = $l;
+        }
+        if (!$lines) {
+            throw new \RuntimeException('Vrátené položky sa na faktúre ' . $inv['number'] . ' nenašli — dobropis vytvorte ručne pri faktúre.');
+        }
+        $h = $this->defaults((int)$inv['company_id'], 'credit_note', $user);
+        foreach (self::HEADER_FIELDS as $f) {
+            if (strpos($f, 'buyer_') === 0 || in_array($f, ['customer_id', 'currency', 'payment_method', 'bank_account_id'], true)) {
+                $h[$f] = $inv[$f];
+            }
+        }
+        $h['delivery_date'] = $inv['delivery_date'];
+        $h['note'] = '';
+        $h['correction_reason'] = $reason;
+        $id = $this->saveDraft(null, $h, $lines, $user, ['original_invoice_id' => $invoiceId, 'shop_id' => $inv['shop_id'],
+            'shop_connection_id' => $inv['shop_connection_id'], 'order_reference' => $inv['order_reference']]);
+        Audit::log($this->db, $user, 'invoice', $invoiceId, 'credit_note', 'koncept dobropisu #' . $id . ' (vrátenie tovaru'
+            . ($missing ? '; na faktúre chýba: ' . implode(', ', $missing) : '') . ')');
         return $id;
     }
 }

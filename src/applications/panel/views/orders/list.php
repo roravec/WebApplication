@@ -27,6 +27,7 @@ $qs = function (array $change) use ($filters) {
   <label>do <input type="date" name="to" value="<?= $e($filters['to']) ?>"></label>
   <button class="primary">Hľadať</button>
   <a href="<?= $e($ctx->url('/orders' . ($filters['src'] ? '?src=' . $filters['src'] : ''))) ?>">Zrušiť filter</a>
+  <a class="button push" href="<?= $e($ctx->url('/shipping' . ($filters['src'] ? '?src=' . $filters['src'] : ''))) ?>">Expedícia</a>
 </form>
 <?php if ($error !== null): ?><p class="flash err">E-shop neodpovedá: <?= $e($error) ?></p><?php endif ?>
 <p class="muted"><?= (int)$total ?> objednávok<?= $filters['src'] ? ' · číta sa cez Webservice e-shopu' : '' ?></p>

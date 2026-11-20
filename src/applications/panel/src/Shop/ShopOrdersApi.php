@@ -98,9 +98,25 @@ class ShopOrdersApi implements OrderSource
 
     public function find(int $id): ?array
     {
-        $byOrder = ['filter' => ['id_order' => '[' . $id . ']'], 'sort' => '[id_ASC]', 'display' => 'full'];
+        // PrestaShop 9 returns an order (and its details, addresses …) only in the context of its shop → find the shop first
+        $shop = null;
+        $tries = [];
+        foreach ($this->shops() as $sh) {
+            $tries[(string)$sh['id_shop']] = ['orders', ['id_shop' => $sh['id_shop'], 'display' => '[id,id_shop]', 'filter' => ['id' => '[' . $id . ']']]];
+        }
+        foreach ($tries ? $this->api->getMany($tries, array_keys($tries)) : [] as $k => $x) {
+            if ($x !== null && self::each($x->orders, 'order')) {
+                $shop = (int)$k;
+                break;
+            }
+        }
+        if ($shop === null) {
+            return null;
+        }
+        $ctx = ['id_shop' => $shop];
+        $byOrder = $ctx + ['filter' => ['id_order' => '[' . $id . ']'], 'sort' => '[id_ASC]', 'display' => 'full'];
         try {
-            $r = $this->api->getMany(['o' => ['orders/' . $id, []], 'd' => ['order_details', $byOrder], 'h' => ['order_histories', $byOrder]]);
+            $r = $this->api->getMany(['o' => ['orders/' . $id, $ctx], 'd' => ['order_details', $byOrder], 'h' => ['order_histories', $byOrder]]);
         } catch (\RuntimeException $e) {
             if ($e->getCode() === 404) {
                 return null;
@@ -125,13 +141,15 @@ class ShopOrdersApi implements OrderSource
         $o['shop'] = $this->shopName((int)$o['id_shop']);
         $o['currency'] = $this->currencies()[(int)$o['id_currency']] ?? '';
         $o['carrier'] = $this->carriers()[(int)$o['id_carrier']] ?? '';
+        $o['carrier_url'] = '';
+        $o['tracking'] = (string)($o['shipping_number'] ?? '');   // PrestaShop copies the order carrier's tracking number here
 
         $addrIds = array_unique(array_filter([(int)$o['id_address_invoice'], (int)$o['id_address_delivery']]));
         $r2 = $this->api->getMany([
             'c' => (int)$o['id_customer'] ? ['customers', ['id_shop' => (int)$o['id_shop'], 'display' => '[id,firstname,lastname,email,company]',
                 'filter' => ['id' => '[' . (int)$o['id_customer'] . ']']]] : null,
-            'a' => $addrIds ? ['addresses', ['display' => 'full', 'filter' => ['id' => '[' . implode('|', $addrIds) . ']']]] : null,
-            'p' => ['order_payments', ['display' => 'full', 'filter' => ['order_reference' => '[' . self::clean($o['reference']) . ']'],
+            'a' => $addrIds ? ['addresses', $ctx + ['display' => 'full', 'filter' => ['id' => '[' . implode('|', $addrIds) . ']']]] : null,
+            'p' => ['order_payments', $ctx + ['display' => 'full', 'filter' => ['order_reference' => '[' . self::clean($o['reference']) . ']'],
                 'sort' => '[id_ASC]']],
         ], ['p']);
         $c = isset($r2['c']) ? (self::each($r2['c']->customers, 'customer')[0] ?? null) : null;
@@ -153,7 +171,8 @@ class ShopOrdersApi implements OrderSource
         }
         $o['lines'] = [];
         foreach (self::each($r['d']->order_details, 'order_detail') as $d) {
-            $o['lines'][] = ['product_name' => (string)$d->product_name, 'product_reference' => (string)$d->product_reference,
+            $o['lines'][] = ['id_order_detail' => (int)$d->id, 'product_id' => (int)$d->product_id, 'product_attribute_id' => (int)$d->product_attribute_id,
+                'product_name' => (string)$d->product_name, 'product_reference' => (string)$d->product_reference,
                 'product_quantity' => (string)$d->product_quantity, 'unit_price_tax_excl' => (string)$d->unit_price_tax_excl,
                 'unit_price_tax_incl' => (string)$d->unit_price_tax_incl, 'total_price_tax_excl' => (string)$d->total_price_tax_excl,
                 'total_price_tax_incl' => (string)$d->total_price_tax_incl,
@@ -216,6 +235,8 @@ class ShopOrdersApi implements OrderSource
         $extra = [];
         if (!empty($f['state'])) {
             $flt['current_state'] = '[' . (int)$f['state'] . ']';
+        } elseif (!empty($f['states'])) {   // several states (Expedícia)
+            $flt['current_state'] = '[' . implode('|', array_map('intval', (array)$f['states'])) . ']';
         }
         $from = !empty($f['from']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $f['from']) ? $f['from'] : '';
         $to = !empty($f['to']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $f['to']) ? $f['to'] : '';

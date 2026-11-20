@@ -17,11 +17,14 @@ hbkpravotice.sk, bnhl.sk, later LedBoard… (confirmed with the owner 2026-11-19
 separate software and is not part of it. Reworked in Nov 2026, see README.md for the full description.
 VS Code workspace with all related repos: `C:\Users\orras\git\ERMA.code-workspace`.
 
-- PHP **7.3 – 8.4**. Must stay **PHP 7.3 compatible**: the hosting runs 7.3 and the PrestaShop shop on the same
-  hosting blocks a PHP upgrade until the shop is upgraded (see `C:\Users\orras\git\Web_store`). No typed properties,
-  arrow functions, `??=`, match, union types, str_contains; no dynamic properties (8.2); explicit `?type` for null defaults (8.4).
+- PHP **8.5** (owner 2026-11-21: "už nemusíš testovať nič na 7.3"): since 2026-11-20 the whole hosting (PrestaShop 9 and
+  every framework app — panel, erma, hbkpravotice, bnhl) runs on PHP 8.5. **Test on 8.5 only** (dev default, see
+  HANDOVER "Dev environment"); no PHP 8.5 deprecations (e.g. `curl_close`, `(integer)` casts). Existing code is still
+  7.3-style (no typed properties etc.) — new code may use PHP 8 features, but keep the style consistent; no dynamic
+  properties (8.2); explicit `?type` for null defaults (8.4).
 - Composer libraries are allowed when they run on shared hosting without shell (pure PHP). `composer.json` in the repo
-  root, libraries in `src/vendor` (not in git; `composer.lock` is), platform pinned to PHP 7.3.33 — install with the
+  root, libraries in `src/vendor` (not in git; `composer.lock` is), platform still pinned to PHP 7.3.33 (can be raised to
+  8.5 with a re-lock — then older library versions are no longer needed) — install with the
   composer docker image on the dev server (command in HANDOVER item 11). Deploy = copy `src/` **including `src/vendor`**.
   Now used: dompdf (invoice PDF), bacon/bacon-qr-code (PAY by square QR), phpmailer/phpmailer (e-mail).
 - E-mail: SMTP settings only in config.php (`apps.panel.mail`), never in the DB. Dev catches all mail in Mailpit
@@ -41,7 +44,7 @@ VS Code workspace with all related repos: `C:\Users\orras\git\ERMA.code-workspac
 - Home server (dev): `ssh -i ~/.ssh/id_ed25519_homeserver rasto@192.168.0.11` (Ubuntu, Docker, LAN only, standing
   permission for these projects). Don't touch the owner's other services there (Nextcloud :80, Minecraft, messenger, camstream…).
   Framework dev copy: `~/webapplication-dev` (copied by tar over ssh, not a git clone), web on **:8090**, tests via
-  `cd ~/webapplication-dev/dev && COMPOSE_PROJECT_NAME=webapplication PHP_VERSION=7.3|8.4 docker compose run --rm test`.
+  `cd ~/webapplication-dev/dev && COMPOSE_PROJECT_NAME=webapplication docker compose run --rm test` (PHP 8.5 = hosting; dev web :8090 runs 8.5 too).
   Disks (2026-11-20): system SSD `/` 437 GB (extended by the owner); **RAID1 2× 1 TB at `/mnt/storage`** — backups of
   the hosting live in `/mnt/storage/erma/backups` (`~/webstore/backups` is a symlink to it). Large/long-lived data
   (backups, archives) goes to `/mnt/storage/erma/`, not to the SSD. `/mnt/storage/minecraft` is the owner's — don't touch.

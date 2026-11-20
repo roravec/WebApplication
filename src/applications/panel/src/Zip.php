@@ -11,11 +11,18 @@ class Zip
     /** @var string */ private $data = '';
     /** @var string */ private $central = '';
     /** @var int */ private $count = 0;
+    /** @var int|null */ private $time;
+
+    /** @param int|null $time file date of all entries (null = now) — a fixed date makes the same content give the same bytes */
+    public function __construct(?int $time = null)
+    {
+        $this->time = $time;
+    }
 
     public function add(string $name, string $bytes, ?int $time = null): void
     {
         $name = ltrim(str_replace('\\', '/', $name), '/');
-        list($dosTime, $dosDate) = self::dosTime($time ?? time());
+        list($dosTime, $dosDate) = self::dosTime($time ?? $this->time ?? time());
         $crc = crc32($bytes);
         $method = 0;
         $packed = $bytes;

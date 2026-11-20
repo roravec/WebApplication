@@ -152,7 +152,7 @@ class AccountingPackage
         $slug = trim(preg_replace('/[^a-z0-9]+/', '-', strtolower(self::ascii((string)$company['name']))), '-') ?: 'firma';
         $base = $slug . '-' . $period;
         $problems = [];
-        $zip = new Zip();
+        $zip = new Zip(strtotime($c['to'] . ' 23:59:58'));   // files dated the last day of the month: a re-sent package is byte-identical
         $originals = [];
         foreach ($c['docs'] as $d) {
             if ($d['original_invoice_id']) {

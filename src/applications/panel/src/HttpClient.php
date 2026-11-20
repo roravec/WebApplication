@@ -76,8 +76,7 @@ class HttpClient
             $res = curl_multi_getcontent($ch);
             $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $err = curl_error($ch);
-            curl_multi_remove_handle($mh, $ch);
-            curl_close($ch);
+            curl_multi_remove_handle($mh, $ch);   // (no curl_close: deprecated in PHP 8.5, no effect since 8.0)
             $out[$k] = $code === 0 ? [0, $err !== '' ? $err : 'connection failed'] : [$code, (string)$res];
             if ($code === 0 && stripos($out[$k][1], 'certificate') !== false && is_file(self::bundle())) {
                 $r = $requests[$k];
@@ -112,7 +111,7 @@ class HttpClient
             $res = curl_exec($ch);
             $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $err = curl_error($ch);
-            curl_close($ch);
+            unset($ch);   // frees the handle (curl_close is deprecated in PHP 8.5)
             return $res === false ? [0, $err] : [$code, (string)$res];
         }
         $ssl = ['verify_peer' => true, 'verify_peer_name' => true];

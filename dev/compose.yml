@@ -1,7 +1,7 @@
 # Dev environment for the framework.
 #   docker compose up -d --build                     web on http://<host>:8090 (PHP 7.3)
 #   docker compose run --rm test                     run tests on PHP 7.3
-#   PHP_VERSION=8.4 docker compose run --rm test     run tests on PHP 8.4
+#   docker compose run --rm test                     run tests on PHP 8.5 (= hosting); PHP_VERSION=8.4 … for another version
 #   docker compose exec web php /dev-tools/seed.php  create tables + user admin/admin for the demo app
 #   http://<host>:8025                               Mailpit: every e-mail sent by the apps lands here (nothing leaves the server)
 services:
@@ -22,8 +22,8 @@ services:
     mem_limit: 384m
 
   web:
-    build: { context: ., args: { PHP_VERSION: "${PHP_VERSION:-7.3}" } }
-    image: webapplication-php:${PHP_VERSION:-7.3}
+    build: { context: ., args: { PHP_VERSION: "${PHP_VERSION:-8.5}" } }
+    image: webapplication-php:${PHP_VERSION:-8.5}
     ports: ["${WEB_PORT:-8090}:80"]
     environment: { WA_CONFIG_FILE: /dev-tools/config.php }
     volumes:
@@ -40,8 +40,8 @@ services:
 
   test:
     profiles: [test]
-    image: webapplication-php:${PHP_VERSION:-7.3}
-    build: { context: ., args: { PHP_VERSION: "${PHP_VERSION:-7.3}" } }
+    image: webapplication-php:${PHP_VERSION:-8.5}
+    build: { context: ., args: { PHP_VERSION: "${PHP_VERSION:-8.5}" } }
     working_dir: /app
     volumes: ["..:/app"]
     environment: { DB_HOST: db, DB_NAME: webapp, DB_USER: webapp, DB_PASS: webapp }

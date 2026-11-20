@@ -52,6 +52,12 @@ class PrestaShopApi
         return $this->call('POST', $resource, $params, $xml);
     }
 
+    /** DELETE one object. */
+    public function delete(string $resource, int $id, array $params = []): void
+    {
+        $this->call('DELETE', $resource . '/' . $id, $params);
+    }
+
     /**
      * Several GETs in parallel. @param array $requests key => [resource, params] (null entries are skipped)
      * @param string[] $optional keys whose failure gives null instead of an exception (e.g. a resource the key may lack)
@@ -112,6 +118,9 @@ class PrestaShopApi
         }
         if ($code === 401) {
             throw new \RuntimeException('E-shop odmietol kľúč Webservice (neplatný alebo neaktívny kľúč).', 401);
+        }
+        if ($method === 'DELETE' && $code >= 200 && $code < 300 && trim($res) === '') {
+            return new \SimpleXMLElement('<prestashop/>');   // PrestaShop answers a DELETE with an empty body
         }
         $prev = libxml_use_internal_errors(true);
         $xml = simplexml_load_string($res, 'SimpleXMLElement', LIBXML_NOCDATA | LIBXML_NONET);

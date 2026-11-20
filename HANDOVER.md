@@ -407,8 +407,26 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
    `vat_registration_rule`), dashboard "Treba urobiť" + company cards (`Reports\Todo`), monthly summary e-mail
    (`Reports\MonthlySummary`, company setting Firmy → Výsledky, `monthly_summary`; dashboard + cron URL). Tests 62/62,
    lint 7.3/8.4, all pages verified on dev, summary delivered to Mailpit. ALL modules A–F of the spec done.
+29. **Order + shop management** (owner 2026-11-20/21, item 27 "next"): order detail — tracking number (+ state/e-mail),
+   change of delivery / invoice address (new address + order PUT), internal notes, message to the customer in the shop's
+   look (`Panel\ShopMail`), Zásielkovňa pickup point (read from `ps_shaim_zasilkovna_widget_data`), delivery note PDF;
+   returns (restock via Webservice, partial credit note draft, state); Objednávky → Expedícia (bulk PDFs, tracking
+   numbers, states); products: price, active, combination price impact, sales (specific_prices). Verified on dev1
+   (1.7.6.7) through the panel and on dev4 (9.2.1) with a Webservice probe; **every call carries id_shop** (PS 9) —
+   also fixed `ShopOrdersApi::find` for PS 9. NOT done: editing order lines (Webservice can't recalculate — owner to
+   decide: shop admin vs. own module), Packeta shipments (after the official Packeta module). docs/sklad-specifikacia.md.
+   Live Webservice key needs the new permissions (list in the connection form). Migration 017.
+30. **Invoice look** (owner 2026-11-21: all data like the old shop invoices + closer to ermavzor): template
+   `invoice-2026-2` (docs/legislativa.md), bank name per account (migration 018), legal texts delivery_note / thanks_shop.
+   Pickup point NOT on the invoice (owner). ZIP of the accountant package dated the month end → re-sent = identical.
+31. **PHP 8.5 only** (owner 2026-11-21: "už nemusíš testovať nič na 7.3"): dev default + web :8090 on PHP 8.5, tests
+   64/64 on 8.5, `curl_close` (deprecated in 8.5) removed; hbkpravotice / bnhl / erma crawled on 8.5 without errors.
+   Legal PDFs for order e-mails regenerated with Open Sans (Web_store, diacritics looked like another font).
 
 ### Dev environment (home server)
+- **PHP 8.5** everywhere (= hosting): `cd ~/webapplication-dev/dev && COMPOSE_PROJECT_NAME=webapplication docker compose run --rm test`.
+  Shop copies for Webservice tests: dev1 (1.7.6.7, :8081, = the panel's "local" connection) and dev4 (9.2.1, :8084);
+  key permissions set by `Web_store/devserver/ws-key.php` (keeps the existing key).
 - `~/webapplication-dev` (copy via `tar | ssh`, not a git clone), `dev/compose.yml`, web **http://192.168.0.11:8090/**:
   `/` = erma, `/panel` = employee section, `/demo` = framework demo. Dev login everywhere: **admin / admin**.
 - Dev DB contains the shop tables `ps_*` imported by `dev/import-shop.sh` from `~/webstore/backups/database-*.sql.gz`
@@ -427,7 +445,10 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
 - NOT waiting (owner 2026-11-19): OR registration, first invoice number and series format are settings — the owner fills
   them in himself later; don't ask again. Invoice from an order is created **manually** (button) + fully manual
   invoices — both exist.
-- (Not answered yet: can the hosting set PHP version per folder/domain? → PHP 8 for the framework before the shop upgrade.)
+- Live Webservice key: add the new permissions (connection form lists them) — otherwise tracking / address / sales fail
+  with a clear "kľúč nemá oprávnenie" message.
+- Firmy → bankový účet → Banka (e.g. "Fio banka, a.s.") — printed on invoices.
+- Decide: editing order lines — in the shop admin, or an own small module (Webservice can't do it safely).
 
 ### Next tasks
 0. **Deploy + maintenance plan: docs/nasadenie-a-udrzba.md** (2026-11-20): phase A framework + panel + erma +

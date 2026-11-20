@@ -192,14 +192,14 @@ class Companies
     {
         $keep = [];
         foreach ($banks as $b) {
-            $vals = [$b['account_name'], $b['iban'], $b['bic'], $b['is_default'] ? 1 : 0, $b['active'] ? 1 : 0];
+            $vals = [$b['account_name'], $b['iban'], $b['bic'], (string)($b['bank'] ?? ''), $b['is_default'] ? 1 : 0, $b['active'] ? 1 : 0];
             if ((int)$b['id'] > 0) {
-                $this->db->execute("UPDATE {$this->t('company_bank')} SET account_name = ?, iban = ?, bic = ?, is_default = ?, active = ?
+                $this->db->execute("UPDATE {$this->t('company_bank')} SET account_name = ?, iban = ?, bic = ?, bank = ?, is_default = ?, active = ?
                     WHERE id = ? AND company_id = ?", array_merge($vals, [(int)$b['id'], $companyId]));
                 $keep[] = (int)$b['id'];
             } else {
-                $this->db->execute("INSERT INTO {$this->t('company_bank')} (account_name, iban, bic, is_default, active, company_id)
-                    VALUES (?, ?, ?, ?, ?, ?)", array_merge($vals, [$companyId]));
+                $this->db->execute("INSERT INTO {$this->t('company_bank')} (account_name, iban, bic, bank, is_default, active, company_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)", array_merge($vals, [$companyId]));
                 $keep[] = $this->db->lastInsertId();
             }
         }

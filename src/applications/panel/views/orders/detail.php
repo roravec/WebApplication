@@ -1,5 +1,5 @@
 <?php /** @var array $o order with lines, address_invoice, address_delivery, payments, history, src; Panel\Shop\OrderSource $source;
-    array|null $invoice; int $invoiceCompany; bool $canInvoice, $canSeeInvoice, $canChangeState; array $states */
+    array|null $invoice; int $invoiceCompany; bool $canInvoice, $canSeeInvoice, $canChangeState, $canEdit; array $states, $notes, $messages, $returns */
 $src = (int)$o['src'];
 $addr = function ($a) use ($e) {
     if (!$a) {
@@ -24,11 +24,26 @@ $cur = (string)$o['currency'];
       <dt>Stav</dt><dd><span class="state" style="--c: <?= $e($color($o['state_color'])) ?>"><?= $e($o['state']) ?></span></dd>
       <dt>Platba</dt><dd><?= $e($o['payment']) ?></dd>
       <dt>Doprava</dt><dd><?= $e($o['carrier']) ?></dd>
+      <?php if (!empty($o['tracking'])): $turl = (string)($o['carrier_url'] ?? ''); ?>
+        <dt>Zásielka</dt><dd><?php if (strpos($turl, '@') !== false): ?><a href="<?= $e(str_replace('@', rawurlencode($o['tracking']), $turl)) ?>" target="_blank" rel="noopener"><?= $e($o['tracking']) ?></a><?php else: ?><?= $e($o['tracking']) ?><?php endif ?></dd>
+      <?php endif ?>
       <dt>Zákazník</dt><dd><?= $e(trim($o['customer_firstname'] . ' ' . $o['customer_lastname'])) ?><br><?= $e($o['customer_email']) ?></dd>
     </dl>
   </section>
-  <section class="card"><h2>Fakturačná adresa</h2><p><?= $addr($o['address_invoice']) ?></p></section>
-  <section class="card"><h2>Dodacia adresa</h2><p><?= $addr($o['address_delivery']) ?></p></section>
+  <section class="card"><h2>Fakturačná adresa</h2><p><?= $addr($o['address_invoice']) ?></p>
+    <?php if ($canEdit): ?><p class="small"><a href="<?= $e($ctx->orderUrl($src, (int)$o['id_order'], '/address/invoice')) ?>">Zmeniť</a></p><?php endif ?></section>
+  <section class="card"><h2>Dodacia adresa</h2><p><?= $addr($o['address_delivery']) ?></p>
+    <?php if (!empty($o['pickup_point'])): ?><p><b>Výdajné miesto:</b> <?= $e($o['pickup_point']) ?></p><?php endif ?>
+    <?php if ($canEdit): ?><p class="small"><a href="<?= $e($ctx->orderUrl($src, (int)$o['id_order'], '/address/delivery')) ?>">Zmeniť</a></p><?php endif ?></section>
+</div>
+
+<div class="toolbar">
+  <a class="button" href="<?= $e($ctx->orderUrl($src, (int)$o['id_order'], '/delivery-note')) ?>" target="_blank">Dodací list (PDF)</a>
+  <?php if ($ctx->can(\Panel\Rights::ORDERS_EDIT)): ?>
+    <a class="button" href="<?= $e($ctx->orderUrl($src, (int)$o['id_order'], '/message')) ?>">Napísať zákazníkovi</a>
+    <a class="button" href="<?= $e($ctx->orderUrl($src, (int)$o['id_order'], '/return')) ?>">Vrátenie tovaru</a>
+  <?php endif ?>
+  <a class="button" href="<?= $e($ctx->url('/shipping' . ($src ? '?src=' . $src : ''))) ?>">Expedícia</a>
 </div>
 
 <h2>Položky</h2>
@@ -128,6 +143,10 @@ $cur = (string)$o['currency'];
           $mails[] = ['at' => $m['created_at'], 'who' => 'panel', 'what' => $m['subject'] . ' (' . (($m['kind'] ?? '') === 'reminder' ? 'upomienka' : 'faktúra') . ')',
               'to' => $m['recipients'], 'ok' => $m['status'] === 'sent'];
       }
+      foreach ($messages as $m) {
+          $mails[] = ['at' => $m['created_at'], 'who' => 'panel (' . $m['client_name'] . ')', 'what' => $m['subject'] . ' (správa)', 'to' => $m['recipients'],
+              'ok' => $m['status'] === 'sent'];
+      }
       foreach ($shopEmails ?: [] as $m) {
           $mails[] = ['at' => $m['date_add'], 'who' => 'e-shop', 'what' => $m['subject'] . ' (' . $m['template'] . ')', 'to' => $o['customer_email'], 'ok' => true];
       }
@@ -147,4 +166,47 @@ $cur = (string)$o['currency'];
       </table>
     <?php endif ?>
   </section>
+</div>
+
+<div class="cards">
+  <?php if ($canEdit): ?>
+  <section class="card">
+    <h2>Expedícia</h2>
+    <form method="post" action="<?= $e($ctx->orderUrl($src, (int)$o['id_order'], '/tracking')) ?>">
+      <?= WebApplication\Csrf::field() ?>
+      <label>Číslo zásielky <input name="tracking" value="<?= $e((string)($o['tracking'] ?? '')) ?>" maxlength="64"></label>
+      <label>Zároveň zmeniť stav
+        <select name="state"><option value="0">— nemeniť —</option>
+          <?php foreach ($states as $s): ?><option value="<?= (int)$s['id_order_state'] ?>"><?= $e($s['name']) ?></option><?php endforeach ?>
+        </select></label>
+      <label class="check"><input type="checkbox" name="sendemail" value="1" checked> poslať zákazníkovi e-mail o stave (s odkazom na sledovanie)</label>
+      <p><button class="primary">Uložiť do e-shopu</button></p>
+    </form>
+  </section>
+  <?php endif ?>
+  <section class="card" id="notes">
+    <h2>Interné poznámky</h2>
+    <?php foreach ($notes as $n): ?>
+      <p><small class="muted"><?= $e($f->dateTime($n['created_at'])) ?> · <?= $e($n['client_name']) ?></small><br><?= nl2br($e($n['text'])) ?></p>
+    <?php endforeach ?>
+    <?php if (!$notes): ?><p class="muted">Zatiaľ žiadne. Vidia ich len zamestnanci, zákazník nie.</p><?php endif ?>
+    <form method="post" action="<?= $e($ctx->orderUrl($src, (int)$o['id_order'], '/note')) ?>">
+      <?= WebApplication\Csrf::field() ?>
+      <textarea name="text" rows="2" style="width: 100%" placeholder="napr. zákazník volal, pošleme v piatok" required></textarea>
+      <p><button>Pridať poznámku</button></p>
+    </form>
+  </section>
+  <?php if ($returns): ?>
+  <section class="card">
+    <h2>Vrátenia</h2>
+    <?php foreach ($returns as $r): ?>
+      <p><small class="muted"><?= $e($f->dateTime($r['created_at'])) ?> · <?= $e($r['client_name']) ?></small><br>
+        <?php foreach ($r['lines'] as $l): ?><?= (int)$l['quantity'] ?>× <?= $e($l['name']) ?><br><?php endforeach ?>
+        <?= $r['shipping'] ? 'doprava<br>' : '' ?>
+        <small><?= $r['restocked'] ? 'naskladnené v e-shope' : 'nenaskladnené' ?><?php if ($r['credit_note_id']): ?> · <a href="<?= $e($ctx->url('/invoices/' . $r['credit_note_id'])) ?>">dobropis</a><?php endif ?>
+          <?= $r['state'] !== '' ? ' · stav ' . $e($r['state']) : '' ?><?= $r['note'] !== '' ? ' · ' . $e($r['note']) : '' ?></small>
+        <?php if ($r['problems']): ?><br><small class="field-err"><?= $e(implode(' ', $r['problems'])) ?></small><?php endif ?></p>
+    <?php endforeach ?>
+  </section>
+  <?php endif ?>
 </div>

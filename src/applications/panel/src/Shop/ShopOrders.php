@@ -109,11 +109,14 @@ class ShopOrders implements OrderSource
      * Look of one e-shop for e-mails to its customers (owner 2026-11-20: the customer must see where he bought):
      * name, web address and its e-mail logo (PS_LOGO_MAIL, else PS_LOGO — the shop's own value, else the global one),
      * read from the shop tables. Logo bytes are fetched from the shop's web (same hosting); '' when unavailable.
-     * @return array{name:string, web:string, logo:string, logo_mime:string}
+     * Also its contact e-mail and phone (PS_SHOP_EMAIL / PS_SHOP_PHONE). For invoices the shop's invoice logo
+     * (PS_LOGO_INVOICE, like the shop's own invoices had — owner 2026-11-21).
+     * @param string $purpose mail | invoice
+     * @return array{name:string, web:string, email:string, phone:string, logo:string, logo_mime:string}
      */
-    public function brand(int $shopId): array
+    public function brand(int $shopId, string $purpose = 'mail'): array
     {
-        $b = ['name' => '', 'web' => '', 'logo' => '', 'logo_mime' => ''];
+        $b = ['name' => '', 'web' => '', 'email' => '', 'phone' => '', 'logo' => '', 'logo_mime' => ''];
         try {
             $s = $this->db->fetchOne("SELECT s.name, u.domain_ssl, u.physical_uri FROM {$this->p}shop s
                 LEFT JOIN {$this->p}shop_url u ON u.id_shop = s.id_shop AND u.main = 1 WHERE s.id_shop = ?", [$shopId]);
@@ -122,10 +125,15 @@ class ShopOrders implements OrderSource
             }
             $b['name'] = (string)$s['name'];
             $b['web'] = $s['domain_ssl'] ? 'https://' . $s['domain_ssl'] . ($s['physical_uri'] ?: '/') : '';
-            $file = '';
-            foreach (['PS_LOGO_MAIL', 'PS_LOGO'] as $key) {
-                $file = (string)$this->db->fetchValue("SELECT value FROM {$this->p}configuration WHERE name = ? AND (id_shop = ? OR id_shop IS NULL)
+            $conf = function (string $key) use ($shopId) {
+                return (string)$this->db->fetchValue("SELECT value FROM {$this->p}configuration WHERE name = ? AND (id_shop = ? OR id_shop IS NULL)
                     AND IFNULL(value, '') <> '' ORDER BY id_shop IS NULL, id_configuration DESC LIMIT 1", [$key, $shopId]);
+            };
+            $b['email'] = $conf('PS_SHOP_EMAIL');
+            $b['phone'] = $conf('PS_SHOP_PHONE');
+            $file = '';
+            foreach ($purpose === 'invoice' ? ['PS_LOGO_INVOICE', 'PS_LOGO'] : ['PS_LOGO_MAIL', 'PS_LOGO'] as $key) {
+                $file = $conf($key);
                 if ($file !== '') {
                     break;
                 }
@@ -167,7 +175,8 @@ class ShopOrders implements OrderSource
         $o = $this->db->fetchOne(
             "SELECT o.*, s.name AS shop, cur.iso_code AS currency, osl.name AS state, os.color AS state_color,
                     c.firstname AS customer_firstname, c.lastname AS customer_lastname, c.email AS customer_email,
-                    c.company AS customer_company, car.name AS carrier
+                    c.company AS customer_company, car.name AS carrier, car.url AS carrier_url,
+                    (SELECT oc.tracking_number FROM `{$this->p}order_carrier` oc WHERE oc.id_order = o.id_order ORDER BY oc.id_order_carrier DESC LIMIT 1) AS tracking
              FROM `{$this->p}orders` o
              JOIN `{$this->p}shop` s ON s.id_shop = o.id_shop
              LEFT JOIN `{$this->p}currency` cur ON cur.id_currency = o.id_currency
@@ -184,13 +193,14 @@ class ShopOrders implements OrderSource
         $o['src'] = 0;
         $o['payments_unavailable'] = false;
         $o['lines'] = $this->db->query(
-            "SELECT product_name, product_reference, product_quantity, unit_price_tax_excl, unit_price_tax_incl,
-                    total_price_tax_excl, total_price_tax_incl, tax_rate
+            "SELECT id_order_detail, product_id, product_attribute_id, product_name, product_reference, product_quantity, unit_price_tax_excl,
+                    unit_price_tax_incl, total_price_tax_excl, total_price_tax_incl, tax_rate, product_weight
              FROM `{$this->p}order_detail` WHERE id_order = ? ORDER BY id_order_detail",
             [$id]
         );
         $o['address_invoice'] = $this->address((int)$o['id_address_invoice']);
         $o['address_delivery'] = $this->address((int)$o['id_address_delivery']);
+        $o['pickup_point'] = $this->pickupPoint((int)$o['id_cart']);
         $o['payments'] = $this->db->query(
             "SELECT payment_method, amount, transaction_id, date_add FROM `{$this->p}order_payment`
              WHERE order_reference = ? ORDER BY date_add",
@@ -228,6 +238,32 @@ class ShopOrders implements OrderSource
                 'month_total' => (float)$row['month_total'], 'per_shop' => $perShop];
     }
 
+    /**
+     * Packeta pickup point chosen in the checkout — stored by the shop's Zásielkovňa module (shaim_zasilkovna_widget,
+     * table <prefix>shaim_zasilkovna_widget_data, one row per cart). '' when there is none / the module is not installed.
+     * @return string "place, street, zip, city, country" like the old shop invoices printed it
+     */
+    public function pickupPoint(int $cartId): string
+    {
+        static $has = [];
+        $table = $this->p . 'shaim_zasilkovna_widget_data';
+        if ($cartId <= 0) {
+            return '';
+        }
+        if (!isset($has[$table])) {
+            $has[$table] = (bool)$this->db->fetchValue('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?', [$table]);
+        }
+        if (!$has[$table]) {
+            return '';
+        }
+        $r = $this->db->fetchOne("SELECT place, street, psc, city, country, routingName FROM `$table` WHERE id_cart = ?", [$cartId]);
+        if ($r === false) {
+            return '';
+        }
+        $parts = array_filter(array_map('trim', [(string)$r['place'], (string)$r['street'], (string)$r['psc'], (string)$r['city'], (string)$r['country']]), 'strlen');
+        return $parts ? implode(', ', $parts) : trim((string)$r['routingName']);
+    }
+
     private function address(int $id): ?array
     {
         if ($id <= 0) {
@@ -256,6 +292,8 @@ class ShopOrders implements OrderSource
         if (!empty($f['state'])) {
             $w[] = 'o.current_state = ?';
             $p[] = (int)$f['state'];
+        } elseif (!empty($f['states'])) {   // several states (Expedícia)
+            $w[] = 'o.current_state IN (' . implode(',', array_map('intval', (array)$f['states'])) . ')';
         }
         if (!empty($f['from']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $f['from'])) {
             $w[] = 'o.date_add >= ?';

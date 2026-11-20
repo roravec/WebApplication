@@ -57,6 +57,11 @@ alebo bez niektorého typu textu (ochrana pred omylom vymazaním).
 - **PDF pri vystavení:** hotové (19. 11. 2026) — PDF sa uloží pri vystavení s kontrolným súčtom SHA-256.
 - **Šablóna `invoice-2026`** bola 19. 11. 2026 upravená priamo (ešte nebola vystavená žiadna ostrá faktúra); od prvej
   ostrej faktúry platí: zmena vzhľadu = nová kópia šablóny.
+- **Šablóna `invoice-2026-2`** (21. 11. 2026, `Templates::CURRENT`): bližšie k vzoru majiteľa (ermavzor) + všetko, čo
+  mali staré faktúry e-shopu: číslo účtu (z IBAN) a banka (Firmy → bankový účet → Banka), kódy produktov, telefón
+  a e-mail odberateľa, krajina, pri faktúre z objednávky logo / web / e-mail / telefón e-shopu (PS_LOGO_INVOICE,
+  PS_SHOP_EMAIL, PS_SHOP_PHONE) a texty `delivery_note` („slúži aj ako dodací list“) a `thanks_shop` („Ďakujeme za nákup
+  na {shop}“) — oba v Legislatíve → Texty (migrácia 018). Faktúry vystavené so starou šablónou ostávajú (archív PDF).
 - **E-shopy (sklad v e-shope, nastavenia produktu, stav objednávky, objednávky cez Webservice):** neobsahujú zákonné
   pravidlá — e-maily pri zmene stavu a ich texty sú v e-shope (PrestaShop), nie v paneli. Faktúra z objednávky
   vzniká rovnako bez ohľadu na to, odkiaľ sa objednávka číta (`Invoices::createFromOrder`); sadzbu DPH položky pri

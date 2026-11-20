@@ -141,6 +141,26 @@ class ShopStock
         return ['quantity' => (int)$n->quantity, 'out_of_stock' => (int)$n->out_of_stock, 'location' => (string)$n->location];
     }
 
+    /**
+     * Adds (or with a negative $delta removes) pieces of a product / combination in the shop's stock — e.g. returned goods.
+     * The current quantity is read just before the change. @return int the quantity in the shop after the change
+     */
+    public function addQuantity(int $shopId, int $productId, int $attributeId, int $delta): int
+    {
+        $shop = $this->shop($shopId);
+        if ($shop === null) {
+            throw new \RuntimeException('E-shop ' . $shopId . ' sa v pripojení nenašiel.');
+        }
+        $filter = ($shop['share_stock'] ? ['id_shop_group' => '[' . $shop['group_id'] . ']'] : ['id_shop' => '[' . $shop['id'] . ']'])
+            + ['id_product' => '[' . $productId . ']', 'id_product_attribute' => '[' . $attributeId . ']'];
+        $list = $this->api->get('stock_availables', ['id_shop' => $shop['id'], 'display' => '[id,quantity]', 'filter' => $filter]);
+        $row = $list->stock_availables->stock_available[0] ?? null;
+        if ($row === null) {
+            throw new \RuntimeException('Produkt ' . $productId . ($attributeId ? '/' . $attributeId : '') . ' nemá v e-shope sklad (už neexistuje?).');
+        }
+        return $this->update($shop, (int)$row->id, ['quantity' => (int)$row->quantity + $delta])['quantity'];
+    }
+
     /** Language id for Slovak texts (or the shop default = first). */
     public function langId(): int
     {

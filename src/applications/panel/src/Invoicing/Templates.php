@@ -10,7 +10,7 @@ namespace Panel\Invoicing;
  */
 class Templates
 {
-    const CURRENT = 'invoice-2026';
+    const CURRENT = 'invoice-2026-2';   // 2026-11-21: closer to the owner's design + all data of the old shop invoices
 
     /** View name for an invoice: its own template if it exists, otherwise the current one. */
     public static function viewFor(array $inv): string

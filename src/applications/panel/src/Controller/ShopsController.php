@@ -192,13 +192,84 @@ class ShopsController
             if (!$shop) {
                 return $this->notFound();
             }
-            $product = (new ShopProducts($api))->product($shop, (int)$params['pid'], $ss->langId());
+            $sp = new ShopProducts($api);
+            $product = $sp->product($shop, (int)$params['pid'], $ss->langId());
         } catch (\Throwable $e) {
             Session::flash('error', $e->getMessage());
             return Response::redirect($this->ctx->url('/stock/shops/' . $c['id'] . '/' . (int)$params['sid']));
         }
+        $sales = null;
+        $salesError = '';
+        try {
+            $sales = $sp->specificPrices($shop, (int)$params['pid']);
+        } catch (\Throwable $e) {
+            $salesError = $e->getMessage();   // e.g. the key lacks specific_prices
+        }
         return $this->ctx->page('stock/shop-product', ['c' => $c, 'shop' => $shop, 'p' => $product, 'errors' => $errors,
-            'canEdit' => $this->ctx->can(Rights::STOCK_EDIT)], $product['name'] ?: 'Produkt', 'stock');
+            'sales' => $sales, 'salesError' => $salesError, 'canEdit' => $this->ctx->can(Rights::STOCK_EDIT)], $product['name'] ?: 'Produkt', 'stock');
+    }
+
+    /** POST — new sale (specific price) of the product in the shop: % or € off, from–to, optionally one combination. */
+    public function saleAdd(Request $req, array $params)
+    {
+        if (!Csrf::check($req)) {
+            return Response::text('Formulár vypršal, načítajte stránku znova.', 400);
+        }
+        $c = $this->connection((int)$params['cid']);
+        if (!$c || !$c['active']) {
+            return $this->notFound();
+        }
+        $pid = (int)$params['pid'];
+        $back = Response::redirect($this->ctx->url('/stock/shops/' . $c['id'] . '/' . (int)$params['sid'] . '/product/' . $pid . '#sales'));
+        $type = $req->post('type') === 'amount' ? 'amount' : 'percentage';
+        $value = \Panel\Invoicing\Calculator::parse((string)$req->post('value', ''));
+        $date = function ($v) { $v = trim((string)$v); return $v === '' || (preg_match('/^\d{4}-\d{2}-\d{2}$/', $v) && strtotime($v)) ? $v : null; };
+        $from = $date($req->post('from', ''));
+        $to = $date($req->post('to', ''));
+        if ($value === null || $value <= 0 || ($type === 'percentage' && $value >= 100) || $from === null || $to === null || ($from !== '' && $to !== '' && $to < $from)) {
+            Session::flash('error', 'Akcia: zadajte zľavu (percento 0–100 alebo sumu) a platné dátumy (do ≥ od).');
+            return $back;
+        }
+        try {
+            $api = $this->api($c);
+            $shop = (new ShopStock($api))->shop((int)$params['sid']);
+            if (!$shop) {
+                return $this->notFound();
+            }
+            $id = (new ShopProducts($api))->addSpecificPrice($shop, $pid, (int)$req->post('combination', 0), $type, $value,
+                $req->post('tax') !== '0', $from, $to, max(1, (int)$req->post('from_quantity', 1)));
+            Audit::log($this->ctx->db(), $this->ctx->user(), 'shop_product', $pid, 'sale', $shop['name'] . ': akcia #' . $id . ' −'
+                . $value . ($type === 'percentage' ? ' %' : ' €') . ($from !== '' || $to !== '' ? ' (' . $from . ' – ' . $to . ')' : ''));
+            Session::flash('msg', 'Akcia uložená v e-shope.');
+        } catch (\Throwable $e) {
+            Session::flash('error', 'Akcia sa neuložila: ' . $e->getMessage());
+        }
+        return $back;
+    }
+
+    public function saleDelete(Request $req, array $params)
+    {
+        if (!Csrf::check($req)) {
+            return Response::text('Formulár vypršal, načítajte stránku znova.', 400);
+        }
+        $c = $this->connection((int)$params['cid']);
+        if (!$c || !$c['active']) {
+            return $this->notFound();
+        }
+        $pid = (int)$params['pid'];
+        try {
+            $api = $this->api($c);
+            $shop = (new ShopStock($api))->shop((int)$params['sid']);
+            if (!$shop) {
+                return $this->notFound();
+            }
+            (new ShopProducts($api))->deleteSpecificPrice($shop, (int)$params['spid'], $pid);
+            Audit::log($this->ctx->db(), $this->ctx->user(), 'shop_product', $pid, 'sale', $shop['name'] . ': akcia #' . (int)$params['spid'] . ' zrušená');
+            Session::flash('msg', 'Akcia zrušená v e-shope.');
+        } catch (\Throwable $e) {
+            Session::flash('error', 'Akcia sa nezrušila: ' . $e->getMessage());
+        }
+        return Response::redirect($this->ctx->url('/stock/shops/' . $c['id'] . '/' . (int)$params['sid'] . '/product/' . $pid . '#sales'));
     }
 
     /** POST — save changed product / combination settings in the shop. */
@@ -218,15 +289,19 @@ class ShopsController
             $x = \Panel\Invoicing\Calculator::parse($v);
             return $x !== null && $x >= 0 ? number_format($x, 6, '.', '') : null;
         };
+        $signed = function ($v) {   // combination price impact: may be negative
+            $x = \Panel\Invoicing\Calculator::parse($v);
+            return $x !== null ? number_format($x, 6, '.', '') : null;
+        };
         $errors = [];
         $productChanges = [];
         foreach (array_keys(ShopProducts::PRODUCT_FIELDS) as $f) {
             $new = trim((string)$req->post($f, ''));
             $orig = (string)$req->post('orig_' . $f, '');
-            if ($f === 'low_stock_alert') {
+            if ($f === 'low_stock_alert' || $f === 'active') {
                 $new = $req->post($f) ? '1' : '0';
             }
-            if ($new === $orig || ($f === 'wholesale_price' && $money($new) !== null && $money($new) === $money($orig))) {
+            if ($new === $orig || (in_array($f, ['wholesale_price', 'price'], true) && $money($new) !== null && $money($new) === $money($orig))) {
                 continue;
             }
             if ($f === 'minimal_quantity' && !$int($new, 1)) {
@@ -235,10 +310,10 @@ class ShopsController
                 $errors[] = 'Nízky stav: celé číslo';
             } elseif ($f === 'low_stock_threshold' && $new === '') {
                 $new = '0';   // the Webservice can't set "not set" (NULL) back
-            } elseif ($f === 'wholesale_price') {
+            } elseif ($f === 'wholesale_price' || $f === 'price') {
                 $new = $money($new);
                 if ($new === null) {
-                    $errors[] = 'Nákupná cena: číslo ≥ 0';
+                    $errors[] = ($f === 'price' ? 'Predajná cena' : 'Nákupná cena') . ': číslo ≥ 0';
                 }
             } elseif (in_array($f, ShopProducts::LANG_FIELDS, true) && mb_strlen($new, 'UTF-8') > 255) {
                 $errors[] = 'Text dostupnosti: najviac 255 znakov';
@@ -253,7 +328,8 @@ class ShopsController
             foreach (ShopProducts::COMBINATION_FIELDS as $f) {
                 $new = trim((string)($row[$f] ?? ''));
                 $orig = (string)($row['orig_' . $f] ?? '');
-                if ($new === $orig || ($f === 'wholesale_price' && $money($new) !== null && $money($new) === $money($orig))) {
+                if ($new === $orig || ($f === 'wholesale_price' && $money($new) !== null && $money($new) === $money($orig))
+                        || ($f === 'price' && $signed($new) !== null && $signed($new) === $signed($orig))) {
                     continue;
                 }
                 if ($f === 'minimal_quantity' && !$int($new, 1)) {
@@ -268,6 +344,13 @@ class ShopsController
                     $new = $money($new);
                     if ($new === null) {
                         $errors[] = 'Kombinácia ' . $cid . ': nákupná cena číslo ≥ 0';
+                        continue;
+                    }
+                }
+                if ($f === 'price') {
+                    $new = $signed($new === '' ? '0' : $new);
+                    if ($new === null) {
+                        $errors[] = 'Kombinácia ' . $cid . ': príplatok musí byť číslo';
                         continue;
                     }
                 }

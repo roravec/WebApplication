@@ -668,7 +668,15 @@ class FakePrestaShopApi extends Panel\Shop\PrestaShopApi
     public function post(string $resource, string $xml, array $params = []): SimpleXMLElement
     {
         $this->posts[] = [$resource, $xml, $params];
+        if (isset($this->xml['POST ' . $resource])) {   // the shop's answer (e.g. the new object with its id)
+            return simplexml_load_string('<prestashop>' . ($this->xml['POST ' . $resource])($xml) . '</prestashop>');
+        }
         return simplexml_load_string($xml);
+    }
+    public $deletes = [];
+    public function delete(string $resource, int $id, array $params = []): void
+    {
+        $this->deletes[] = [$resource, $id, $params];
     }
     public function getMany(array $requests, array $optional = []): array
     {
@@ -750,7 +758,7 @@ test('e-shop product settings: safe PUT (no associations / read-only / empty nul
     $p = $sp->product($shop, 10, 2);
     eq(['Šnúrky', 'LACE', '1', '', '0', 'Skladom', ''], [$p['name'], $p['reference'], $p['minimal_quantity'], $p['low_stock_threshold'],
         $p['low_stock_alert'], $p['available_now'], $p['available_later']]);
-    eq([['id' => 1, 'label' => '182 cm', 'reference' => 'LACE-182', 'minimal_quantity' => '1', 'low_stock_threshold' => '', 'wholesale_price' => '1.200000']],
+    eq([['id' => 1, 'label' => '182 cm', 'reference' => 'LACE-182', 'minimal_quantity' => '1', 'low_stock_threshold' => '', 'wholesale_price' => '1.200000', 'price' => '']],
         $p['combinations']);
 
     $sp->updateProduct($shop, 10, ['minimal_quantity' => '2', 'available_later' => 'Do 5 dní', 'bogus' => 'x'], 2);
@@ -1576,5 +1584,155 @@ test('company result, money, VAT registration turnover, todo, monthly summary te
     contains('Registrácia k DPH: Obrat', $txt);
     foreach ($tables as $x) {
         $pdo->exec("DROP TABLE IF EXISTS `{$t}$x`");
+    }
+});
+
+test('order tools: tracking + address through the Webservice (shop context, reference check, read-only fields), restock, sales', function () {
+    $synopsis = function (string $res, array $ro) {
+        $f = '';
+        foreach ($ro as $r) {
+            $f .= "<$r read_only=\"true\"/>";
+        }
+        return "<$res><id/>$f</$res>";
+    };
+    $api = new FakePrestaShopApi([
+        'orders/7' => '<order><id>7</id><reference>REF7</reference><id_address_delivery>11</id_address_delivery><id_address_invoice>11</id_address_invoice>'
+            . '<total_paid>10</total_paid><associations><order_rows><order_row><id>1</id></order_row></order_rows></associations></order>',
+        'orders' => function ($p) use ($synopsis) { return $synopsis('order', ['total_paid']); },
+        'order_carriers' => function ($p) use ($synopsis) {
+            return isset($p['schema']) ? $synopsis('order_carrier', ['date_add']) : '<order_carriers><order_carrier><id>33</id></order_carrier></order_carriers>';
+        },
+        'order_carriers/33' => '<order_carrier><id>33</id><id_order>7</id_order><tracking_number></tracking_number><date_add>2026-01-01</date_add></order_carrier>',
+        'addresses/11' => '<address><id>11</id><id_customer>5</id_customer><alias>Moja</alias><firstname>Ján</firstname><lastname>Novák</lastname>'
+            . '<address1>Stará 1</address1><city>Levice</city><postcode>93401</postcode><deleted>0</deleted><date_add>x</date_add></address>',
+        'addresses' => function ($p) use ($synopsis) { return $synopsis('address', []); },
+        'POST addresses' => function ($xml) { return '<address><id>99</id></address>'; },
+    ]);
+    $ed = new Panel\Shop\ShopOrderEdit($api);
+    throws(function () use ($ed) { $ed->setTracking(7, 1, 'OTHER', 'Z1'); }, RuntimeException::class);
+    eq([], $api->putXml, 'reference mismatch: nothing written');
+    $api->gets = [];
+    $ed->setTracking(7, 2, 'REF7', 'Z123');
+    list($res, $id, $xml, $params) = $api->putXml[0];
+    eq(['order_carriers', 33, ['id_shop' => 2]], [$res, $id, $params]);
+    eq('Z123', (string)$xml->order_carrier->tracking_number);
+    ok(!isset($xml->order_carrier->date_add), 'read-only field removed');
+    foreach ($api->gets as $g) {
+        if ($g[0] === 'orders/7' || $g[0] === 'order_carriers/33') {
+            eq(2, $g[1]['id_shop'] ?? null, 'shop context on ' . $g[0]);
+        }
+    }
+
+    $new = $ed->changeAddress(7, 2, 'REF7', 'delivery', ['address1' => 'Nová 5', 'city' => 'Nitra', 'firstname' => 'Ján', 'lastname' => 'Novák', 'evil' => 'x']);
+    eq(99, $new);
+    list($res, $xml, $params) = end($api->posts);
+    $a = simplexml_load_string($xml)->address;
+    eq(['addresses', ['id_shop' => 2]], [$res, $params]);
+    eq(['Nová 5', 'Nitra', '5', 'Objednávka REF7'], [(string)$a->address1, (string)$a->city, (string)$a->id_customer, (string)$a->alias]);
+    ok(!isset($a->id) && !isset($a->deleted) && !isset($a->evil), 'new address without id / deleted / unknown fields');
+    list($res, $id, $xml, $params) = end($api->putXml);
+    eq(['orders', 7, '99', '11'], [$res, $id, (string)$xml->order->id_address_delivery, (string)$xml->order->id_address_invoice]);
+    ok(!isset($xml->order->associations) && !isset($xml->order->total_paid), 'order PUT without associations and read-only fields');
+
+    // restock: +2 pieces of a combination in a shop that shares stock with its group
+    $api = new FakePrestaShopApi([
+        'shop_groups' => '<shop_groups><shop_group><id>1</id><name>G</name><share_stock>1</share_stock></shop_group></shop_groups>',
+        'shops' => '<shops><shop><id>3</id><name>Howies</name><id_shop_group>1</id_shop_group></shop></shops>',
+        'stock_availables' => function ($p) {
+            eq(['[1]', '[4]', '[8]'], [$p['filter']['id_shop_group'] ?? '', $p['filter']['id_product'], $p['filter']['id_product_attribute']]);
+            return '<stock_availables><stock_available><id>50</id><quantity>5</quantity></stock_available></stock_availables>';
+        },
+        'stock_availables/50' => '<stock_available><id>50</id><id_shop>0</id_shop><id_shop_group>1</id_shop_group><quantity>5</quantity><out_of_stock>2</out_of_stock><location></location></stock_available>',
+    ]);
+    eq(7, (new Panel\Shop\ShopStock($api))->addQuantity(3, 4, 8, 2));
+    eq([['stock_availables', 50, 7]], $api->puts);
+
+    // sales (specific prices)
+    $api = new FakePrestaShopApi([
+        'POST specific_prices' => function ($xml) { return '<specific_price><id>12</id></specific_price>'; },
+        'specific_prices/12' => '<specific_price><id>12</id><id_product>4</id_product><id_shop>3</id_shop></specific_price>',
+        'specific_prices/13' => '<specific_price><id>13</id><id_product>9</id_product><id_shop>3</id_shop></specific_price>',
+    ]);
+    $sp = new Panel\Shop\ShopProducts($api);
+    eq(12, $sp->addSpecificPrice(['id' => 3], 4, 0, 'percentage', 15, true, '2026-11-21', ''));
+    $x = simplexml_load_string($api->posts[0][1])->specific_price;
+    eq(['0.15', 'percentage', '1', '3', '2026-11-21 00:00:00', '0000-00-00 00:00:00', '-1'],
+        [(string)$x->reduction, (string)$x->reduction_type, (string)$x->reduction_tax, (string)$x->id_shop, (string)$x->from, (string)$x->to, (string)$x->price]);
+    $sp->addSpecificPrice(['id' => 3], 4, 8, 'amount', 2.5, false, '', '2026-12-31');
+    $x = simplexml_load_string($api->posts[1][1])->specific_price;
+    eq(['2.5', '0', '8', '2026-12-31 23:59:59'], [(string)$x->reduction, (string)$x->reduction_tax, (string)$x->id_product_attribute, (string)$x->to]);
+    throws(function () use ($sp) { $sp->addSpecificPrice(['id' => 3], 4, 0, 'percentage', 100, true, '', ''); }, InvalidArgumentException::class);
+    $sp->deleteSpecificPrice(['id' => 3], 12, 4);
+    eq([['specific_prices', 12, ['id_shop' => 3]]], $api->deletes);
+    throws(function () use ($sp) { $sp->deleteSpecificPrice(['id' => 3], 13, 4); }, RuntimeException::class);
+});
+
+test('returns: partial credit note (returned goods + shipping), order log, branded mail, invoice template 2026-2', function () {
+    $db = panelDb();
+    $user = panelUser($db, 'admin', 100);
+    Schema::migrate($db, __DIR__ . '/../src/applications/panel/sql');
+    $companies = new Companies($db);
+    $cid = $companies->save(null, ['name' => 'ERMA Group s.r.o.', 'street' => 'Pravotice 178', 'city' => 'Pravotice', 'zip' => '956 35',
+        'country' => 'SK', 'ico' => '53036875', 'dic' => '2121232916', 'registration' => '', 'email' => 'info@erma.sk', 'phone' => '', 'web' => '',
+        'slogan' => '', 'due_days' => 14, 'invoice_note' => '', 'accent_color' => '#f74040', 'active' => 1]);
+    $companies->saveBanks($cid, [['id' => 0, 'account_name' => 'ERMA', 'iban' => 'SK1783300000002501809819', 'bic' => 'FIOZSKBAXXX', 'bank' => 'Fio banka, a.s.',
+        'is_default' => true, 'active' => true]]);
+    eq('Fio banka, a.s.', $companies->banks($cid)[0]['bank']);
+    $companies->saveSeries(null, $cid, ['doc_type' => 'invoice', 'name' => 'FA', 'format' => 'FA{RRRR}/{NNNNNN}', 'vs_format' => '', 'reset_yearly' => 1, 'is_default' => 1, 'active' => 1]);
+    $companies->saveSeries(null, $cid, ['doc_type' => 'credit_note', 'name' => 'DB', 'format' => 'DB{RRRR}/{NNNN}', 'vs_format' => '', 'reset_yearly' => 1, 'is_default' => 1, 'active' => 1]);
+    $inv = new Invoices($db);
+    $h = array_merge($inv->defaults($cid, 'invoice', $user), ['issue_date' => '2026-11-18', 'delivery_date' => '2026-11-18', 'due_date' => '2026-12-02',
+        'buyer_type' => 'b2c', 'buyer_name' => 'Klaudia Turanová', 'buyer_street' => 'Štefánika 7', 'buyer_city' => 'Levice', 'buyer_zip' => '93401',
+        'buyer_email' => 'k@example.sk', 'buyer_phone' => '0940730049']);
+    $id = $inv->saveDraft(null, $h, [
+        ['name' => 'Howies Vosk na čepeľ', 'sku' => '330', 'quantity' => 2, 'unit' => 'ks', 'unit_price' => 6.9, 'vat_rate' => 0, 'vat_category' => 'S'],
+        ['name' => 'Páska čierna', 'sku' => '63', 'quantity' => 1, 'unit' => 'ks', 'unit_price' => 4, 'vat_rate' => 0, 'vat_category' => 'S'],
+        ['name' => 'Doprava: Zásielkovňa SK', 'sku' => '', 'quantity' => 1, 'unit' => 'ks', 'unit_price' => 3.59, 'vat_rate' => 0, 'vat_category' => 'S'],
+    ], $user, ['shop_id' => 1, 'shop_connection_id' => 0, 'shop_order_id' => 2508, 'order_reference' => '2456']);
+    $inv->issue($id, $user);
+    $cn = $inv->createCreditNote($id, $user, [['sku' => '330', 'name' => 'Howies Vosk na čepeľ', 'quantity' => 1], ['shipping' => true]], 'Vrátenie tovaru');
+    $c = $inv->find($cn);
+    eq([['Howies Vosk na čepeľ', '-1.000'], ['Doprava: Zásielkovňa SK', '-1.000']], array_map(function ($l) { return [$l['name'], $l['quantity']]; }, $c['lines']));
+    eq(['-10.49', 'Vrátenie tovaru', '2456', null], [$c['total'], $c['correction_reason'], $c['order_reference'], $c['shop_order_id']]);
+    eq($id, (int)$inv->findByOrder(0, 2508)['id'], 'the order still points to its invoice, not to the credit note');
+    throws(function () use ($inv, $id, $user) { $inv->createCreditNote($id, $user, [['sku' => 'X', 'name' => 'Iný', 'quantity' => 1]], 'x'); }, RuntimeException::class);
+    eq(2, count($inv->find($cn)['lines']));
+
+    // order log: notes, returns, settings
+    $log = new Panel\Shop\OrderLog($db);
+    $log->addNote(0, 2508, 'Zákazník volal', $user);
+    eq(['Zákazník volal'], array_column($log->notes(0, 2508), 'text'));
+    eq([2508 => 1], $log->noteCounts(0, [2508, 2509]));
+    $log->addReturn(0, 2508, [['id_order_detail' => 5, 'product_id' => 1, 'product_attribute_id' => 0, 'name' => 'Vosk', 'reference' => '330', 'quantity' => 1]],
+        true, true, $cn, 'Platba bola vrátená', '', [], $user);
+    $log->addReturn(0, 2508, [['id_order_detail' => 5, 'product_id' => 1, 'product_attribute_id' => 0, 'name' => 'Vosk', 'reference' => '330', 'quantity' => 1]],
+        false, false, null, '', '', ['Naskladnenie: chyba'], $user);
+    eq([5 => 2], $log->returned(0, 2508));
+    eq(['Naskladnenie: chyba'], $log->returns(0, 2508)[1]['problems']);
+    $log->logMessage(0, 2508, ['k@example.sk'], 'Otázka', 'Text', '', $user);
+    eq('sent', $log->messages(0, 2508)[0]['status']);
+    eq(null, $log->setting('shipping_states.0'));
+    $log->setSetting('shipping_states.0', [2, 11]);
+    eq([2, 11], $log->setting('shipping_states.0'));
+
+    // e-mail in the shop's look
+    $m = Panel\ShopMail::message(['text' => 'Dobrý deň'], ['name' => 'Howies', 'web' => 'https://howieshockey.sk/', 'logo' => 'PNG', 'logo_mime' => 'image/png'], 'pätička');
+    contains('cid:shoplogo', $m['html']);
+    eq([['shoplogo', 'PNG', 'image/png', 'logo']], $m['embedded']);
+    contains("-- \npätička", $m['text']);
+    eq(['text' => 'x'], Panel\ShopMail::message(['text' => 'x'], null));
+
+    // the new invoice template: everything the old shop invoices had (domestic account, bank, codes, buyer contact, texts)
+    eq('invoice-2026-2', Panel\Invoicing\Templates::CURRENT);
+    $i = $inv->find($id);
+    $view = new WebApplication\View(__DIR__ . '/../src/applications/panel/views');
+    $html = $view->render('invoices/templates/invoice-2026-2', ['inv' => $i, 'supplier' => $i['supplier'], 'original' => null,
+        'legal' => (new Panel\Invoicing\Legislation($db))->textsOn('2026-11-18'), 'logo' => '', 'stamp' => '', 'qr' => '', 'qrError' => '',
+        'fontBase' => '', 'forPdf' => true, 'title' => 'x', 'bankName' => 'Fio banka, a.s.', 'f' => new Panel\Format(),
+        'shop' => ['name' => 'HowiesHockey', 'web' => 'https://www.howieshockey.sk/store/', 'email' => 'info@howieshockey.sk', 'phone' => '+421 949 00 11 02', 'logo' => '']]);
+    foreach (['2501809819/8330', 'Fio banka, a.s.', 'Kód: 330', '0940730049', 'k@example.sk', 'Slovensko', 'Táto faktúra slúži zároveň aj ako dodací list.',
+              'Ďakujeme Vám za nákup na howieshockey.sk.', 'www.howieshockey.sk', 'info@howieshockey.sk', 'Dátum splatnosti:', '2.12.2026',
+              'Celková suma bez DPH:', 'Číslo objednávky:', '2456'] as $needle) {
+        contains($needle, $html);
     }
 });

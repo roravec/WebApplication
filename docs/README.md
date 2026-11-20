@@ -27,7 +27,7 @@ rovnako ako predtým — všetko v `applications/`.
 
 ## Hosting a databázy
 
-- Zdieľaný hosting, len FTP, nginx pred Apache, PHP 7.3 (kvôli e-shopu). Jeden FTP priečinok = koreň webu všetkých
+- Zdieľaný hosting, len FTP, nginx pred Apache, PHP 8.5 (od 20. 11. 2026, PrestaShop 9). Jeden FTP priečinok = koreň webu všetkých
   domén. Koreňový `.htaccess` je spoločný — nikdy ho neprepisovať. Lokálna snímka FTP: `C:\Users\orras\git\ftp`
   (štruktúra spoľahlivá, obsah starý — nie je to záloha).
 - **`ermaskretail` = ostrá databáza**, **`molesk` = testovacia** (najprv sa nasadzuje na ňu, potom sa preklopí) —
@@ -47,7 +47,7 @@ rovnako ako predtým — všetko v `applications/`.
 
 | Čo | Kde |
 |---|---|
-| framework, panel, weby | http://192.168.0.11:8090/ (`/panel`, login admin/admin), hbkpravotice / bnhl: `http://hbkpravotice.sk.192-168-0-11.sslip.io:8090/`, `http://bnhl.sk.192-168-0-11.sslip.io:8090/`; testy `dev/` (PHP 7.3 aj 8.4) |
+| framework, panel, weby | http://192.168.0.11:8090/ (`/panel`, login admin/admin), hbkpravotice / bnhl: `http://hbkpravotice.sk.192-168-0-11.sslip.io:8090/`, `http://bnhl.sk.192-168-0-11.sslip.io:8090/`; testy `dev/` (PHP 8.5 ako hosting) |
 | e-shopy — kópie | `~/webstore/devN`: dev1 = dnešný ostrý stav (1.7.6, :8081), dev5 = 8.2.9 (:8085), dev4 = 9.2.1 (:8084); dev2, dev3 = staršie skúšky (vypnuté) |
 | e-maily z kópií | Mailpit http://192.168.0.11:8025 (nič neodíde von) |
 | zálohy z hostingu | `/mnt/storage/erma/backups/` (zrkadlené disky RAID1 2× 1 TB; `~/webstore/backups` je odkaz naň) |

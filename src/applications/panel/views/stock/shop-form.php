@@ -10,9 +10,12 @@ $err = function ($k) use ($errors, $e) { return isset($errors[$k]) ? '<span clas
   <label>Adresa e-shopu <input name="url" value="<?= $e($values['url']) ?>" required placeholder="https://www.example.sk/store/"><?= $err('url') ?>
     <small class="field-hint">Adresa, na ktorej beží PrestaShop (aj s podpriečinkom). Pri viacerých obchodoch v jednej inštalácii stačí jedna.</small></label>
   <label>Kľúč Webservice <input type="password" name="api_key" value="" autocomplete="new-password" placeholder="<?= $c ? 'uložený — nechajte prázdne' : '32 znakov' ?>"><?= $err('api_key') ?>
-    <small class="field-hint">V administrácii PrestaShopu: Rozšírené parametre → Webservice → pridať kľúč. Oprávnenia: products, combinations,
-      stock_availables (GET, PUT), product_options, product_option_values, languages, shops, shop_groups (GET), orders, order_details,
-      order_states, order_payments, customers, addresses, countries, currencies, carriers (GET), order_histories (GET, POST).
+    <small class="field-hint">V administrácii PrestaShopu: Rozšírené parametre → Webservice → pridať kľúč. Oprávnenia:
+      <b>GET + PUT:</b> products, combinations, stock_availables, orders, order_carriers ·
+      <b>GET + POST:</b> order_histories, addresses ·
+      <b>GET + POST + PUT + DELETE:</b> specific_prices ·
+      <b>GET:</b> product_options, product_option_values, languages, shops, shop_groups, order_details, order_states, order_payments,
+      customers, countries, currencies, carriers, taxes, tax_rules, tax_rule_groups, categories.
       Kľúč sa uloží zašifrovaný.</small></label>
   <label class="check"><input type="checkbox" name="active" value="1"<?= $values['active'] ? ' checked' : '' ?>> Aktívne</label>
   <label class="check"><input type="checkbox" name="local_db" value="1"<?= !empty($values['local_db']) ? ' checked' : '' ?>>

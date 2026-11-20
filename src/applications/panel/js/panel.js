@@ -201,6 +201,13 @@
     note.textContent = payer ? 'Len odpočítateľná DPH z dokladu.' : 'Firma nie je platiteľ DPH — DPH sa neodpočítava, celá suma je náklad (uloží sa 0).';
   }
 
+  // ---------------------------------------------------------------- "select all" checkbox: data-check-all="<name of the checkboxes>"
+  document.addEventListener('change', function (ev) {
+    var name = ev.target.getAttribute && ev.target.getAttribute('data-check-all');
+    if (!name || !ev.target.form) return;
+    Array.prototype.forEach.call(ev.target.form.querySelectorAll('input[type=checkbox][name="' + name + '"]'), function (c) { c.checked = ev.target.checked; });
+  });
+
   // ---------------------------------------------------------------- order cost rules: show the select of the chosen type
   function ocRow(row) {
     var t = row.querySelector('[data-oc-type]');

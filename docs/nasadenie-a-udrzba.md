@@ -17,7 +17,8 @@ v `C:\Users\orras\git\Web_store\docs\upgrade-plan.md` (časť „Production proc
 - Koreňový `.htaccess` je spoločný (presmerovanie na https, e-shopy do `/store/`, zariadenia ESP32 `/fw` a
   `/api/device_sync.php` bez https, všetko ostatné na `/index.php`) — **nikdy sa neprepisuje**, pre nový framework
   netreba v ňom nič meniť.
-- PHP 7.3 (kvôli e-shopu), databáza `molesk` spoločná pre všetko (aj staré nástroje `admin/`, `sklad/`, `beta/`).
+- PHP **8.5** od 20. 11. 2026 (predtým 7.3 kvôli starému e-shopu) — nastavuje sa pre každú doménu zvlášť (aj aliasy);
+  databázy: ostré `ermaskretail`, testovacia `molesk` (pozri nižšie). Staré nástroje `admin/`, `sklad/`, `beta/` na 8.5 neoverené.
 
 ## Databázy (majiteľ 20. 11. 2026)
 

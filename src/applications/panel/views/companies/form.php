@@ -17,6 +17,7 @@ $bankRow = function (array $b) use ($e) { ?>
     <td><input type="hidden" name="bank_id[]" value="<?= (int)$b['id'] ?>"><input name="bank_name[]" value="<?= $e($b['account_name']) ?>" placeholder="Názov účtu"></td>
     <td><input name="bank_iban[]" value="<?= $e($b['iban']) ?>" placeholder="SK.." size="28"></td>
     <td><input name="bank_bic[]" value="<?= $e($b['bic']) ?>" size="11"></td>
+    <td><input name="bank_bank[]" value="<?= $e($b['bank'] ?? '') ?>" size="16" placeholder="napr. Fio banka, a.s."></td>
     <td><select name="bank_default[]"><option value="0">nie</option><option value="1"<?= $b['is_default'] ? ' selected' : '' ?>>áno</option></select></td>
     <td><select name="bank_active[]"><option value="1">aktívny</option><option value="0"<?= $b['active'] ? '' : ' selected' ?>>neaktívny</option></select></td>
     <td><input type="password" name="bank_token[]" value="" autocomplete="new-password" size="14"
@@ -70,10 +71,10 @@ $bankRow = function (array $b) use ($e) { ?>
     <h2>Bankové účty</h2>
     <?= $err('banks') ?>
     <table class="grid compact">
-      <thead><tr><th>Názov účtu</th><th>IBAN</th><th>BIC</th><th>Predvolený</th><th>Stav</th><th title="Automatické sťahovanie pohybov">API banky</th></tr></thead>
+      <thead><tr><th>Názov účtu</th><th>IBAN</th><th>BIC</th><th>Banka</th><th>Predvolený</th><th>Stav</th><th title="Automatické sťahovanie pohybov">API banky</th></tr></thead>
       <tbody id="bank-rows"><?php foreach ($values['banks'] as $b) { $bankRow($b); } ?></tbody>
     </table>
-    <template id="bank-rows-tpl"><?php $bankRow(['id' => 0, 'account_name' => '', 'iban' => '', 'bic' => '', 'is_default' => 0, 'active' => 1, 'api_token' => null]); ?></template>
+    <template id="bank-rows-tpl"><?php $bankRow(['id' => 0, 'account_name' => '', 'iban' => '', 'bic' => '', 'bank' => '', 'is_default' => 0, 'active' => 1, 'api_token' => null]); ?></template>
     <p class="muted small">API banky: token Fio banky (internetbanking → Nastavenia → API, oprávnenie len na čítanie) — pohyby sa
       potom sťahujú tlačidlom vo Faktúry → Import výpisu. Token sa uloží zašifrovaný a už sa nezobrazí.</p>
     <p><button type="button" data-add-row="bank-rows">+ Bankový účet</button></p>

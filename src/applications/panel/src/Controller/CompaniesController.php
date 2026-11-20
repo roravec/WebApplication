@@ -141,6 +141,7 @@ class CompaniesController
         $bankNames = (array)$req->post('bank_name', []);
         $bankIbans = (array)$req->post('bank_iban', []);
         $bankBics = (array)$req->post('bank_bic', []);
+        $bankBanks = (array)$req->post('bank_bank', []);
         $bankActive = (array)$req->post('bank_active', []);
         $bankDefault = (array)$req->post('bank_default', []);
         $haveDefault = false;
@@ -154,6 +155,7 @@ class CompaniesController
             }
             $v['banks'][] = ['id' => (int)($bankIds[$i] ?? 0), 'account_name' => trim((string)($bankNames[$i] ?? '')) ?: $v['name'],
                 'iban' => $iban, 'bic' => strtoupper(trim((string)($bankBics[$i] ?? ''))),
+                'bank' => mb_substr(trim((string)($bankBanks[$i] ?? '')), 0, 100, 'UTF-8'),
                 'is_default' => false, 'active' => (int)($bankActive[$i] ?? 1) === 1];
             $last = count($v['banks']) - 1;
             if (!$haveDefault && (int)($bankDefault[$i] ?? 0) === 1 && $v['banks'][$last]['active']) {

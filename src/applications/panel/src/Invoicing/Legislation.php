@@ -23,6 +23,8 @@ class Legislation
         'vat_Z' => 'Nulová sadzba (kategória Z)',
         'paid' => 'Uhradené (karta / hotovosť)',
         'prices_currency' => 'Mena cien ({currency})',
+        'delivery_note' => 'Faktúra z e-shopu = aj dodací list',
+        'thanks_shop' => 'Poďakovanie za nákup v e-shope ({shop})',
     ];
 
     /** @var Database */ private $db;

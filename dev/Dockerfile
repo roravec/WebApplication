@@ -1,5 +1,5 @@
-# PHP + Apache for developing/testing the framework. PHP_VERSION: 7.3 (= hosting today), 8.1, 8.3, 8.4 ...
-ARG PHP_VERSION=7.3
+# PHP + Apache for developing/testing the framework. PHP_VERSION: 8.5 (= hosting since 2026-11-20), older ones only when needed
+ARG PHP_VERSION=8.5
 FROM php:${PHP_VERSION}-apache
 
 # Debian 11 security archive for old PHP images is gone → drop that source (dev only)
