@@ -109,7 +109,8 @@ Those apps (hbkpravotice, bnhl — ported 2026-11-20) are run by `WebApplication
 the old `$application` object on top of the framework: `GetTextFromDatabase` (texts by appid = app name),
 `GetDatabase` (LegacyDatabase), `GetDbPrefix`, `EscapeString`, `DetectPage` / `GetContentFilename` (same page names as
 before), `Login` / `Logout` / `IsLoggedIn` / `GetUser` with the app's own `<prefix>users` table (global classes `User`,
-`ICRUD` in `framework/Legacy/oldcore/`). The app gets a small entry class (`applications/hbkpravotice/App.php`):
+`ICRUD` in `framework/Legacy/oldcore/`). The app gets a small entry class (`applications/hbkpravotice/App.php`; hbkpravotice and bnhl live in the
+StadiumControl repo, `WebServer/apps/` — see `apps.json`):
 
 ```php
 \WebApplication\Legacy\OldCoreApplication::loadOldCore();      // User, ICRUD — before the app's own classes

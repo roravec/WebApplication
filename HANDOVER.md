@@ -334,6 +334,20 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
      static files (hbkpravoticetimer.html, livestream.html, … and `/fw`, `/api/device_sync.php` for the ESP32 devices)
      stay where they are; URLs of the sites don't change (`/StadiumControl?api=…` too).
 
+23. **Apps in their own repositories + deploy package** (2026-11-20, owner: "apps should be separate repos"):
+   hbkpravotice, bnhl → `StadiumControl/WebServer/apps/` (old `webapp/WebApp_hbkpravotice`, `WebApp_bnhl`,
+   `WebApp_erma`, `core/`, `index.php`, `Config.php` with the DB password removed there — 511 files, all in its git
+   history; the static root pages `webapp/*.html` now load `/applications/hbkpravotice/…`); erma → `Web_ERMA/app/`
+   (Web_ERMA is NOT a git repo yet — its old `WebApp_erma/` differs from the StadiumControl history copy, left for the
+   owner). `src/applications/{erma,hbkpravotice,bnhl}` removed here + .gitignore'd. **`apps.json`** = where each app
+   lives (+ `root_files`); **`dev/apps.py`** `check` / `sync` (dev server ~/webapplication-dev/src) / `package NAME`
+   (~/wa-deploy/NAME/www: framework + panel + apps + vendor + root files, index.php → index_wa.php, no config.php).
+   `dev/make-prod-config.py` = production config.php with generated jwtSecret / cron_token (first install only).
+   Phase A package `C:\Users\orras\ERMA-nasadenie\A-20261120\www` (897 files, 59 MB, config.php with TODO for DB +
+   SMTP): built by the script, content verified equal to the hand-built one (only line endings + the fixed root pages
+   differ), tested in a temp container on the dev server: hbkpravotice, bnhl, erma, panel login → dashboard; `/config/*`,
+   `/vendor/*` → 403. Dev server re-synced with the script, crawl OK.
+
 ### Dev environment (home server)
 - `~/webapplication-dev` (copy via `tar | ssh`, not a git clone), `dev/compose.yml`, web **http://192.168.0.11:8090/**:
   `/` = erma, `/panel` = employee section, `/demo` = framework demo. Dev login everywhere: **admin / admin**.

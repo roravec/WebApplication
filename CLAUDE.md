@@ -1,5 +1,9 @@
 # Project context for Claude — WebApplication
 
+> **This repo is the HUB for all ERMA web services** (owner 2026-11-20): **docs/README.md** = overview of every service
+> (webs, panel, e-shops, devices, old tools), where its code and docs live, hosting, databases, dev environment.
+> Document cross-service things (deploy, hosting, databases, maintenance) HERE; service details stay in their repos
+> (e-shops: `C:\Users\orras\git\Web_store`) and are linked from docs/README.md. Update it when a service changes.
 > Current state of work / next tasks: see **HANDOVER.md**. Invoicing requirements: **docs/fakturacia-specifikacia.md**;
 > where every legal rule lives and how it is changed: **docs/legislativa.md**.
 > Deploy order + maintenance: **docs/nasadenie-a-udrzba.md**.
@@ -45,17 +49,25 @@ VS Code workspace with all related repos: `C:\Users\orras\git\ERMA.code-workspac
 - Root `.htaccess` is shared with the shop (`/store/`) and must not be overwritten; `/fw` and `/api/device_sync.php`
   must stay plain HTTP (ESP32 devices). The live server currently runs BOTH the old core (`core/`, `WebApp_*` folders,
   root `index.php`) and an older copy of this framework (`core_new/`, `applications/`, `config/`).
-- Database `molesk` is shared: PrestaShop `ps_*`, `hbkpravotice_*` (also used by bnhl), `ermaweb_*`, `branchmanager_*`.
+- **Databases (owner 2026-11-20): `ermaskretail` = production** for everything in full operation; **`molesk` = test**.
+  Deploy first on `molesk` (as today: shop `ps_*`, `hbkpravotice_*`, old tools `admin/`, `sklad/`, `beta/` …), then
+  flip over to `ermaskretail` (framework apps: phase A2 = copy `panel_*` + `hbkpravotice_*`, switch config.php; the
+  upgraded shop goes into `ermaskretail` directly in phase C). `molesk` stays as the test database afterwards.
+  Plan: docs/nasadenie-a-udrzba.md "Databázy".
   The ERMA system may READ `ps_*` directly (shop orders); it NEVER writes into them by SQL — changes in a shop (stock,
   order state) go only through the PrestaShop Webservice API (owner 2026-11-19, docs/sklad-specifikacia.md).
 
 ## Apps and their sources
+Apps in their own repos (owner 2026-11-20): listed in **`apps.json`**; `python dev/apps.py sync` (dev server) /
+`package NAME` (deploy package) assemble them into `applications/<name>`. Never commit them into this repo
+(.gitignore). Only the framework, `panel` and `demo` live here.
+
 | App | Domain | Source of truth | Notes |
 |---|---|---|---|
-| erma | erma.sk | `src/applications/erma` — **new placeholder** (owner 2026-11-19: the old erma site is not needed) | public frontpage for customers; real site later |
+| erma | erma.sk | `C:\Users\orras\git\Web_ERMA\app` (own repo; folder not in git yet) — **new placeholder** (owner 2026-11-19: the old erma site is not needed) | public frontpage for customers; real site later |
 | panel | erma.sk/panel (path may change) | `src/applications/panel` | employee section: shop orders (read-only), employees; invoicing next |
-| hbkpravotice | hbkpravotice.sk | `src/applications/hbkpravotice` (ported 2026-11-20 from StadiumControl `WebApp_hbkpravotice`, which stays until the deploy) | ~11k lines, oldest core API → runs via `WebApplication\Legacy\OldCoreApplication` (HANDOVER 22); StadiumControl admin + JSON API |
-| bnhl | bnhl.sk | `src/applications/bnhl` (ported 2026-11-20 from StadiumControl `WebApp_bnhl`) | ~10k lines, uses `hbkpravotice_` tables + hbkpravotice's StadiumControl API (config `stadiumControlApi`) |
+| hbkpravotice | hbkpravotice.sk | `StadiumControl\WebServer\apps\hbkpravotice` (own repo; ported 2026-11-20, old `WebApp_*` + `core/` removed there) | ~11k lines, oldest core API → runs via `WebApplication\Legacy\OldCoreApplication` (HANDOVER 22); StadiumControl admin + JSON API |
+| bnhl | bnhl.sk | `StadiumControl\WebServer\apps\bnhl` (own repo; ported 2026-11-20) | ~10k lines, uses `hbkpravotice_` tables + hbkpravotice's StadiumControl API (config `stadiumControlApi`) |
 | LedBoard | ? | repo `C:\Users\orras\git\WEB_LedBoard` (spec in `Prj_LedBoard`) | website fits; server part depends on its DEC-003 (needs realtime?) |
 
 `C:\Users\orras\git\WebApplications` = identical copy of StadiumControl apps (owner may delete).

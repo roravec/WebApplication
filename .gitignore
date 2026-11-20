@@ -484,3 +484,8 @@ composer.lock
 !/composer.lock
 # dompdf font cache, generated
 /src/var/dompdf/
+
+# apps that live in their own repositories (apps.json) — assembled by dev/apps.py, never committed here
+/src/applications/erma/
+/src/applications/hbkpravotice/
+/src/applications/bnhl/

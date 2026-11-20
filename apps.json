@@ -1,0 +1,24 @@
+{
+  "_comment": "Apps that live in their OWN repositories (owner 2026-11-20). dev/apps.py copies each one into applications/<name> for the dev server and the deploy package. Paths are relative to this file. root_files: static files that belong in the web root (served there on the hosting). Apps inside this repo (src/applications/panel, demo) are not listed.",
+  "apps": {
+    "erma": {
+      "repo": "Web_ERMA",
+      "path": "../Web_ERMA/app"
+    },
+    "hbkpravotice": {
+      "repo": "StadiumControl",
+      "path": "../StadiumControl/WebServer/apps/hbkpravotice",
+      "root_files": [
+        "../StadiumControl/WebServer/webapp/hbkpravoticetimer.html",
+        "../StadiumControl/WebServer/webapp/livestream.html",
+        "../StadiumControl/WebServer/webapp/live.html",
+        "../StadiumControl/WebServer/webapp/tournamentstats.html",
+        "../StadiumControl/WebServer/webapp/tournamentstream.html"
+      ]
+    },
+    "bnhl": {
+      "repo": "StadiumControl",
+      "path": "../StadiumControl/WebServer/apps/bnhl"
+    }
+  }
+}
