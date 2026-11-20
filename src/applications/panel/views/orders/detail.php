@@ -1,4 +1,6 @@
-<?php /** @var array $o order with lines, address_invoice, address_delivery, payments, history */
+<?php /** @var array $o order with lines, address_invoice, address_delivery, payments, history, src; Panel\Shop\OrderSource $source;
+    array|null $invoice; int $invoiceCompany; bool $canInvoice, $canSeeInvoice, $canChangeState; array $states */
+$src = (int)$o['src'];
 $addr = function ($a) use ($e) {
     if (!$a) {
         return '<span class="muted">—</span>';
@@ -11,13 +13,13 @@ $addr = function ($a) use ($e) {
 $color = function ($c) { return preg_match('/^#[0-9a-fA-F]{3,6}$/', (string)$c) ? $c : '#999'; };
 $cur = (string)$o['currency'];
 ?>
-<p><a href="<?= $e($ctx->url('/orders')) ?>">← Objednávky</a></p>
+<p><a href="<?= $e($ctx->url('/orders' . ($src ? '?src=' . $src : ''))) ?>">← Objednávky</a></p>
 <div class="cards">
   <section class="card">
     <h2>Objednávka</h2>
     <dl>
       <dt>Číslo</dt><dd><?= $e($o['reference']) ?> (ID <?= (int)$o['id_order'] ?>)</dd>
-      <dt>E-shop</dt><dd><?= $e($o['shop']) ?></dd>
+      <dt>E-shop</dt><dd><?= $e($o['shop']) ?><?php if ($src): ?> <small class="muted">(<?= $e($source->label()) ?>, cez Webservice)</small><?php endif ?></dd>
       <dt>Dátum</dt><dd><?= $e($f->dateTime($o['date_add'])) ?></dd>
       <dt>Stav</dt><dd><span class="state" style="--c: <?= $e($color($o['state_color'])) ?>"><?= $e($o['state']) ?></span></dd>
       <dt>Platba</dt><dd><?= $e($o['payment']) ?></dd>
@@ -53,7 +55,8 @@ $cur = (string)$o['currency'];
 <div class="cards">
   <section class="card">
     <h2>Platby</h2>
-    <?php if (!$o['payments']): ?><p class="muted">Žiadna zaznamenaná platba.</p><?php endif ?>
+    <?php if ($o['payments_unavailable']): ?><p class="muted">Platby sa nedajú zistiť — kľúč Webservice nemá oprávnenie order_payments (GET).</p>
+    <?php elseif (!$o['payments']): ?><p class="muted">Žiadna zaznamenaná platba.</p><?php endif ?>
     <?php foreach ($o['payments'] as $p): ?>
       <p><?= $e($f->dateTime($p['date_add'])) ?> · <?= $e($p['payment_method']) ?> · <b><?= $e($f->money($p['amount'], $cur)) ?></b>
       <?php if ($p['transaction_id']): ?><br><small class="muted"><?= $e($p['transaction_id']) ?></small><?php endif ?></p>
@@ -61,12 +64,33 @@ $cur = (string)$o['currency'];
   </section>
   <section class="card">
     <h2>História stavov</h2>
+    <?php if ($canChangeState): ?>
+      <form method="post" action="<?= $e($ctx->orderUrl($src, (int)$o['id_order'], '/state')) ?>" class="filters">
+        <?= WebApplication\Csrf::field() ?>
+        <select name="state"><?php foreach ($states as $s): ?><option value="<?= (int)$s['id_order_state'] ?>"<?= (int)$s['id_order_state'] === (int)$o['current_state'] ? ' selected' : '' ?>><?= $e($s['name']) ?></option><?php endforeach ?></select>
+        <label class="check"><input type="checkbox" name="sendemail" value="1" checked> poslať zákazníkovi e-mail</label>
+        <button class="primary" data-confirm="Zmeniť stav objednávky v e-shope?">Zmeniť stav</button>
+      </form>
+    <?php endif ?>
     <?php foreach ($o['history'] as $h): ?>
       <p><?= $e($f->dateTime($h['date_add'])) ?> · <?= $e($h['state']) ?></p>
     <?php endforeach ?>
   </section>
   <section class="card">
     <h2>Faktúra</h2>
-    <p class="muted">Fakturácia sa pripravuje — faktúry sa budú vystavovať tu.</p>
+    <?php if ($invoice): ?>
+      <p><?php if ($canSeeInvoice): ?><a href="<?= $e($ctx->url('/invoices/' . $invoice['id'])) ?>"><?= $e($invoice['number'] ?: 'Koncept faktúry') ?></a><?php else: ?><?= $e($invoice['number'] ?: 'Koncept faktúry') ?><?php endif ?>
+        <?= $invoice['status'] === 'draft' ? '<span class="badge draft">koncept</span>' : '<span class="badge issued">vystavená</span>' ?></p>
+    <?php elseif (!$invoiceCompany): ?>
+      <p class="muted">E-shop nie je priradený k firme, ktorá zaň fakturuje (Firmy → E-shopy).</p>
+    <?php elseif ($canInvoice): ?>
+      <form method="post" action="<?= $e($ctx->orderUrl($src, (int)$o['id_order'], '/invoice')) ?>">
+        <?= WebApplication\Csrf::field() ?>
+        <button class="primary">Pripraviť faktúru</button>
+      </form>
+      <p class="muted small">Vytvorí koncept z položiek objednávky; pred vystavením ho skontrolujete.</p>
+    <?php else: ?>
+      <p class="muted">Bez faktúry.</p>
+    <?php endif ?>
   </section>
 </div>

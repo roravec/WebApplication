@@ -37,13 +37,17 @@ class EmployeesController
                 return $this->ctx->page('notfound', [], 'Zamestnanec neexistuje', 'employees');
             }
         }
+        $db = $this->ctx->app->getDatabase();
         $values = $values ?? [
             'identifier' => $client ? $client->identifier : '',
             'name' => $client ? $client->name : '',
-            'rights' => $client ? $client->getRights() : Rights::VIEW,
+            'admin' => $client ? $client->getRights() >= Rights::ADMIN : false,
             'status' => $client ? $client->status : 1,
+            'permissions' => $client ? Rights::permissionsOf($db, $client->getId()) : [Rights::ORDERS_VIEW, Rights::INVOICES_VIEW],
+            'companies' => $client ? Rights::companiesOf($db, $client->getId()) : [],
         ];
-        return $this->ctx->page('employees/form', ['client' => $client, 'values' => $values, 'errors' => $errors,
+        $companies = $this->ctx->companies()->all($this->ctx->companyIds());
+        return $this->ctx->page('employees/form', ['client' => $client, 'values' => $values, 'errors' => $errors, 'companies' => $companies,
             'minPassword' => self::MIN_PASSWORD], $client ? 'Upraviť zamestnanca' : 'Nový zamestnanec', 'employees');
     }
 
@@ -60,8 +64,10 @@ class EmployeesController
         $v = [
             'identifier' => trim((string)$req->post('identifier', '')),
             'name' => trim((string)$req->post('name', '')),
-            'rights' => (int)$req->post('rights', Rights::VIEW),
+            'admin' => (bool)$req->post('admin'),
             'status' => $req->post('status') ? 1 : 0,
+            'permissions' => array_values(array_intersect((array)$req->post('permissions', []), array_keys(Rights::permissionLabels()))),
+            'companies' => array_map('intval', (array)$req->post('companies', [])),
         ];
         $password = (string)$req->post('password', '');
         $errors = [];
@@ -76,9 +82,6 @@ class EmployeesController
         if ($v['name'] === '') {
             $errors['name'] = 'Zadajte meno.';
         }
-        if (!array_key_exists($v['rights'], Rights::labels())) {
-            $errors['rights'] = 'Neplatné oprávnenie.';
-        }
         if (!$client->exists() && $password === '') {
             $errors['password'] = 'Zadajte heslo.';
         }
@@ -86,19 +89,22 @@ class EmployeesController
             $errors['password'] = 'Heslo musí mať aspoň ' . self::MIN_PASSWORD . ' znakov.';
         }
         $me = $this->ctx->user();
-        if ($client->getId() === $me->getId() && ($v['rights'] < Rights::ADMIN || !$v['status'])) {
-            $errors['rights'] = 'Sám sebe nemôžete odobrať práva správcu ani deaktivovať účet.';
+        if ($client->getId() === $me->getId() && (!$v['admin'] || !$v['status'])) {
+            $errors['admin'] = 'Sám sebe nemôžete odobrať práva správcu ani deaktivovať účet.';
         }
         if ($errors) {
             return Response::html($this->form($req, $params, $errors, $v), 422);
         }
         $client->identifier = $v['identifier'];
         $client->name = $v['name'];
-        $client->rights = $v['rights'];
+        $client->rights = $v['admin'] ? Rights::ADMIN : Rights::EMPLOYEE;
         $client->status = $v['status'];
         $client->type = 0;
         $client->secret = $password;
         $ok = $client->exists() ? $client->update() : $client->create();
+        if ($ok) {
+            Rights::save($db, $client->getId(), $v['permissions'], $v['companies']);
+        }
         Session::flash($ok ? 'msg' : 'error', $ok ? 'Uložené.' : 'Uloženie zlyhalo.');
         return Response::redirect($this->ctx->url('/employees'));
     }

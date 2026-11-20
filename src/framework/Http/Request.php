@@ -13,11 +13,12 @@ class Request
     /** @var array */  private $server;
     /** @var string */ private $rawBody;
     /** @var array */  private $cookies;
+    /** @var array */  private $files;
     /** @var string */ private $basePath = '/';
     /** @var array|null */ private $json = null;
 
     public function __construct(string $method, string $host, string $path, array $query = [], array $post = [],
-                                array $headers = [], array $server = [], string $rawBody = '', array $cookies = [])
+                                array $headers = [], array $server = [], string $rawBody = '', array $cookies = [], array $files = [])
     {
         $this->method = strtoupper($method);
         $this->host = strtolower(preg_replace('/:\d+$/', '', $host));
@@ -28,6 +29,7 @@ class Request
         $this->server = $server;
         $this->rawBody = $rawBody;
         $this->cookies = $cookies;
+        $this->files = $files;
     }
 
     public static function fromGlobals(): self
@@ -52,7 +54,7 @@ class Request
         $path = parse_url($uri, PHP_URL_PATH);
         $host = $_SERVER['HTTP_HOST'] ?? ($_SERVER['SERVER_NAME'] ?? 'localhost');
         $body = (string)file_get_contents('php://input');
-        return new self($method, $host, is_string($path) ? $path : '/', $_GET, $_POST, $headers, $_SERVER, $body, $_COOKIE);
+        return new self($method, $host, is_string($path) ? $path : '/', $_GET, $_POST, $headers, $_SERVER, $body, $_COOKIE, $_FILES);
     }
 
     /** Copy of the request with the path of the app's mount point (e.g. '/panel') remembered. */
@@ -99,6 +101,19 @@ class Request
     public function post(?string $key = null, $default = null)
     {
         return $key === null ? $this->post : ($this->post[$key] ?? $default);
+    }
+
+    /**
+     * Uploaded file from a form with enctype="multipart/form-data": ['name', 'type', 'tmp_name', 'error', 'size'],
+     * or null when nothing was uploaded for $key. Check 'error' === UPLOAD_ERR_OK and use is_uploaded_file().
+     */
+    public function file(string $key): ?array
+    {
+        $f = $this->files[$key] ?? null;
+        if (!is_array($f) || !isset($f['error']) || is_array($f['error']) || $f['error'] === UPLOAD_ERR_NO_FILE) {
+            return null;
+        }
+        return $f;
     }
 
     /** Value from JSON body, form body or query string (in that order). */

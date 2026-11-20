@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Timer</title>
+  <script src="WebApp_hbkpravotice/assets/js/timer.js"></script>
+<style>
+    body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  height: 100vh;
+  background-color: #fff;
+  background-image: url('bg-video.jpg');
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  background-size: cover;
+}
+
+#bg-video {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  left: 0;
+  width: 100%;
+  /*user-select: none;
+  pointer-events: none;*/
+  aspect-ratio: 16/9;
+}
+
+#timer-container {
+  text-align: center;
+  font-weight: 600;
+  font-size: 7em;
+}
+
+#data-container {
+	z-index: 50;
+	border-spacing: 4px;
+	margin-top: 4px;
+  justify-content: space-around;
+  width: 80%;
+  text-shadow: 2px 2px 2px #0c0249;
+}
+#data-container td {
+  padding: 8px;
+}
+
+#description {
+	text-align: center;
+	color: white;
+	font-weight: bold;
+	background-color: #4dad52;
+	font-size: 1.5em;
+	border: none;
+	border-radius: 10px 10px 30px 30px;
+	/*border: 3px solid #0c0249;*/
+}
+
+#timer-container {
+	text-align: center;
+	color: white;
+	font-weight: bold;
+	width: 150px;
+	background-color: #4dad52;
+	font-size: 3em;
+	border: none;
+	border-radius: 10px 10px 10px 10px;
+	margin: 5px;
+	/*border: 3px solid #0c0249;*/
+}
+
+#team1-name {
+	text-align: right;
+	color: white;
+	font-weight: bold;
+	padding-right: 20px!important;
+	width: 300px;
+	/*background-color: #4dad52;*/
+	background: linear-gradient(to left, #4dad52, rgba(77, 173, 82, 0));
+	font-size: 2em;
+	border: none;
+	border-radius: 30px 10px 10px 10px;
+	margin: 5px;
+	/*border: 3px solid #0c0249;*/
+}
+#team2-name{
+	text-align: left;
+	color: white;
+	font-weight: bold;
+	padding-left: 20px!important;
+	width: 300px;
+	/*background-color: #4dad52;*/
+	background: linear-gradient(to right, #4dad52, rgba(77, 173, 82, 0));
+	font-size: 2em;
+	border: none;
+	border-radius: 10px 10px 30px 10px;
+	margin: 5px;
+	/*border: 3px solid #0c0249;*/
+}
+#team1-score {
+	text-align: center;
+	color: white;
+	font-weight: bold;
+	width: 30px;
+	background-color: #4dad52;
+	font-size: 3em;
+	border: none;
+	border-radius: 10px 10px 10px 10px;
+	margin: 5px;
+	/*border: 3px solid #0c0249;*/
+}
+#team2-score {
+	text-align: center;
+	color: white;
+	font-weight: bold;
+	width: 30px;
+	background-color: #4dad52;
+	font-size: 3em;
+	border: none;
+	border-radius: 10px 10px 10px 10px;
+	margin: 5px;
+	/*border: 3px solid #0c0249;*/
+}
+#team1-penalties {
+	text-align: right;
+	color: white;
+	font-weight: bold;
+	padding-right: 50px!important;
+	font-size: 1.5em;
+	margin: 5px;
+	
+}
+#team2-penalties {
+	text-align: left;
+	color: white;
+	font-weight: bold;
+	padding-left: 50px!important;
+	font-size: 1.5em;
+	border: none;
+	margin: 5px;
+}
+
+.column {
+  flex: 1;
+  padding: 5px;
+  background-color: #fff;
+  border: 1px solid #fff;
+  border-radius: 8px;
+  margin: 0 10px;
+}
+.column h2{
+	margin: 0; /* Remove default margin */
+	font-size: 4em;
+}
+.column p{
+	margin: 0; /* Remove default margin */
+	font-size: 2em;
+}
+
+.column.right
+{
+	text-align: right;
+}
+.column.left
+{
+	text-align: left;
+}
+
+  </style>
+</head>
+<body>
+
+
+<iframe 
+  id="bg-video"
+  src="https://www.youtube.com/embed/Dv0aodqdamY?ps=docs&controls=1&autoplay=1&mute=1"
+frameBorder="0"
+  allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen
+></iframe>
+
+<!--
+<video id="bg-video" autoplay>
+	<source src="rtsp://stream:123abc123@192.168.1.99:554/" type="video/mp4">
+	Your browser does not support the video tag.
+</video>
+-->
+
+<table id="data-container">
+<tbody>
+	<tr>
+		<td id="team1-name">HBK Pravotice</td>
+		<td id="team1-score">-</td>
+		<td id="timer-container">0:00</td>
+		<td id="team2-score">-</td>
+		<td id="team2-name">Blades Banovce</td>
+	</tr>
+	<tr>
+		<td id="team1-penalties">0:00</td>
+		<td></td>
+		<td id="description">1st</td>
+		<td></td>
+		<td id="team2-penalties">0:00</td>
+	</tr>
+</tbody>
+</table>
+
+
+</body>
+</html>

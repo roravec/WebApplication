@@ -39,6 +39,12 @@ class ErrorHandler
         if (!(error_reporting() & $errno)) {
             return false;   // silenced with @
         }
+        // deprecation notices of third-party libraries (src/vendor) are not ours to fix — e.g. libraries that still
+        // support PHP 7.3 trigger PHP 8.4 "implicitly nullable" notices; upgrade them when the hosting leaves 7.3
+        if (($errno === E_DEPRECATED || $errno === E_USER_DEPRECATED) && defined('WA_ROOT')
+            && strpos(str_replace('\\', '/', $file), str_replace('\\', '/', WA_ROOT) . '/vendor/') === 0) {
+            return true;
+        }
         $this->logger->warning($message, ['file' => $file, 'line' => $line, 'type' => $errno]);
         return !$this->debug;   // in debug mode let PHP display it as well
     }

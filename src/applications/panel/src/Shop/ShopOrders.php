@@ -4,24 +4,38 @@ namespace Panel\Shop;
 use WebApplication\Database\Database;
 
 /**
- * READ-ONLY access to PrestaShop orders (tables <prefix>orders, order_detail, …) in the shared database.
- * The panel never writes into the shop's tables. Works with PrestaShop 1.7.6 – 8.x table layout.
+ * READ-ONLY access to PrestaShop orders (tables <prefix>orders, order_detail, …) in the shared database = order
+ * source 0 (OrderSource; shops reached only through the Webservice: ShopOrdersApi).
+ * The panel never writes into the shop's tables by SQL — changes go through the PrestaShop Webservice API
+ * (docs/sklad-specifikacia.md). Works with PrestaShop 1.7.6 – 8.x table layout.
  */
-class ShopOrders
+class ShopOrders implements OrderSource
 {
     /** @var Database */ private $db;
     /** @var string */ private $p;
     /** @var string */ private $langIso;
     /** @var int|null */ private $langId = null;
+    /** @var string */ private $label;
 
-    public function __construct(Database $db, string $prefix = 'ps_', string $langIso = 'sk')
+    public function __construct(Database $db, string $prefix = 'ps_', string $langIso = 'sk', string $label = 'E-shopy (databáza)')
     {
+        $this->label = $label;
         if (!preg_match('/^[A-Za-z0-9_]*$/', $prefix)) {
             throw new \InvalidArgumentException('Invalid shop table prefix');
         }
         $this->db = $db;
         $this->p = $prefix;
         $this->langIso = $langIso;
+    }
+
+    public function id(): int
+    {
+        return 0;
+    }
+
+    public function label(): string
+    {
+        return $this->label;
     }
 
     /** Is the shop database reachable (tables exist)? */
@@ -82,7 +96,7 @@ class ShopOrders
         $perPage = max(1, min(200, $perPage));
         $offset = max(0, ($page - 1) * $perPage);
         $rows = $this->db->query(
-            "SELECT o.id_order, o.reference, o.id_shop, s.name AS shop, o.date_add, o.total_paid_tax_incl, o.payment,
+            "SELECT 0 AS src, o.id_order, o.reference, o.id_shop, s.name AS shop, o.date_add, o.total_paid_tax_incl, o.payment,
                     o.current_state, osl.name AS state, os.color AS state_color, os.paid AS state_paid,
                     c.firstname, c.lastname, c.email, a.company, cur.iso_code AS currency
              $from ORDER BY o.date_add DESC, o.id_order DESC LIMIT $perPage OFFSET $offset",
@@ -111,6 +125,8 @@ class ShopOrders
         if ($o === false) {
             return null;
         }
+        $o['src'] = 0;
+        $o['payments_unavailable'] = false;
         $o['lines'] = $this->db->query(
             "SELECT product_name, product_reference, product_quantity, unit_price_tax_excl, unit_price_tax_incl,
                     total_price_tax_excl, total_price_tax_incl, tax_rate
@@ -163,9 +179,10 @@ class ShopOrders
         }
         $a = $this->db->fetchOne(
             "SELECT a.company, a.firstname, a.lastname, a.address1, a.address2, a.postcode, a.city, a.phone, a.phone_mobile,
-                    a.vat_number, a.dni, cl.name AS country
+                    a.vat_number, a.dni, cl.name AS country, co.iso_code AS country_iso
              FROM `{$this->p}address` a
              LEFT JOIN `{$this->p}country_lang` cl ON cl.id_country = a.id_country AND cl.id_lang = ?
+             LEFT JOIN `{$this->p}country` co ON co.id_country = a.id_country
              WHERE a.id_address = ?",
             [$this->langId(), $id]
         );

@@ -4,15 +4,18 @@ use Panel\Rights;
 use WebApplication\Csrf;
 
 $nav = [
-    ['dashboard', '/', 'Prehľad', Rights::VIEW],
-    ['orders', '/orders', 'Objednávky', Rights::VIEW],
-    ['invoices', null, 'Faktúry', Rights::VIEW],          // pripravuje sa
-    ['companies', null, 'Firmy', Rights::ADMIN],          // pripravuje sa
-    ['employees', '/employees', 'Zamestnanci', Rights::ADMIN],
+    ['dashboard', '/', 'Prehľad', ''],
+    ['orders', '/orders', 'Objednávky', Rights::ORDERS_VIEW],
+    ['invoices', '/invoices', 'Faktúry', Rights::INVOICES_VIEW],
+    ['customers', '/customers', 'Odberatelia', Rights::INVOICES_VIEW],
+    ['stock', '/stock', 'Sklad', Rights::STOCK_VIEW],
+    ['companies', '/companies', 'Firmy', Rights::COMPANIES_MANAGE],
+    ['employees', '/employees', 'Zamestnanci', Rights::ADMIN_ONLY],
+    ['legislation', '/settings/legal', 'Legislatíva', Rights::ADMIN_ONLY],
 ];
 ?>
 <!doctype html>
-<html lang="sk">
+<html lang="sk" data-theme="<?= $e($ctx->theme()) ?>" data-theme-path="<?= $e($ctx->themeCookiePath()) ?>">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -21,13 +24,15 @@ $nav = [
   <link rel="stylesheet" href="<?= $e($app->asset('css/panel.css')) ?>">
   <link rel="icon" type="image/png" sizes="32x32" href="<?= $e($app->asset('img/favicon-32.png')) ?>">
   <link rel="apple-touch-icon" href="<?= $e($app->asset('img/apple-touch-icon.png')) ?>">
+  <script src="<?= $e($app->asset('js/theme.js')) ?>" defer></script>
+  <script src="<?= $e($app->asset('js/panel.js')) ?>" defer></script>
 </head>
 <body>
 <div class="shell">
   <aside class="side">
     <a class="brand" href="<?= $e($ctx->url('/')) ?>"><img src="<?= $e($app->asset('img/mark.png')) ?>" alt="" width="32" height="32"><span>ERMA <b>panel</b></span></a>
     <nav>
-      <?php foreach ($nav as list($key, $path, $label, $rights)): if (!$ctx->can($rights)) continue; ?>
+      <?php foreach ($nav as list($key, $path, $label, $rights)): if ($rights !== '' && !$ctx->can($rights)) continue; ?>
         <?php if ($path === null): ?>
           <span class="soon" title="Pripravuje sa"><?= $e($label) ?></span>
         <?php else: ?>
@@ -37,7 +42,8 @@ $nav = [
     </nav>
     <div class="me">
       <a href="<?= $e($ctx->url('/account')) ?>" class="<?= $section === 'account' ? 'active' : '' ?>"><?= $e($user->getName()) ?></a>
-      <small><?= $e(Rights::label($user->getRights())) ?></small>
+      <small><?= $e(Rights::roleLabel($user->getRights())) ?></small>
+      <button type="button" class="link theme-toggle" data-theme-toggle title="Prepnúť farebný režim"><span class="to-light">☀ Denný režim</span><span class="to-dark">☾ Tmavý režim</span></button>
       <form method="post" action="<?= $e($ctx->url('/logout')) ?>"><?= Csrf::field() ?><button class="link">Odhlásiť</button></form>
     </div>
   </aside>

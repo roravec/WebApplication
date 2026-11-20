@@ -1,0 +1,29 @@
+{
+    "name": "orras/webapplication",
+    "description": "WebApplication framework + apps. Libraries are installed into src/vendor (deployed by upload with src/).",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=7.3",
+        "dompdf/dompdf": "^2.0 || ^3.0",
+        "bacon/bacon-qr-code": "^2.0",
+        "phpmailer/phpmailer": "^6.9"
+    },
+    "config": {
+        "vendor-dir": "src/vendor",
+        "platform": {
+            "php": "7.3.33"
+        },
+        "optimize-autoloader": true,
+        "sort-packages": true
+    },
+    "scripts": {
+        "post-install-cmd": [
+            "@deny-web"
+        ],
+        "post-update-cmd": [
+            "@deny-web"
+        ],
+        "deny-web": "php -r \"copy('src/var/.htaccess', 'src/vendor/.htaccess');\""
+    }
+}

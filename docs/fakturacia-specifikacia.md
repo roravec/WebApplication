@@ -136,10 +136,54 @@ Doplniť: zápis v OR, dátum dodania. Zjednotiť údaje na pečiatke (Nedašovc
 - Prijímanie e-faktúr (povinné pre platiteľov aj neplatiteľov) — každá firma cez svojho poštára alebo KROS; v systéme
   neskôr prípadne evidencia prijatých faktúr.
 
-## 6. Otvorené otázky
+### 5.4 KROS API (zistené 20. 11. 2026, https://developer.kros.sk/)
+- Verejné API je len pre cloudové **KROS Fakturácia** a **KROS Sklad** (`https://api-economy.kros.sk`, REST/JSON,
+  Swagger na `/swagger`). **Omegu výslovne nepokrýva** (co-umoznuje.html) — do Omegy sa ide naďalej importom alebo cez
+  KROS cloud („Stiahni doklady z KROSu“, overiť u účtovníka).
+- Čo vie: vydané faktúry, dobropisy, zálohové faktúry, dodacie listy, objednávky — zápis aj čítanie; úhrady (párovanie
+  podľa VS); prijaté doklady vrátane prijatých e-faktúr — len čítanie; PDF a prílohy; webhooky (zmena dokladu, úhrada,
+  stav odoslania; podpis HMAC). Doklady sa cez API neupravujú ani nemažú; rovnaké číslo + rad = celý doklad sa prepíše.
+- **E-faktúra cez KROS**: `POST /api/invoices` s `isEInvoice: true` → `POST /api/invoices/{id}/send`; KROS doručí cez
+  Peppol (BIS Billing 3.0) — netreba vlastného certifikovaného poštára; odberateľ musí mať DIČ a firma musí mať v KROS
+  zapnutú eFaktúru. Stav v `eInvoice.status` (pending, sent, confirmed, validationFailed, sendingFailed, deliveryFailed).
+- Prístup: token pre firmu (KROS → nastavenia firmy → „API prepojenia“, alebo „Integration Consent“ bez registrácie
+  u KROS); firma potrebuje účet KROS Fakturácia/Sklad a licenciu na API (cena podľa produktu, na webe neuvedená).
+  Limity 10 req/s, 300/min, dávka 100 dokladov; zápisy asynchrónne (202 + výsledok webhookom). **Testovacie prostredie
+  nie je** — skúšať na testovacej firme v KROS.
+- **ERMA Group (majiteľ 20. 11. 2026):** účtovníčka ju zaregistrovala do Peppolu cez KROS → prijaté e-faktúry chodia do
+  KROS (eFaktúra) a odtiaľ do Omegy; to pokrýva povinnosť neplatiteľa DPH (prijímať). Prístup k API v KROS zatiaľ
+  nemá (bez licencie) → pre neplatiteľa nič netreba. Pri registrácii k DPH (povinnosť vystavovať e-faktúry): buď
+  licencia na KROS API (odosielanie z panelu cez KROS, adresa v Peppol ostáva u KROS), alebo iný spôsob odoslania —
+  overiť vtedy u KROS cenu licencie a či sa dá posielať cez iného poskytovateľa, keď je príjem zaregistrovaný v KROS.
+- Hodí sa do návrhu ako jeden z „poskytovateľov e-faktúry pre firmu“ (kap. 5.3): poskytovateľ **KROS** = odoslanie
+  e-faktúr cez Peppol + prenos vydaných faktúr a úhrad do KROS (→ Omega) + čítanie prijatých e-faktúr. Rozhodnutie
+  majiteľa: či firma má / chce KROS Fakturácia (licencia na API).
 
-1. Zápis ERMA Group s.r.o. v obchodnom registri (súd, oddiel, vložka).
-2. Prvé číslo a formát radu nového systému (s účtovníkom).
-3. Omega: ktorý import účtovník používa (TXT / ISDOC / KROS eFaktúra), vzorový súbor.
-4. Faktúra z objednávky: automaticky pri zaplatení, pri odoslaní, alebo ručne? Posielať zákazníkovi e-mailom automaticky?
-5. Názov/cesta zamestnaneckej sekcie (`/panel`, `/zamestnanci`, `/intranet`…).
+## 6. Stav implementácie (19. 11. 2026)
+
+Hotové v zamestnaneckej sekcii (`/panel`), zatiaľ na vývojovom serveri:
+- **Firmy**: údaje, zápis v OR, režim DPH s dátumom platnosti, bankové účty, logo, pečiatka s podpisom, priradenie e-shopov.
+- **Číselné rady**: formát z tokenov, variabilný symbol, nulovanie každý rok, nastaviteľné ďalšie číslo; číslo sa prideľuje
+  pri vystavení bez medzier a bez duplicít.
+- **Odberatelia**: adresár pre každú firmu zvlášť, preberanie z objednávok.
+- **Faktúry a dobropisy**: koncept → vystavenie (potom sa nedá meniť ani zmazať), faktúra z objednávky jedným klikom
+  (jedna objednávka = jedna faktúra), dobropis k faktúre s dôvodom opravy, história (kto, kedy).
+- **Oprávnenia**: zamestnanec vidí len povolené časti a len firmy, ku ktorým má prístup.
+- **Tlač** podľa vzoru (kap. 4); zatiaľ cez „Uložiť ako PDF“ v prehliadači.
+- **Pre účtovníka** (20. 11. 2026): raz za mesiac jeden e-mail účtovníkovi so ZIP — súbor na import do Omegy, PDF
+  všetkých dokladov, prehľad dokladov a úhrad (Excel), návod. Posiela sa automaticky (nastavenie firmy: e-mail, od
+  ktorého dňa) alebo tlačidlom vo Faktúry → Pre účtovníka; dá sa aj stiahnuť. Každý doklad ide len v jednom balíku.
+
+- **Export do Omegy** (textový import podľa oficiálneho popisu KROS) — docs/omega-export.md.
+
+Ďalej: PDF súbor + archív, QR PAY by square, e-faktúra (UBL / Peppol), e-mail zákazníkovi, úhrady.
+
+## 7. Otvorené otázky
+
+1. ~~Zápis v OR, prvé číslo a formát radu~~ — **nastaviteľné v systéme, majiteľ doplní sám** (rozhodnutie 19. 11. 2026;
+   systém sa na ne nepýta).
+2. ~~Omega: aký import~~ — **vyriešené podľa oficiálneho formátu KROS** (textový import, docs/omega-export.md). Účtovník
+   len overí kódy evidencie / číselných radov a desatinný oddeľovač pri prvom importe.
+3. ~~Faktúra z objednávky automaticky alebo ručne?~~ — **ručne** (19. 11. 2026): import objednávky z PrestaShopu
+   tlačidlom aj úplne ručná faktúra. E-mail zákazníkovi — zatiaľ neurčené.
+4. Názov/cesta zamestnaneckej sekcie (`/panel`, `/zamestnanci`, `/intranet`…).

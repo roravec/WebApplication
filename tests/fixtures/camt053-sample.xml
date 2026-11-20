@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic CAMT.053.001.08 statement for tests (structure as exported by Slovak banks, SBA conventions). -->
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.08" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <BkToCstmrStmt>
+    <GrpHdr><MsgId>TEST-2026-11-19</MsgId><CreDtTm>2026-11-19T08:00:00</CreDtTm></GrpHdr>
+    <Stmt>
+      <Id>STMT-1</Id>
+      <CreDtTm>2026-11-19T08:00:00</CreDtTm>
+      <Acct><Id><IBAN>SK1783300000002501809819</IBAN></Id><Ccy>EUR</Ccy></Acct>
+      <Ntry>
+        <NtryRef>1</NtryRef>
+        <Amt Ccy="EUR">975.60</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-11-18</Dt></BookgDt>
+        <ValDt><Dt>2026-11-18</Dt></ValDt>
+        <AcctSvcrRef>TX-1001</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <Refs><EndToEndId>/VS2027000001/SS/KS0308</EndToEndId></Refs>
+          <RltdPties><Dbtr><Pty><Nm>ZM Technik, spol. s r. o.</Nm></Pty></Dbtr><DbtrAcct><Id><IBAN>SK3111000000002612345678</IBAN></Id></DbtrAcct></RltdPties>
+          <RmtInf><Ustrd>Faktúra FA2027/000001</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <NtryRef>2</NtryRef>
+        <Amt Ccy="EUR">100.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-11-18</Dt></BookgDt>
+        <AcctSvcrRef>TX-1002</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <Refs><EndToEndId>NOTPROVIDED</EndToEndId></Refs>
+          <RltdPties><Dbtr><Nm>Ján Novák</Nm></Dbtr></RltdPties>
+          <RmtInf><Ustrd>platba VS 0000123456 ďakujem</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <NtryRef>3</NtryRef>
+        <Amt Ccy="EUR">2.50</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-11-18</Dt></BookgDt>
+        <AcctSvcrRef>TX-1003</AcctSvcrRef>
+        <NtryDtls><TxDtls><RmtInf><Ustrd>Poplatok za vedenie účtu</Ustrd></RmtInf></TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <NtryRef>4</NtryRef>
+        <Amt Ccy="EUR">55.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Sts><Cd>PDNG</Cd></Sts>
+        <BookgDt><Dt>2026-11-19</Dt></BookgDt>
+        <AcctSvcrRef>TX-1004</AcctSvcrRef>
+      </Ntry>
+      <Ntry>
+        <NtryRef>5</NtryRef>
+        <Amt Ccy="EUR">50.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-11-19</Dt></BookgDt>
+        <AcctSvcrRef>TX-1005</AcctSvcrRef>
+        <NtryDtls>
+          <TxDtls><Amt Ccy="EUR">30.00</Amt><Refs><EndToEndId>/VS111/SS/KS</EndToEndId></Refs></TxDtls>
+          <TxDtls><Amt Ccy="EUR">20.00</Amt><Refs><EndToEndId>/VS222/SS/KS</EndToEndId></Refs></TxDtls>
+        </NtryDtls>
+      </Ntry>
+    </Stmt>
+  </BkToCstmrStmt>
+</Document>

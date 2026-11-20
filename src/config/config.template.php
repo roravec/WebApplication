@@ -45,5 +45,22 @@ return [
             'dbPrefix' => 'ermaweb_',    // table prefix in the shared database
             'auth' => 'none',            // none | user (browser login) | api (device/API tokens)
         ],
+        // 'panel' => [
+        //     'folder' => 'panel', 'file' => 'App.php', 'class' => 'PanelApp', 'dbPrefix' => 'panel_', 'auth' => 'user',
+        //     'shop' => ['prefix' => 'ps_', 'lang' => 'sk'],
+        //     // Sending invoices by e-mail. Credentials stay here (not in the database).
+        //     // transport: smtp (recommended, SMTP of the hosting / mailbox) or mail (PHP mail()).
+        //     'mail' => ['transport' => 'smtp', 'host' => 'smtp.example.sk', 'port' => 465, 'secure' => 'ssl',
+        //                'user' => 'faktury@erma.sk', 'password' => ''],
+        //     // optional: URL /panel/cron/accounting?token=<cron_token> sends the monthly package for the accountant
+        //     // without anybody opening the panel (hosting web cron / external cron service); min. 20 random chars
+        //     'cron_token' => '',
+        // ],
+        // Club / league webs ported from StadiumControl (oldest core, run by WebApplication\Legacy\OldCoreApplication).
+        // Both use the hbkpravotice_ tables; logins are in hbkpravotice_users ("remember me" is signed with jwtSecret).
+        // 'hbkpravotice' => ['folder' => 'hbkpravotice', 'file' => 'App.php', 'class' => 'HbkpravoticeApp',
+        //                    'dbPrefix' => 'hbkpravotice_', 'auth' => 'none'],
+        // 'bnhl' => ['folder' => 'bnhl', 'file' => 'App.php', 'class' => 'BnhlApp', 'dbPrefix' => 'hbkpravotice_', 'auth' => 'none',
+        //            'stadiumControlApi' => 'https://hbkpravotice.sk/StadiumControl'],   // optional, this is the default
     ],
 ];

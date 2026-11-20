@@ -1,10 +1,17 @@
-<?php /** @var array $filters, $shops, $states, $rows; int $total, $page, $pages */
+<?php /** @var array $filters, $shops, $states, $rows; Panel\Shop\OrderSource[] $sources; string|null $error; int $total, $page, $pages */
 $qs = function (array $change) use ($filters) {
     $all = array_merge($filters, $change);
     return '?' . http_build_query(array_filter($all, function ($v) { return $v !== '' && $v !== 0 && $v !== null; }));
 };
 ?>
 <form class="filters" method="get" action="<?= $e($ctx->url('/orders')) ?>">
+  <?php if (count($sources) > 1): ?>
+    <select name="src" onchange="this.form.shop.value = ''; this.form.state.value = ''; this.form.submit()" title="Odkiaľ sa objednávky čítajú">
+      <?php foreach ($sources as $sid => $s): ?>
+        <option value="<?= (int)$sid ?>"<?= $filters['src'] === (int)$sid ? ' selected' : '' ?>><?= $e($s->label()) ?></option>
+      <?php endforeach ?>
+    </select>
+  <?php else: ?><input type="hidden" name="src" value="<?= (int)$filters['src'] ?>"><?php endif ?>
   <input name="q" value="<?= $e($filters['q']) ?>" placeholder="Číslo, zákazník, e-mail, firma">
   <select name="shop"><option value="">Všetky e-shopy</option>
     <?php foreach ($shops as $s): ?>
@@ -19,9 +26,10 @@ $qs = function (array $change) use ($filters) {
   <label>od <input type="date" name="from" value="<?= $e($filters['from']) ?>"></label>
   <label>do <input type="date" name="to" value="<?= $e($filters['to']) ?>"></label>
   <button class="primary">Hľadať</button>
-  <a href="<?= $e($ctx->url('/orders')) ?>">Zrušiť filter</a>
+  <a href="<?= $e($ctx->url('/orders' . ($filters['src'] ? '?src=' . $filters['src'] : ''))) ?>">Zrušiť filter</a>
 </form>
-<p class="muted"><?= (int)$total ?> objednávok</p>
+<?php if ($error !== null): ?><p class="flash err">E-shop neodpovedá: <?= $e($error) ?></p><?php endif ?>
+<p class="muted"><?= (int)$total ?> objednávok<?= $filters['src'] ? ' · číta sa cez Webservice e-shopu' : '' ?></p>
 <?= $view->partial('orders/table', ['rows' => $rows]) ?>
 <?php if ($pages > 1): ?>
   <nav class="pager">

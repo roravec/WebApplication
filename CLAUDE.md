@@ -1,6 +1,8 @@
 # Project context for Claude — WebApplication
 
-> Current state of work / next tasks: see **HANDOVER.md**. Invoicing requirements: **docs/fakturacia-specifikacia.md**.
+> Current state of work / next tasks: see **HANDOVER.md**. Invoicing requirements: **docs/fakturacia-specifikacia.md**;
+> where every legal rule lives and how it is changed: **docs/legislativa.md**.
+> Deploy order + maintenance: **docs/nasadenie-a-udrzba.md**.
 > Keep these files up to date — the owner wants everything written down so a new session loses nothing.
 
 ## What this is
@@ -14,8 +16,12 @@ VS Code workspace with all related repos: `C:\Users\orras\git\ERMA.code-workspac
 - PHP **7.3 – 8.4**. Must stay **PHP 7.3 compatible**: the hosting runs 7.3 and the PrestaShop shop on the same
   hosting blocks a PHP upgrade until the shop is upgraded (see `C:\Users\orras\git\Web_store`). No typed properties,
   arrow functions, `??=`, match, union types, str_contains; no dynamic properties (8.2); explicit `?type` for null defaults (8.4).
-- No external dependencies so far (deploy = copy `src/`). Composer libraries are allowed when needed (e.g. PDF), as long as
-  `vendor/` can be deployed by upload.
+- Composer libraries are allowed when they run on shared hosting without shell (pure PHP). `composer.json` in the repo
+  root, libraries in `src/vendor` (not in git; `composer.lock` is), platform pinned to PHP 7.3.33 — install with the
+  composer docker image on the dev server (command in HANDOVER item 11). Deploy = copy `src/` **including `src/vendor`**.
+  Now used: dompdf (invoice PDF), bacon/bacon-qr-code (PAY by square QR), phpmailer/phpmailer (e-mail).
+- E-mail: SMTP settings only in config.php (`apps.panel.mail`), never in the DB. Dev catches all mail in Mailpit
+  (http://192.168.0.11:8025).
 - Namespace `WebApplication\` → `src/framework/`. Apps implement global `IWebApp` (old style) or
   `WebApplication\Http\RequestHandler` (new style). `src/applications/demo/` is the reference app.
 
@@ -40,26 +46,48 @@ VS Code workspace with all related repos: `C:\Users\orras\git\ERMA.code-workspac
   must stay plain HTTP (ESP32 devices). The live server currently runs BOTH the old core (`core/`, `WebApp_*` folders,
   root `index.php`) and an older copy of this framework (`core_new/`, `applications/`, `config/`).
 - Database `molesk` is shared: PrestaShop `ps_*`, `hbkpravotice_*` (also used by bnhl), `ermaweb_*`, `branchmanager_*`.
-  The ERMA system may READ `ps_*` (shop orders); it never writes into the shop's tables.
+  The ERMA system may READ `ps_*` directly (shop orders); it NEVER writes into them by SQL — changes in a shop (stock,
+  order state) go only through the PrestaShop Webservice API (owner 2026-11-19, docs/sklad-specifikacia.md).
 
 ## Apps and their sources
 | App | Domain | Source of truth | Notes |
 |---|---|---|---|
 | erma | erma.sk | `src/applications/erma` — **new placeholder** (owner 2026-11-19: the old erma site is not needed) | public frontpage for customers; real site later |
 | panel | erma.sk/panel (path may change) | `src/applications/panel` | employee section: shop orders (read-only), employees; invoicing next |
-| hbkpravotice | hbkpravotice.sk | `C:\Users\orras\git\StadiumControl\WebServer\webapp\WebApp_hbkpravotice` | ~11k lines, old core API (mysqli) → use LegacyDatabase |
-| bnhl | bnhl.sk | `...\StadiumControl\WebServer\webapp\WebApp_bnhl` | ~10k lines, uses `hbkpravotice_` tables |
+| hbkpravotice | hbkpravotice.sk | `src/applications/hbkpravotice` (ported 2026-11-20 from StadiumControl `WebApp_hbkpravotice`, which stays until the deploy) | ~11k lines, oldest core API → runs via `WebApplication\Legacy\OldCoreApplication` (HANDOVER 22); StadiumControl admin + JSON API |
+| bnhl | bnhl.sk | `src/applications/bnhl` (ported 2026-11-20 from StadiumControl `WebApp_bnhl`) | ~10k lines, uses `hbkpravotice_` tables + hbkpravotice's StadiumControl API (config `stadiumControlApi`) |
 | LedBoard | ? | repo `C:\Users\orras\git\WEB_LedBoard` (spec in `Prj_LedBoard`) | website fits; server part depends on its DEC-003 (needs realtime?) |
 
 `C:\Users\orras\git\WebApplications` = identical copy of StadiumControl apps (owner may delete).
 
 ## Decisions (owner)
-- Order: 1) framework rework ✅ → 2) erma.sk placeholder ✅ → 3) **employee section** (orders ✅, invoicing next) — current
-  focus → 4) port hbkpravotice, bnhl → later the real erma.sk site.
+- Order: 1) framework rework ✅ → 2) erma.sk placeholder ✅ → 3) **employee section** (orders ✅, invoicing step 1 ✅; step 2 = PDF,
+  PAY by square, exports, e-mail) — current focus → 4) port hbkpravotice, bnhl ✅ (2026-11-20, on dev; goes live with
+  the framework deploy) → later the real erma.sk site.
+- Employee section (panel): **dark theme by default**, user can switch to light ("denný režim"); all pages use the colour
+  tokens. **Task management (Asana/Trello-like) will be added later** — keep it in mind (generic links between records,
+  shared activity log, per-module permissions). See HANDOVER.md.
 - Invoicing is done **only** in the ERMA system, centrally, for all e-shops; PrestaShop stops issuing invoices
   (`add_faktura` removed). Built **from scratch** — do not investigate or repair the old shop invoicing/numbering.
 - **The system is not only for ERMA Group** — other/new companies may use it. Nothing hard-coded: companies, VAT mode
   (payer / non-payer, with validity dates), number series, B2B/B2C, invoice look, exports, e-invoice provider per company.
+- Company-specific values (OR registration, first invoice number, series format, Omega codes …) are **settings the owner
+  fills in himself** — build them configurable and don't ask for the values (owner 2026-11-19). Formats of external
+  systems (Omega, Peppol, PAY by square …): look up the official specification yourself instead of asking.
+- **Legal rules change often → they must stay easy to edit** (owner 2026-11-19, "je to dôležité"). Rules in
+  **docs/legislativa.md**: anything set by law = data with validity dates edited in the panel (Legislatíva, Firmy), never
+  hard-coded; an issued document freezes what applied (texts, rates, supplier, template version); external formats
+  (Omega, UBL/Peppol, PAY by square) are versioned side by side; rules that must be code live in one place
+  (`Invoices::issueErrors/issueWarnings`, `Calculator`) with tests. Update docs/legislativa.md with every new feature.
+- **Warehouse + shops** (owner 2026-11-19, details docs/sklad-specifikacia.md): a shop's stock STAYS IN THE SHOP — the
+  panel reads and edits it directly in PrestaShop (quantities, stock settings, combinations exactly as PrestaShop has
+  them); shops do NOT take data from us. Warehouses outside shops are NATIVE in the panel (batches with purchase price,
+  FIFO). The panel must link ANY PrestaShop (also remote) and manage it: orders, order state, stock, invoices → writes
+  go ONLY through the PrestaShop Webservice API, never direct SQL into ps_*. Orders are read from the shared DB
+  (source 0) or — for a shop not in our DB — through its Webservice (`Shop\OrderSource`, HANDOVER item 19); we do not
+  modify the shops' code, only use the standard Webservice + settings. Shops must not issue invoices (PS_INVOICE off
+  at deploy).
+- Invoices from shop orders are created **manually** (button on the order) + fully manual invoices (owner 2026-11-19).
 - Invoices must meet Slovak law; **issuing e-invoices (EN 16931 / Peppol BIS 3.0 / UBL 2.1, sent via a Peppol access
   point configured per company) is a full feature from day one** for VAT-payer companies — even though ERMA Group
   itself is currently not a VAT payer. Exportable to the accountant's **Omega (KROS)**. Details: docs/fakturacia-specifikacia.md.

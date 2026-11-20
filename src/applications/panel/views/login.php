@@ -1,6 +1,6 @@
 <?php use WebApplication\Csrf; /** @var string|null $error, $flash; string $next */ ?>
 <!doctype html>
-<html lang="sk">
+<html lang="sk" data-theme="<?= $e($ctx->theme()) ?>" data-theme-path="<?= $e($ctx->themeCookiePath()) ?>">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,8 +9,10 @@
   <link rel="stylesheet" href="<?= $e($app->asset('css/panel.css')) ?>">
   <link rel="icon" type="image/png" sizes="32x32" href="<?= $e($app->asset('img/favicon-32.png')) ?>">
   <link rel="apple-touch-icon" href="<?= $e($app->asset('img/apple-touch-icon.png')) ?>">
+  <script src="<?= $e($app->asset('js/theme.js')) ?>" defer></script>
 </head>
 <body class="login-page">
+  <button type="button" class="link theme-toggle" data-theme-toggle title="Prepnúť farebný režim"><span class="to-light">☀ Denný režim</span><span class="to-dark">☾ Tmavý režim</span></button>
   <form class="login card" method="post" action="<?= $e($ctx->url('/login')) ?>">
     <img class="login-logo" src="<?= $e($app->asset('img/logo-vertical.png')) ?>" alt="ERMA Group" width="220" height="163">
     <h1>Sekcia pre zamestnancov</h1>

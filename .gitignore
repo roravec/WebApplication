@@ -479,3 +479,8 @@ composer.lock
 /src/var/log/*
 !/src/var/log/.gitkeep
 /src/var/cache/
+# Composer: libraries are installed into src/vendor (see composer.json); the lock file IS committed
+/src/vendor/
+!/composer.lock
+# dompdf font cache, generated
+/src/var/dompdf/

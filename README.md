@@ -5,7 +5,8 @@ installation on shared hosting. Each request is routed to one app by domain (and
 each app has its own folder, database table prefix and login type.
 
 - PHP **7.3 – 8.4** (tested on both ends), MySQL/MariaDB via PDO.
-- No external dependencies, no build step — deploy by copying `src/`.
+- No build step — deploy by copying `src/`. Optional Composer libraries live in `src/vendor` (see `composer.json`;
+  `src/bootstrap.php` loads `vendor/autoload.php` when it exists; deprecation notices from `src/vendor` are not logged).
 - Apps written for the previous version keep working (`IWebApp`, old database API via a compatibility layer).
 
 ## Layout
@@ -84,7 +85,7 @@ Still supported; returned and echoed output is sent, `http_response_code()` is r
 
 | Method | |
 |---|---|
-| `getRequest()` | method, host, path, `appPath()`, `appSegments()`, `query()`, `post()`, `input()`, `json()`, `header()`, `cookie()`, `bearerToken()`, `isHttps()`, `ip()` |
+| `getRequest()` | method, host, path, `appPath()`, `appSegments()`, `query()`, `post()`, `input()`, `json()`, `file()` (upload), `header()`, `cookie()`, `bearerToken()`, `isHttps()`, `ip()` |
 | `getDatabase()` | PDO wrapper: `query`, `fetchOne`, `fetchValue`, `execute`, `affected`, `lastInsertId`, `transaction`, `table` |
 | `getClientAuth()` | `UserAuth` / `ApiAuth` / null |
 | `url('/x')`, `asset('css/a.css')` | links inside the app / to files in the app folder |
@@ -101,6 +102,31 @@ Still supported; returned and echoed output is sent, `http_response_code()` is r
    `GetUser()` exist on the root application too.
 4. Asset paths: `$rootApplication->asset('...')` → `/applications/<folder>/...`.
 5. Then gradually replace string-built SQL + `EscapeString()` with parameterised `getDatabase()` queries.
+
+### Apps of the OLDEST core (StadiumControl `WebServer/webapp/core`: `SetInitVariables()` + `GetHTML()`)
+
+Those apps (hbkpravotice, bnhl — ported 2026-11-20) are run by `WebApplication\Legacy\OldCoreApplication`, which is
+the old `$application` object on top of the framework: `GetTextFromDatabase` (texts by appid = app name),
+`GetDatabase` (LegacyDatabase), `GetDbPrefix`, `EscapeString`, `DetectPage` / `GetContentFilename` (same page names as
+before), `Login` / `Logout` / `IsLoggedIn` / `GetUser` with the app's own `<prefix>users` table (global classes `User`,
+`ICRUD` in `framework/Legacy/oldcore/`). The app gets a small entry class (`applications/hbkpravotice/App.php`):
+
+```php
+\WebApplication\Legacy\OldCoreApplication::loadOldCore();      // User, ICRUD — before the app's own classes
+require_once __DIR__ . '/WebApp.php';                           // the old page builder, class WebApp
+class HbkpravoticeApp implements IWebApp {
+    public function get($root): string { return \WebApplication\Legacy\OldCoreApplication::run($root, new WebApp()); }
+    // post/put/delete = get (the old core built the page the same way for every method)
+}
+```
+
+Changes made to the old files: includes of `./core/*` removed; relative includes → `__DIR__ . "/…"`; the old
+`implements IWebApp` removed (same name as the framework's interface, different methods); `#[\AllowDynamicProperties]`
+on the classes (they set undeclared properties; a comment on PHP 7.3); asset path = `/applications/<folder>` (an app
+that writes `"/" . $AssetsPath` itself gets it without the leading slash). Login session = the framework session
+(own cookie per app); "remember me" cookie `auth_token` is signed with `jwtSecret` and expires (the old core had the
+key in its source and no expiry — old cookies are invalid, users log in once more). Checks: `dev/crawl-check.py`
+(pages + assets of a site) and `tests/LegacyCoreTest.php`.
 
 ## Deploying to the hosting
 

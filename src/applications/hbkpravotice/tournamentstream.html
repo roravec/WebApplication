@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tournament stats</title>
+  <script src="WebApp_hbkpravotice/assets/js/timer.js"></script>
+<style>
+    body {
+            /*display: flex;*/
+			font-family: Arial, Helvetica, sans-serif;
+			background-image: url(pc_bg.jpg);
+			background-repeat: no-repeat;
+  			background-attachment: fixed;
+  			background-size: cover;
+    		background-color: rgba(255,255,255,0.6);
+    		background-blend-mode: lighten;
+        }
+		h1 {
+  			text-shadow: 2px 2px rgb(255, 255, 255)!important;;
+			color: rgb(30, 150, 0);
+			margin-bottom: 15px;
+		}
+		h2 {
+  			text-shadow: 1px 1px rgb(255, 255, 255)!important;;
+			color: rgb(0, 0, 0);
+		}
+        #tables {
+            display: flex;
+        }
+		#tablesPlayersTeams {
+			padding: 30px;
+            display: flex;
+            flex-direction: column;
+            width: 30%;
+        }
+		#playersTable {
+			font-size: 12px;
+        }
+		#groupATable, #groupBTable {
+			font-size: 16px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 20px;
+			box-shadow: 2px 2px;
+			background-color: rgb(255, 255, 255);
+        }
+        td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: left;
+        }
+        #gamesTable {
+			font-size: 20px;
+			padding-left: 30px;
+			padding-right: 30px;
+            width: 70%;
+			display: flex;
+            flex-direction: column;
+        }
+		th, thead {
+			border: 2px solid black;
+            padding: 8px;
+            text-align: left;
+			background-color: rgb(207, 207, 207);
+		}
+
+		#greenBg
+		{
+			background-color: rgb(142, 255, 142)!important;
+		}
+		#redBg 
+		{
+			background-color: rgb(255, 121, 121)!important;
+		}
+		#greyBg 
+		{
+			background-color: rgb(146, 146, 146)!important;
+		}
+		#bottom 
+		{
+			padding-left: 0px;
+			padding-right: 0px;
+			display: flex;
+  			justify-content: space-between;
+		}
+		#currentGame 
+		{
+			line-height: 1.3;
+			visibility: hidden;
+			text-align: center;
+			font-size: 40px;
+			padding-top: 5px;
+			padding-bottom: 5px;
+			padding-left: 25px;
+			padding-right: 25px;
+			background-color: rgba(142, 255, 142, 0.5);
+
+		}
+		#currentGame small
+		{
+			font-size: 25px;
+		}
+		#ad { 
+			object-fit: cover;
+			width: auto;
+		}
+		
+	html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .video-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .stream {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      border: none;
+    }
+
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 40%;
+      width: 60%;
+      height: 100%;
+      z-index: 2;
+      border: none;
+      background: transparent;
+      pointer-events: none;
+    }
+
+    .ads {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 15%;
+      height: 100%;
+      z-index: 3;
+      border: none;
+      background: transparent;
+      pointer-events: auto;
+    }
+
+  </style>
+</head>
+<body>
+	<div class="video-container">
+    <!-- RTSP video stream -->
+    <iframe
+      class="stream"
+      src="https://rtsp.me/embed/zy2DzSsZ/"
+      title="HBK Pravotice stadium - live stream player"
+      allowfullscreen>
+    </iframe>
+
+    <!-- Score overlay -->
+    <iframe
+      class="overlay"
+      src="https://www.hbkpravotice.sk/livestream.html"
+      title="Score Overlay">
+    </iframe>
+
+    <!-- Ads overlay (must be in iframe to show above stream) -->
+    <iframe
+      class="ads"
+      src="https://www.hbkpravotice.sk/ads.html"
+      title="Ad Overlay">
+    </iframe>
+  </div>
+	<div id="tables">
+		<div id="gamesTable">
+			<h1>Pravotice Cup 2024</h1>
+			<table>
+				<thead>
+					<tr>
+						<th>Čas</th>
+						<th>Domáci</th>
+						<th>Hostia</th>
+						<th>Stav</th>
+					</tr>
+				</thead>
+				<tbody></tbody>
+			</table>	
+		</div>
+		<div id="tablesPlayersTeams">
+			<h2>Top hráči</h2>
+			<table id="playersTable">
+				<thead>
+					<tr>
+						<th></th>
+						<th>Meno</th>
+						<th>Tím</th>
+						<th>B</th>
+						<th>G</th>
+						<th>A</th>
+						<th>Tresty</th>
+					</tr>
+				</thead>
+				<tbody></tbody>
+			</table>
+			<h2>Skupina A</h2>
+			<table id="groupATable">
+				<thead>
+					<tr>
+						<th>Tím</th>
+						<th>Body</th>
+						<th>Strelené góly</th>
+						<th>Obdržané góly</th>
+					</tr>
+				</thead>
+				<tbody></tbody>
+			</table>
+			<h2>Skupina B</h2>
+			<table id="groupBTable">
+				<thead>
+					<tr>
+						<th>Tím</th>
+						<th>Body</th>
+						<th>Strelené góly</th>
+						<th>Obdržané góly</th>
+					</tr>
+				</thead>
+				<tbody></tbody>
+			</table>
+		</div>
+	</div>
+	<div id="bottom">
+		<div id="ad"><img src="logo_hbkp_small.png"/></div>
+		<div id="currentGame"></div>
+		<div id="ad"><img src="erma_small.png"/></div>
+	</div>
+    
+
+    <script>
+        const url = "https://hbkpravotice.sk/StadiumControl?p=STATS&id=5";
+        const groupAurl = "https://hbkpravotice.sk/StadiumControl?p=STATS&id=6";
+        const groupBurl = "https://hbkpravotice.sk/StadiumControl?p=STATS&id=7";
+		const topPlayers = 10;
+		const groupPassTeams = 3;
+		const refreshTime = 10000;
+
+		/* main function - runs every "refreshTime" */
+        async function fetchData() {
+            try {
+                const response = await fetch(url);
+                const responseA = await fetch(groupAurl);
+                const responseB = await fetch(groupBurl);
+                if (!response.ok || !responseA.ok || !responseB.ok) {
+                    throw new Error("Network response was not ok " + response.statusText);
+                }
+                const data = await response.json();
+                const dataA = await responseA.json();
+                const dataB = await responseB.json();
+                updateTables(data,dataA,dataB);
+            } catch (error) {
+                console.error("Failed to fetch data:", error);
+            }
+        }
+
+        function updateTables(data,dataA,dataB) {
+            updatePlayersTable(data.players);
+            updateTeamsTables(dataA, dataB);
+            updateGamesTable(data.games);
+        }
+
+        function updatePlayersTable(players) {
+            const playersTable = document.getElementById("playersTable").getElementsByTagName("tbody")[0];
+            playersTable.innerHTML = "";
+			let i=1;
+            players.slice(0, topPlayers).forEach(player => {  // Limit to top 20 players
+                const row = playersTable.insertRow();
+				row.insertCell(0).innerText = i+".";
+                row.insertCell(1).innerText = player.playerName;
+                row.insertCell(2).innerText = player.teamName;
+                row.insertCell(3).innerText = player.totalPoints;
+                row.insertCell(4).innerText = player.goals;
+                row.insertCell(5).innerText = player.assistances;
+                row.insertCell(6).innerText = player.penaltySeconds/60;
+				i++;
+            });
+        }
+
+        function updateTeamsTables(teamsA, teamsB) {
+            const groupATable = document.getElementById("groupATable").getElementsByTagName("tbody")[0];
+            const groupBTable = document.getElementById("groupBTable").getElementsByTagName("tbody")[0];
+            groupATable.innerHTML = "";
+            groupBTable.innerHTML = "";
+			
+			const groupA = teamsA.teams;
+            const groupB = teamsB.teams;
+			
+			groupA.sort((a, b) => b.points - a.points);
+			groupB.sort((a, b) => b.points - a.points);
+
+			let i=1;
+            groupA.forEach(team => {
+                const row = groupATable.insertRow();
+				if (i<=groupPassTeams)
+					row.id = "greenBg";
+				else
+					row.id = "redBg";
+                row.insertCell(0).innerText = team.name;
+                row.insertCell(1).innerText = team.points;
+                row.insertCell(2).innerText = team.goalsScored;
+                row.insertCell(3).innerText = team.goalsReceived;
+				i++;
+            });
+			i=1;
+            groupB.forEach(team => {
+                const row = groupBTable.insertRow();
+				if (i<=groupPassTeams)
+					row.id = "greenBg";
+				else
+					row.id = "redBg";
+                row.insertCell(0).innerText = team.name;
+                row.insertCell(1).innerText = team.points;
+                row.insertCell(2).innerText = team.goalsScored;
+                row.insertCell(3).innerText = team.goalsReceived;
+				i++;
+            });
+        }
+
+        function updateGamesTable(games) {
+            const gamesTable = document.getElementById("gamesTable").getElementsByTagName("tbody")[0];
+            gamesTable.innerHTML = "";
+			currentGame.innerHTML = "";
+            games.forEach(game => {
+                const row = gamesTable.insertRow();
+				/* 	
+					0 - preGame
+					1 - in progress
+					2 - home team won
+					3 - away team won
+					4 - home team won PP
+					5 - away team won PP
+					6 - tie
+				*/
+				if (game.afterGameStatus == 1)
+				{
+					row.style.fontWeight = 'bold';
+
+					currentGame.style.visibility = "visible";
+					currentGame.innerHTML += "<small>Práve prebieha:</small><br/>";
+					//currentGame.innerHTML += "<b>"+game.team1name + " : " + game.team2name + "</b><br/>";
+					currentGame.innerHTML += "<b>"+game.name + "</b><br/>";
+					currentGame.innerHTML += "<b>"+game.team1goals + " : " + game.team2goals + "</b>";	
+				}
+				else if (game.afterGameStatus > 1)
+					row.style.fontStyle = 'italic';
+
+                row.insertCell(0).innerText = game.note;
+                row.insertCell(1).innerText = game.team1name;
+                row.insertCell(2).innerText = game.team2name;
+                row.insertCell(3).innerText = game.team1goals + " : " + game.team2goals;
+				row.cells[3].style.textAlign = "center"
+
+				if (game.afterGameStatus == 2) row.cells[1].style.fontWeight = 'bold';
+				if (game.afterGameStatus == 3) row.cells[2].style.fontWeight = 'bold';
+				if (game.afterGameStatus == 4)
+				{
+					row.cells[3].innerText += 'pp';
+					row.cells[1].style.fontWeight = 'bold';
+				}
+				if (game.afterGameStatus == 5)
+				{
+					row.cells[3].innerText += 'pp';
+					row.cells[2].style.fontWeight = 'bold';
+				}
+            });
+        }
+
+        // Fetch data every 5 seconds
+        fetchData();  // Initial fetch
+        setInterval(fetchData, refreshTime);
+    </script>
+</body>
+</html>

@@ -21,5 +21,10 @@ spl_autoload_register(function ($class) {
     }
 });
 
+// Composer libraries (composer.json → src/vendor, e.g. dompdf for invoice PDFs), when installed.
+if (is_file(__DIR__ . '/vendor/autoload.php')) {
+    require_once __DIR__ . '/vendor/autoload.php';
+}
+
 // Apps implement the global IWebApp interface (kept global for backward compatibility).
 require_once WA_FRAMEWORK . '/IWebApp.php';

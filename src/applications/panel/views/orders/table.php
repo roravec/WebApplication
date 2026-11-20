@@ -7,7 +7,7 @@ $color = function ($c) { return preg_match('/^#[0-9a-fA-F]{3,6}$/', (string)$c) 
   <?php if (!$rows): ?><tr><td colspan="7" class="muted">Žiadne objednávky.</td></tr><?php endif ?>
   <?php foreach ($rows as $o): ?>
     <tr>
-      <td><a href="<?= $e($ctx->url('/orders/' . (int)$o['id_order'])) ?>"><?= $e($o['reference']) ?></a></td>
+      <td><a href="<?= $e($ctx->orderUrl((int)$o['src'], (int)$o['id_order'])) ?>"><?= $e($o['reference']) ?></a></td>
       <td><?= $e($f->dateTime($o['date_add'])) ?></td>
       <td><?= $e($o['shop']) ?></td>
       <td><?= $e(trim($o['firstname'] . ' ' . $o['lastname'])) ?><?php if ($o['company']): ?><br><small class="muted"><?= $e($o['company']) ?></small><?php endif ?></td>
