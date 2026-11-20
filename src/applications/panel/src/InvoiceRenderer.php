@@ -1,6 +1,7 @@
 <?php
 namespace Panel;
 
+use Panel\Invoicing\Calculator;
 use Panel\Invoicing\Invoices;
 use Panel\Invoicing\Legislation;
 use Panel\Invoicing\PayBySquare;
@@ -54,6 +55,41 @@ class InvoiceRenderer
             'forPdf' => $forPdf, 'fontBase' => $forPdf ? Pdf::fontDir() : $this->ctx->app->asset('fonts'),
             'title' => Invoices::typeLabel($inv['doc_type']) . ' ' . ($inv['number'] ?: '(koncept)'),
         ]);
+    }
+
+    /**
+     * Sample invoice of a company for the preview in its settings (owner 2026-11-20): today's company data, logo, stamp,
+     * first active bank account, VAT status of today, the current template. Nothing is saved.
+     */
+    public function sample(int $companyId): array
+    {
+        $companies = $this->ctx->companies();
+        $today = date('Y-m-d');
+        $payer = (bool)$companies->vatOn($companyId, $today)['vat_payer'];
+        $banks = $companies->banks($companyId, true);
+        $bank = $banks ? $banks[0] : null;
+        $c = Calculator::compute([
+            ['position' => 1, 'name' => 'Vzorový produkt (náhľad faktúry)', 'sku' => 'VZOR-1', 'quantity' => '2', 'unit' => 'ks',
+             'unit_price' => '12.50', 'vat_rate' => '23', 'vat_category' => 'S'],
+            ['position' => 2, 'name' => 'Doprava — Slovenská pošta', 'sku' => '', 'quantity' => '1', 'unit' => 'ks',
+             'unit_price' => '3.90', 'vat_rate' => '23', 'vat_category' => 'S'],
+        ], $payer);
+        $user = $this->ctx->user();
+        return [
+            'id' => 0, 'company_id' => $companyId, 'doc_type' => 'invoice', 'status' => 'draft', 'series_id' => null,
+            'number' => 'FA' . date('Y') . '/000000', 'variable_symbol' => date('Y') . '000000', 'issue_date' => $today,
+            'delivery_date' => $today, 'due_date' => date('Y-m-d', strtotime('+14 days')), 'currency' => 'EUR',
+            'payment_method' => $bank ? 'transfer' : 'paid', 'bank_account_id' => $bank ? (int)$bank['id'] : null,
+            'bank_account_name' => '', 'iban' => '', 'bic' => '', 'vat_payer' => $payer ? 1 : 0, 'supplier_json' => null, 'supplier' => null,
+            'legal_json' => null, 'legal' => null, 'template' => '', 'customer_id' => null, 'buyer_type' => 'person',
+            'buyer_name' => 'Ján Vzorový', 'buyer_street' => 'Hlavná 1', 'buyer_city' => 'Bratislava', 'buyer_zip' => '811 01',
+            'buyer_country' => 'SK', 'buyer_ico' => '', 'buyer_dic' => '', 'buyer_icdph' => '', 'buyer_email' => 'zakaznik@example.sk',
+            'buyer_phone' => '', 'shop_id' => null, 'shop_connection_id' => 0, 'shop_order_id' => null, 'order_reference' => 'ABCDEFGHI',
+            'original_invoice_id' => null, 'correction_reason' => '', 'note' => '', 'internal_note' => '',
+            'lines' => $c['lines'], 'breakdown' => $c['breakdown'], 'total_net' => $c['net'], 'total_vat' => $c['vat'], 'total' => $c['total'],
+            'issued_by_name' => $user ? $user->getName() : '', 'issued_by' => null, 'issued_at' => null,
+            'created_by' => null, 'created_at' => $today, 'updated_at' => $today,
+        ];
     }
 
     /** PAY by square QR (data URI) for payment by bank transfer; '' when not applicable. */

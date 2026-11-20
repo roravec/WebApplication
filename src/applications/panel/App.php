@@ -96,6 +96,37 @@ class PanelApp implements RequestHandler
         $bank = new BankImportController($ctx);
         $stock = new StockController($ctx);
         $shops = new ShopsController($ctx);
+        $reports = new \Panel\Controller\ReportsController($ctx);
+        $r->get('/reports', function () use ($ctx) { return Response::redirect($ctx->url('/reports/sales')); });
+        $r->get('/reports/sales', $guard(Rights::REPORTS_VIEW, [$reports, 'sales']));
+        $r->get('/reports/purchase-prices', $guard(Rights::REPORTS_VIEW, [$reports, 'purchasePrices']));
+        $r->post('/reports/purchase-prices', $guard(Rights::STOCK_EDIT, [$reports, 'purchasePricesSave']));
+        $expenses = new \Panel\Controller\ExpensesController($ctx);
+        $XV = Rights::EXPENSES_VIEW;
+        $XE = Rights::EXPENSES_EDIT;
+        $r->get('/expenses', $guard($XV, [$expenses, 'index']));
+        $r->get('/expenses/new', $guard($XE, [$expenses, 'form']));
+        $r->post('/expenses', $guard($XE, [$expenses, 'save']));
+        $r->get('/expenses/categories', $guard($XV, [$expenses, 'categories']));
+        $r->post('/expenses/categories', $guard($XE, [$expenses, 'categoriesSave']));
+        $r->get('/expenses/recurring', $guard($XV, [$expenses, 'recurringIndex']));
+        $r->get('/expenses/recurring/new', $guard($XE, [$expenses, 'recurringForm']));
+        $r->post('/expenses/recurring', $guard($XE, [$expenses, 'recurringSave']));
+        $r->get('/expenses/recurring/{id:\d+}', $guard($XV, [$expenses, 'recurringForm']));
+        $r->post('/expenses/recurring/{id:\d+}', $guard($XE, [$expenses, 'recurringSave']));
+        $r->get('/expenses/{id:\d+}', $guard($XV, [$expenses, 'show']));
+        $r->get('/expenses/{id:\d+}/edit', $guard($XE, [$expenses, 'form']));
+        $r->post('/expenses/{id:\d+}', $guard($XE, [$expenses, 'save']));
+        $r->get('/expenses/{id:\d+}/files/{fid:\d+}', $guard($XV, [$expenses, 'file']));
+        $r->post('/expenses/{id:\d+}/files', $guard($XE, [$expenses, 'addFile']));
+        $r->post('/expenses/{id:\d+}/paid', $guard($XE, [$expenses, 'paid']));
+        $r->post('/expenses/{id:\d+}/unpaid', $guard($XE, [$expenses, 'unpaid']));
+        $r->post('/expenses/{id:\d+}/cancel', $guard($XE, [$expenses, 'cancel']));
+        $r->get('/reports/result', $guard(Rights::REPORTS_VIEW, [$reports, 'result']));
+        $r->get('/reports/money', $guard(Rights::REPORTS_VIEW, [$reports, 'money']));
+        $r->get('/reports/order-costs', $guard(Rights::REPORTS_VIEW, [$reports, 'orderCosts']));
+        $r->post('/reports/order-costs', $guard(Rights::EXPENSES_EDIT, [$reports, 'orderCostsSave']));
+        $r->get('/reports/purchase-prices/continue', $guard(Rights::STOCK_EDIT, [$reports, 'purchasePricesContinue']));
         $SV = Rights::STOCK_VIEW;
         $SE = Rights::STOCK_EDIT;
         $VIEW = Rights::INVOICES_VIEW;
@@ -109,6 +140,8 @@ class PanelApp implements RequestHandler
         foreach (['/orders/{id:\d+}', '/orders/{src:\d+}/{id:\d+}'] as $o) {
             $r->get($o, $guard(Rights::ORDERS_VIEW, [$orders, 'show']));
             $r->post($o . '/invoice', $guard($EDIT, [$invoices, 'fromOrder']));
+            $r->post($o . '/invoice/issue', $guard($EDIT, [$invoices, 'issueFromOrder']));
+            $r->post($o . '/invoice/send', $guard($EDIT, [$invoices, 'sendFromOrder']));
             $r->post($o . '/state', $guard(Rights::ORDERS_EDIT, [$orders, 'changeState']));
         }
 
@@ -134,10 +167,11 @@ class PanelApp implements RequestHandler
         $r->get('/invoices/{id:\d+}/send', $guard($EDIT, [$invoices, 'sendForm']));
         $r->post('/invoices/{id:\d+}/send', $guard($EDIT, [$invoices, 'send']));
 
-        $r->get('/payments/import', $guard($EDIT, [$bank, 'form']));
-        $r->post('/payments/import', $guard($EDIT, [$bank, 'upload']));
-        $r->post('/payments/import/confirm', $guard($EDIT, [$bank, 'confirm']));
-        $r->post('/payments/import/fio', $guard($EDIT, [$bank, 'download']));
+        $r->get('/payments/import', $guard('', [$bank, 'form']));
+        // statement import: invoices.edit (incoming) or expenses.edit (outgoing) — checked in BankImportController
+        $r->post('/payments/import', $guard('', [$bank, 'upload']));
+        $r->post('/payments/import/confirm', $guard('', [$bank, 'confirm']));
+        $r->post('/payments/import/fio', $guard('', [$bank, 'download']));
 
         $r->get('/stock', $guard($SV, [$stock, 'index']));
         $r->get('/stock/warehouses', $guard($SV, [$stock, 'warehouses']));
@@ -178,6 +212,7 @@ class PanelApp implements RequestHandler
         $r->get('/companies/{id:\d+}', $guard($COMP, [$companies, 'form']));
         $r->post('/companies/{id:\d+}', $guard($COMP, [$companies, 'save']));
         $r->get('/companies/{id:\d+}/{kind:logo|stamp}', $guard('', [$companies, 'image']));
+        $r->get('/companies/{id:\d+}/preview', $guard($COMP, [$companies, 'preview']));
         $r->get('/companies/{id:\d+}/series/new', $guard($COMP, [$companies, 'seriesForm']));
         $r->get('/companies/{id:\d+}/series/{sid:\d+}', $guard($COMP, [$companies, 'seriesForm']));
         $r->post('/companies/{id:\d+}/series', $guard($COMP, [$companies, 'seriesSave']));
@@ -185,6 +220,7 @@ class PanelApp implements RequestHandler
 
         $r->get('/settings/legal', $guard($ADMIN, [$legislation, 'form']));
         $r->post('/settings/legal', $guard($ADMIN, [$legislation, 'save']));
+        $r->post('/settings/legal/vat-registration', $guard($ADMIN, [$legislation, 'saveVatRegistration']));
 
         $r->get('/employees', $guard($ADMIN, [$employees, 'index']));
         $r->get('/employees/new', $guard($ADMIN, [$employees, 'form']));

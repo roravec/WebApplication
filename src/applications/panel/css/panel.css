@@ -142,3 +142,15 @@ button.rpo { color: var(--link); font-size: .82rem; align-self: flex-start; }
   .me { flex-direction: row; flex-wrap: wrap; align-items: center; gap: .8rem; }
   .grid { display: block; overflow-x: auto; }
 }
+
+/* Výsledky (reports): big numbers in summary cards */
+.card p.big { font-size: 1.6rem; font-weight: 700; margin: .2rem 0; }
+.doc-preview { margin-top: 1rem; }
+.doc-preview iframe { width: 100%; height: 75vh; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.doc-preview img { max-width: 100%; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.todo ul { margin: 0; padding-left: 1.1rem; }
+.todo li { margin: .25rem 0; }
+.todo li::marker { color: var(--muted); }
+.todo li.todo-err::marker, .todo li.todo-err a { color: var(--red); }
+.todo li.todo-warn::marker { color: #d4a017; }
+tr.warn td { color: var(--red); }

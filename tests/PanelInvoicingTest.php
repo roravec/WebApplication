@@ -77,6 +77,94 @@ function panelUser($db, string $login, int $rights): Client
     return $u;
 }
 
+test('panel: sales & margin report (purchase price at order time, estimate, missing, returns, VAT basis)', function () {
+    $db = testDb('pt_');
+    $pdo = $db->pdo();
+    $t = 'tsr_';
+    foreach (['orders', 'order_detail', 'product', 'product_shop', 'product_attribute', 'shop', 'category_lang', 'lang'] as $x) {
+        $pdo->exec("DROP TABLE IF EXISTS `{$t}$x`");
+    }
+    $pdo->exec("CREATE TABLE {$t}shop (id_shop INT PRIMARY KEY, name VARCHAR(64))");
+    $pdo->exec("CREATE TABLE {$t}lang (id_lang INT PRIMARY KEY, iso_code VARCHAR(2))");
+    $pdo->exec("CREATE TABLE {$t}category_lang (id_category INT, id_shop INT, id_lang INT, name VARCHAR(64))");
+    $pdo->exec("CREATE TABLE {$t}product (id_product INT PRIMARY KEY, wholesale_price DECIMAL(20,6), id_category_default INT, is_virtual TINYINT)");
+    $pdo->exec("CREATE TABLE {$t}product_shop (id_product INT, id_shop INT, wholesale_price DECIMAL(20,6))");
+    $pdo->exec("CREATE TABLE {$t}product_attribute (id_product_attribute INT PRIMARY KEY, id_product INT, wholesale_price DECIMAL(20,6))");
+    $pdo->exec("CREATE TABLE {$t}orders (id_order INT PRIMARY KEY, id_shop INT, reference VARCHAR(9), date_add DATETIME, valid TINYINT,
+        conversion_rate DECIMAL(13,6), total_discounts_tax_excl DECIMAL(20,6), total_discounts_tax_incl DECIMAL(20,6),
+        total_shipping_tax_excl DECIMAL(20,6), total_shipping_tax_incl DECIMAL(20,6))");
+    $pdo->exec("CREATE TABLE {$t}order_detail (id_order_detail INT AUTO_INCREMENT PRIMARY KEY, id_order INT, product_id INT, product_attribute_id INT,
+        product_name VARCHAR(64), product_reference VARCHAR(32), product_quantity INT, product_quantity_refunded INT, product_quantity_return INT,
+        total_price_tax_excl DECIMAL(20,6), total_price_tax_incl DECIMAL(20,6), original_wholesale_price DECIMAL(20,6), purchase_supplier_price DECIMAL(20,6))");
+    $pdo->exec("INSERT INTO {$t}shop VALUES (1, 'Howies'), (2, 'SPZ')");
+    $pdo->exec("INSERT INTO {$t}lang VALUES (1, 'sk')");
+    $pdo->exec("INSERT INTO {$t}category_lang VALUES (10, 1, 1, 'Pásky'), (20, 1, 1, 'ŠPZ')");
+    $pdo->exec("INSERT INTO {$t}product VALUES (1, 2.00, 10, 0), (2, 0, 20, 0), (3, 0, 10, 1), (4, 0, 20, 0)");
+    $pdo->exec("INSERT INTO {$t}product_shop VALUES (1, 1, 2.00), (2, 2, 6.00), (3, 1, 0), (4, 2, 0)");
+    $pdo->exec("INSERT INTO {$t}orders VALUES
+        (1, 1, 'AAA', '2026-10-05 10:00:00', 1, 1, 1.00, 1.23, 3.00, 3.69),
+        (2, 2, 'BBB', '2026-11-02 10:00:00', 1, 1, 0, 0, 2.00, 2.46),
+        (3, 1, 'CCC', '2026-11-03 10:00:00', 0, 1, 0, 0, 0, 0)");    // cancelled → not counted
+    $pdo->exec("INSERT INTO {$t}order_detail (id_order, product_id, product_attribute_id, product_name, product_reference, product_quantity,
+        product_quantity_refunded, product_quantity_return, total_price_tax_excl, total_price_tax_incl, original_wholesale_price, purchase_supplier_price) VALUES
+        (1, 1, 0, 'Páska', 'P1', 4, 1, 0, 20.00, 24.60, 1.50, 0),     -- 3 effective, cost at order time 1.50
+        (1, 3, 0, 'Poplatok za dobierku', '', 1, 0, 0, 1.00, 1.00, 0, 0),   -- virtual: no purchase price needed
+        (2, 2, 0, 'ŠPZ Texas', 'T1', 1, 0, 0, 10.00, 12.30, 0, 0),      -- estimate: current shop purchase price 6.00
+        (2, 4, 0, 'ŠPZ Ohio', 'O1', 1, 0, 0, 8.00, 9.84, 0, 0),         -- missing
+        (3, 1, 0, 'Páska', 'P1', 9, 0, 0, 45.00, 55.35, 1.50, 0)");
+    $r = new Panel\Reports\SalesReport($db, $t, 'sk');
+    $netAll = function () { return true; };
+    $d = $r->compute(['from' => '2026-10-01', 'to' => '2026-11-30', 'group' => 'month'], $netAll);
+    $s = $d['summary'];
+    eq(2, $s['orders'], 'cancelled order not counted');
+    eq(3 + 1 + 1 + 1, $s['qty'], 'returned piece subtracted');
+    eq('34.00', number_format($s['revenue'], 2, '.', ''), '15 + 1 + 10 + 8');        // 20 × 3/4 = 15
+    eq('4.50 6.00', number_format(3 * 1.50, 2, '.', '') . ' ' . number_format(6.0, 2, '.', ''));
+    eq('10.50', number_format($s['cogs'], 2, '.', ''), '3 × 1.50 + 6.00 (estimate) + 0');
+    eq('22.50', number_format($s['margin'], 2, '.', ''), '34 − 1 discount − 10.50');
+    eq(1, $s['missing']);
+    eq(1, $s['estimated']);
+    eq('5.00', number_format($s['shipping'], 2, '.', ''));
+    eq(['2026-10', '2026-11'], array_column($d['rows'], 'label'));
+    eq(['ŠPZ Ohio'], array_column($d['missing'], 'name'));
+    // non-payer: gross amounts
+    $gross = $r->compute(['from' => '2026-10-01', 'to' => '2026-11-30', 'group' => 'shop'], function () { return false; });
+    eq('41.59', number_format($gross['summary']['revenue'], 2, '.', ''), '24.60 × 3/4 + 1 + 12.30 + 9.84');
+    eq(['SPZ', 'Howies'], array_column($gross['rows'], 'label'), 'by revenue: SPZ 22.14 > Howies 19.45');
+    // only one shop, by category
+    $cat = $r->compute(['from' => '2026-10-01', 'to' => '2026-11-30', 'shops' => [2], 'group' => 'category'], $netAll);
+    eq(['ŠPZ'], array_column($cat['rows'], 'label'));
+    eq(1, $cat['summary']['orders']);
+    // non-payer counting purchase prices with VAT (company setting): cost × 1.23
+    $vat = $r->compute(['from' => '2026-10-01', 'to' => '2026-11-30', 'group' => 'month'], function () { return ['net' => true, 'cost_factor' => 1.23]; });
+    eq('12.92', number_format($vat['summary']['cogs'], 2, '.', ''), '10.50 × 1.23');
+
+    // purchase price list (module B): missing + sold first, estimate counts as a price, virtual left out
+    foreach (['product_lang', 'product_attribute_combination', 'attribute_lang'] as $x) {
+        $pdo->exec("DROP TABLE IF EXISTS `{$t}$x`");
+    }
+    $pdo->exec("CREATE TABLE {$t}product_lang (id_product INT, id_shop INT, id_lang INT, name VARCHAR(64))");
+    $pdo->exec("CREATE TABLE {$t}product_attribute_combination (id_attribute INT, id_product_attribute INT)");
+    $pdo->exec("CREATE TABLE {$t}attribute_lang (id_attribute INT, id_lang INT, name VARCHAR(64))");
+    $pdo->exec("INSERT INTO {$t}product_lang VALUES (1, 1, 1, 'Páska'), (2, 2, 1, 'ŠPZ Texas'), (3, 1, 1, 'Poplatok'), (4, 2, 1, 'ŠPZ Ohio'), (5, 2, 1, 'ŠPZ Iowa')");
+    $pdo->exec("INSERT INTO {$t}product VALUES (5, 0, 20, 0)");
+    $pdo->exec("INSERT INTO {$t}product_shop VALUES (5, 2, 0)");
+    $pdo->exec("ALTER TABLE {$t}product ADD reference VARCHAR(32) NOT NULL DEFAULT ''");
+    $pdo->exec("ALTER TABLE {$t}product_attribute ADD reference VARCHAR(32) NOT NULL DEFAULT ''");
+    $missingSold = $r->purchasePriceList([1, 2], 'missing_sold');
+    eq(['ŠPZ Ohio'], array_column($missingSold, 'name'), 'only sold without any price (Texas has a shop price, Iowa never sold)');
+    eq(['ŠPZ Ohio', 'ŠPZ Iowa'], array_column($r->purchasePriceList([1, 2], 'missing'), 'name'), 'sold first');
+    eq(4, count($r->purchasePriceList([1, 2], 'all')), 'virtual fee product left out');
+    eq('6.00', number_format($r->purchasePriceList([2], 'all', 'texas')[0]['price'], 2, '.', ''));
+    eq([2], $r->productShops(4));
+    foreach (['product_lang', 'product_attribute_combination', 'attribute_lang'] as $x) {
+        $pdo->exec("DROP TABLE IF EXISTS `{$t}$x`");
+    }
+    foreach (['orders', 'order_detail', 'product', 'product_shop', 'product_attribute', 'shop', 'category_lang', 'lang'] as $x) {
+        $pdo->exec("DROP TABLE IF EXISTS `{$t}$x`");
+    }
+});
+
 test('panel: migrations on an EMPTY database (fresh hosting) create the framework tables too', function () {
     $db = testDb('pt_');
     foreach ($db->query("SHOW TABLES LIKE 'pt\\_%'") as $row) {
@@ -1047,7 +1135,7 @@ test('accounting package: content, send once, again, late documents, failure, au
     ok($r[0]['ok']);
     $last = end($mail->sent);
     eq([], $last['attachments']);
-    contains('nie sú žiadne vystavené doklady', $last['text']);
+    contains('nie sú žiadne vystavené ani prijaté doklady', $last['text']);
     ok(count(Panel\Audit::forEntity($db, 'company', $cid)) >= 4, 'audit of the packages');
 
     // settings validation
@@ -1056,4 +1144,437 @@ test('accounting package: content, send once, again, late documents, failure, au
     eq('október 2026', Panel\Invoicing\AccountingPackage::label('2026-10'));
     eq(['1 doklad', '3 doklady', '5 dokladov', '0 dokladov'], array_map(['Panel\Invoicing\AccountingPackage', 'docs'], [1, 3, 5, 0]));
     eq('2026-12', Panel\Invoicing\AccountingPackage::previousPeriod('2027-01-15'));
+});
+
+test('received documents (Náklady): card = paid, duplicates, sums, overdue, cancel, files, categories, accountant package', function () {
+    $db = panelDb();
+    $user = panelUser($db, 'admin', 100);
+    Schema::migrate($db, __DIR__ . '/../src/applications/panel/sql');
+    $companies = new Companies($db);
+    $cid = $companies->save(null, ['name' => 'ERMA Group s.r.o.', 'street' => 'Pravotice 178', 'city' => 'Pravotice', 'zip' => '956 35',
+        'country' => 'SK', 'ico' => '53036875', 'dic' => '2121232916', 'registration' => '', 'email' => 'info@erma.sk', 'phone' => '', 'web' => '',
+        'slogan' => '', 'due_days' => 14, 'invoice_note' => '', 'accent_color' => '#f74040', 'active' => 1]);
+    $companies->saveExportSettings($cid, array_merge($companies->exportSettings($cid), ['accountant' => ['email' => 'uctovnik@example.sk', 'auto' => 0, 'day' => 5]]));
+    $x = new Panel\Expenses\Expenses($db);
+    eq(12, count($x->categories()), 'seeded categories');
+    $doc = function (array $v) use ($cid) {
+        return array_merge(array_fill_keys(Panel\Expenses\Expenses::FIELDS, ''), ['company_id' => $cid, 'shop_id' => null, 'category_id' => 2,
+            'doc_type' => 'invoice', 'supplier_name' => 'Packeta Slovakia s.r.o.', 'supplier_ico' => '48136999', 'supplier_country' => 'SK',
+            'document_number' => '2026001', 'issue_date' => '2026-10-05', 'delivery_date' => '2026-10-05', 'due_date' => '2026-10-19',
+            'currency' => 'EUR', 'total_net' => 120, 'total_vat' => 0, 'total' => 120, 'payment_method' => 'transfer', 'note' => ''], $v);
+    };
+    $a = $x->save(null, $doc([]), $user);
+    $b = $x->save(null, $doc(['supplier_name' => 'Tesco', 'supplier_ico' => '', 'document_number' => 'BL-1', 'category_id' => 12,
+        'payment_method' => 'card', 'issue_date' => '2026-10-12', 'delivery_date' => '2026-10-12', 'due_date' => null, 'total' => 15.5, 'total_net' => 15.5]), $user);
+    $nov = $x->save(null, $doc(['document_number' => '2026002', 'issue_date' => '2026-11-04', 'delivery_date' => '2026-11-04', 'due_date' => '2026-11-18']), $user);
+    eq('open', $x->find($a)['status']);
+    eq('paid', $x->find($b)['status'], 'card = paid');
+    eq('2026-10-12', $x->find($b)['paid_on']);
+
+    // duplicate: same supplier (by IČO) + number; another number or itself is not a duplicate
+    eq($a, (int)$x->duplicate($cid, '48136999', 'x', '2026001', null)['id']);
+    eq(null, $x->duplicate($cid, '48136999', 'x', '2026001', $a));
+    eq(null, $x->duplicate($cid, '48136999', 'x', '2026999', null));
+    eq($b, (int)$x->duplicate($cid, '', 'Tesco', 'BL-1', null)['id'], 'without IČO by name');
+
+    // list: sums, overdue, search
+    $all = $x->search(['companies' => [$cid]]);
+    eq(3, $all['total']);
+    eq(255.5, (float)$all['sums']['total']);
+    eq(240.0, (float)$all['sums']['open']);
+    $db->execute('UPDATE pt_expense SET due_date = ? WHERE id = ?', [date('Y-m-d', strtotime('+10 days')), $nov]);
+    eq(1, $x->search(['companies' => [$cid], 'status' => 'overdue'])['total'], 'open and past due');
+    eq(1, $x->search(['companies' => [$cid], 'q' => 'tesco'])['total']);
+    eq(2, $x->search(['companies' => [$cid], 'from' => '2026-10-01', 'to' => '2026-10-31'])['total']);
+    eq(0, $x->search(['companies' => [999]])['total'], 'other company');
+
+    // paid / reopened / cancelled (cancelled not in the default list, not in the package)
+    $x->markPaid($a, '2026-10-18', 'výpis 10/2026', $user);
+    eq('paid', $x->find($a)['status']);
+    $x->markOpen($a, $user);
+    eq(['open', null], [$x->find($a)['status'], $x->find($a)['paid_on']]);
+    $c = $x->save(null, $doc(['document_number' => 'DUP']), $user);
+    $x->cancel($c, 'zadaný dvakrát', $user);
+    eq('cancelled', $x->find($c)['status']);
+    eq(3, $x->search(['companies' => [$cid]])['total']);
+    eq(1, $x->search(['companies' => [$cid], 'status' => 'cancelled'])['total']);
+    $actions = array_column($x->history($a), 'action');
+    ok(in_array('paid', $actions, true) && in_array('unpaid', $actions, true) && in_array('create', $actions, true), 'history');
+
+    // files
+    $fid = $x->addFile($a, 'faktura packeta.pdf', 'application/pdf', '%PDF-1.4 packeta', $user);
+    eq('%PDF-1.4 packeta', $x->file($fid)['data']);
+    eq(hash('sha256', '%PDF-1.4 packeta'), $x->find($a)['files'][0]['sha256']);
+
+    // categories: rename, deactivate, add; nothing deleted
+    $rows = array_map(function ($c) { return ['id' => $c['id'], 'name' => $c['name'], 'kind' => $c['kind'], 'active' => 1]; }, $x->categories());
+    $rows[0]['name'] = 'Tovar na predaj';
+    $rows[11]['active'] = 0;
+    $rows[] = ['id' => '', 'name' => 'Provízie marketplace', 'kind' => 'order'];
+    $rows[] = ['id' => '', 'name' => '', 'kind' => 'order'];
+    $x->saveCategories($rows, $user);
+    eq(13, count($x->categories()));
+    eq(12, count($x->categories(true)));
+    eq('Tovar na predaj', $x->categories()[0]['name']);
+
+    // accountant's package: October received documents with their files + list; problem for the one without a file
+    $acc = (new Panel\Invoicing\AccountingPackage($db, new Invoices($db), $companies, function (array $d) { return '%PDF'; }))->withExpenses($x);
+    $p = $acc->build($cid, '2026-10');
+    $files = unzipTest($p['zip']);
+    $base = 'erma-group-s-r-o-2026-10/';
+    eq('%PDF-1.4 packeta', $files[$base . 'prijate/2026-10-05_Packeta-Slovakia-s-r-o-2026001.pdf'] ?? null, 'file of the received document');
+    $csv = $files[$base . 'prijate-doklady-2026-10.csv'];
+    eq(3, substr_count($csv, "\r\n"), 'header + 2 documents (cancelled and November left out)');
+    contains('Packeta Slovakia s.r.o.;48136999', $csv);
+    contains('Tesco', $csv);
+    eq(1, count($p['problems']));
+    contains('Prijatý doklad bez súboru: Tesco BL-1', $p['problems'][0]);
+    $ids = $p['expense_ids'];
+    sort($ids);
+    eq([$a, $b], $ids);
+
+    $mail = new TestMailer();
+    $r = $acc->send($cid, '2026-10', $mail, $user);
+    ok($r['ok'], $r['message']);
+    contains('prijaté: 2 doklady', $r['message']);
+    contains('- prijaté doklady (náklady): 2 (spolu 135,50 EUR)', $mail->sent[0]['text']);
+    $pkg = $acc->find($cid, '2026-10');
+    eq(2, count(json_decode($pkg['expense_ids'], true)));
+    eq((int)$pkg['id'], (int)$x->find($a)['accounting_package_id']);
+    eq(null, $x->find($nov)['accounting_package_id']);
+    // a document entered later for October goes into the next package, the sent one stays the same
+    $lateExp = $x->save(null, $doc(['document_number' => 'LATE', 'delivery_date' => '2026-10-30']), $user);
+    $r = $acc->send($cid, '2026-10', $mail, $user, 'manual', true);
+    eq($mail->sent[0]['attachments'][0][1], $mail->sent[1]['attachments'][0][1], 'resent package identical');
+    $novIds = $acc->build($cid, '2026-11')['expense_ids'];
+    sort($novIds);
+    eq([$nov, $lateExp], $novIds, 'late October document in the November package');
+
+    // form helpers
+    $C = 'Panel\Controller\ExpensesController';
+    eq([1234.5, 12.5, 12.5, 1234.56, null, null], [$C::amount('1 234,50'), $C::amount('12,5'), $C::amount('12.50 €'), $C::amount('1.234,56'), $C::amount('abc'), $C::amount('1,234')]);
+    eq(['2026-11-20', '2026-02-03', null, null], [$C::date('20.11.2026'), $C::date('2026-02-03'), $C::date('31.2.2026'), $C::date('x')]);
+    eq(['application/pdf', 'image/jpeg', 'image/png', 'application/xml', 'application/octet-stream'],
+        [$C::mime('%PDF-1.7'), $C::mime("\xFF\xD8\xFF\xE0"), $C::mime("\x89PNG\r\n"), $C::mime("\xEF\xBB\xBF<?xml version=\"1.0\"?><Invoice/>"), $C::mime('MZ...')]);
+});
+
+test('received documents C2: payment from the bank statement (VS / IBAN), new cost from a movement, recurring costs', function () {
+    $db = panelDb();
+    $user = panelUser($db, 'admin', 100);
+    Schema::migrate($db, __DIR__ . '/../src/applications/panel/sql');
+    $companies = new Companies($db);
+    $cid = $companies->save(null, ['name' => 'ERMA Group s.r.o.', 'street' => 'Pravotice 178', 'city' => 'Pravotice', 'zip' => '956 35',
+        'country' => 'SK', 'ico' => '53036875', 'dic' => '2121232916', 'registration' => '', 'email' => 'info@erma.sk', 'phone' => '', 'web' => '',
+        'slogan' => '', 'due_days' => 14, 'invoice_note' => '', 'accent_color' => '#f74040', 'active' => 1]);
+    $x = new Panel\Expenses\Expenses($db);
+    $doc = function (array $v) use ($cid) {
+        return array_merge(array_fill_keys(Panel\Expenses\Expenses::FIELDS, ''), ['company_id' => $cid, 'shop_id' => null, 'category_id' => 6,
+            'doc_type' => 'invoice', 'supplier_name' => 'Prenajímateľ s.r.o.', 'supplier_country' => 'SK', 'document_number' => 'F1',
+            'issue_date' => '2026-11-01', 'delivery_date' => '2026-11-01', 'due_date' => '2026-11-15', 'currency' => 'EUR',
+            'total_net' => 300, 'total_vat' => 0, 'total' => 300, 'payment_method' => 'transfer', 'note' => ''], $v);
+    };
+    $rent = $x->save(null, $doc(['variable_symbol' => '2026011', 'supplier_iban' => 'SK3112000000198742637541']), $user);
+    $phone = $x->save(null, $doc(['supplier_name' => 'Telekom', 'document_number' => 'T1', 'total' => 25.9, 'total_net' => 25.9,
+        'supplier_iban' => 'SK0809000000000123123123', 'category_id' => 7]), $user);
+    $open = $x->openDocuments($cid);
+    eq(2, count($open));
+    $M = 'Panel\Expenses\Expenses';
+    $mv = function (float $amount, string $vs = '', string $iban = '', string $ref = 'R1') {
+        return ['ref' => $ref, 'date' => '2026-11-14', 'amount' => $amount, 'currency' => 'EUR', 'vs' => $vs, 'ss' => '', 'ks' => '',
+                'payer' => 'Prenajímateľ s.r.o.', 'payer_iban' => $iban, 'message' => 'nájom 11/2026'];
+    };
+    eq([$rent, 'vs'], (function ($m) { return [(int)$m['id'], $m['by']]; })($M::matchPayment($mv(-300, '0002026011'), $open)), 'by VS (leading zeros)');
+    eq($rent, (int)$M::matchPayment($mv(-280, '2026011'), $open)['id'], 'VS with another amount still proposed');
+    eq([$phone, 'iban'], (function ($m) { return [(int)$m['id'], $m['by']]; })($M::matchPayment($mv(-25.9, '', 'SK08 0900 0000 0001 2312 3123'), $open)), 'by IBAN + amount');
+    eq(null, $M::matchPayment($mv(-25, '', 'SK0809000000000123123123'), $open), 'IBAN with another amount: no proposal');
+    eq(null, $M::matchPayment($mv(300, '2026011'), $open), 'incoming payment is not a cost');
+
+    ok($x->payFromBank($rent, '2026-11-14', 'R1', 'výpis', $user));
+    eq(['paid', '2026-11-14', 'R1'], [$x->find($rent)['status'], $x->find($rent)['paid_on'], $x->find($rent)['bank_ref']]);
+    ok(!$x->payFromBank($rent, '2026-11-14', 'R9', '', $user), 'not open any more');
+    throws(function () use ($x, $phone, $user) { $x->payFromBank($phone, '2026-11-14', 'R1', '', $user); }, PDOException::class);
+    eq(['R1'], $x->importedRefs(['R1', 'R2', '']));
+    $x->markOpen($rent, $user);
+    eq([], $x->importedRefs(['R1']), 'reopened document frees the movement');
+
+    $fee = $x->createFromBank($cid, ['ref' => 'FEE-1', 'date' => '2026-11-30', 'amount' => -2.5, 'currency' => 'EUR', 'vs' => '', 'payer' => '',
+        'payer_iban' => '', 'message' => 'Poplatok za vedenie účtu'], 3, $user);
+    $f = $x->find($fee);
+    eq(['paid', 'FEE-1', 2.5, 'Poplatok za vedenie účtu', 'other'], [$f['status'], $f['bank_ref'], (float)$f['total'], $f['supplier_name'], $f['doc_type']]);
+
+    // recurring: last day of the month stays the last day, catch-up of missed months, end date, parallel safety
+    eq(['2026-02-28', '2026-03-31', '2027-02-15', '2027-01-10', '2028-02-29'], [$M::addMonths('2026-01-31', 1, 31), $M::addMonths('2026-02-28', 1, 31),
+        $M::addMonths('2026-11-15', 3, 15), $M::addMonths('2026-12-10', 1, 10), $M::addMonths('2027-02-28', 12, 31)]);
+    $rec = function (array $v) use ($cid) {
+        return array_merge(array_fill_keys(Panel\Expenses\Expenses::RECURRING_FIELDS, ''), ['company_id' => $cid, 'shop_id' => null,
+            'category_id' => 6, 'name' => 'Nájom skladu', 'supplier_name' => 'Prenajímateľ s.r.o.', 'supplier_country' => 'SK', 'currency' => 'EUR',
+            'total' => 300, 'total_vat' => 0, 'payment_method' => 'transfer', 'interval_months' => 1, 'due_days' => 10, 'day' => 31,
+            'next_date' => '2026-09-30', 'end_date' => '2026-11-30', 'active' => 1, 'note' => ''], $v);
+    };
+    $r1 = $x->saveRecurring(null, $rec([]), $user);
+    $r2 = $x->saveRecurring(null, $rec(['name' => 'Hosting', 'payment_method' => 'card', 'total' => 12, 'interval_months' => 12, 'day' => 5,
+        'next_date' => '2026-12-05', 'end_date' => null]), $user);
+    $made = $x->generateRecurring('2026-11-20');
+    eq(2, count($made), 'September and October rent (November not yet)');
+    $docs = array_map([$x, 'find'], $made);
+    eq(['2026-09-30', '2026-10-31'], array_column($docs, 'delivery_date'));
+    eq('2026-10-10', $docs[0]['due_date']);
+    eq([$r1, $r1], array_map('intval', array_column($docs, 'recurring_id')));
+    eq(['open', 'open'], array_column($docs, 'status'));
+    contains('Opakovaný náklad „Nájom skladu“', $docs[0]['note']);
+    eq('2026-11-30', $x->recurring($r1)['next_date']);
+    eq([], $x->generateRecurring('2026-11-20'), 'nothing twice');
+    $made = $x->generateRecurring('2026-12-05');
+    eq(2, count($made), 'November rent + hosting');
+    eq(0, (int)$x->recurring($r1)['active'], 'ended after the end date');
+    eq('2027-12-05', $x->recurring($r2)['next_date']);
+    $hosting = $x->find($made[1]);
+    eq(['paid', '2026-12-05'], [$hosting['status'], $hosting['paid_on']], 'card = paid');
+    eq([], $x->generateRecurring('2027-06-01'));
+    // the accountant's automatic package creates the due recurring documents first
+    $x->saveRecurring($r1, array_merge($x->recurring($r1), ['active' => 1, 'next_date' => '2026-12-31', 'end_date' => null]), $user);
+    $acc = (new Panel\Invoicing\AccountingPackage($db, new Invoices($db), $companies, function () { return '%PDF'; }))->withExpenses($x);
+    $acc->sendDue(new TestMailer(), '2027-01-02');
+    eq('2027-01-31', $x->recurring($r1)['next_date'], 'sendDue generated December');
+});
+
+test('order costs (module D): most specific valid rule, % + fixed, contribution margin in the sales report, rule editing', function () {
+    $db = panelDb();
+    $user = panelUser($db, 'admin', 100);
+    Schema::migrate($db, __DIR__ . '/../src/applications/panel/sql');
+    $pdo = $db->pdo();
+    $t = 'tsc_';
+    $tables = ['orders', 'order_detail', 'product', 'product_shop', 'product_attribute', 'shop', 'category_lang', 'lang', 'carrier'];
+    foreach ($tables as $x) {
+        $pdo->exec("DROP TABLE IF EXISTS `{$t}$x`");
+    }
+    $pdo->exec("CREATE TABLE {$t}shop (id_shop INT PRIMARY KEY, name VARCHAR(64))");
+    $pdo->exec("CREATE TABLE {$t}lang (id_lang INT PRIMARY KEY, iso_code VARCHAR(2))");
+    $pdo->exec("CREATE TABLE {$t}category_lang (id_category INT, id_shop INT, id_lang INT, name VARCHAR(64))");
+    $pdo->exec("CREATE TABLE {$t}product (id_product INT PRIMARY KEY, wholesale_price DECIMAL(20,6), id_category_default INT, is_virtual TINYINT)");
+    $pdo->exec("CREATE TABLE {$t}product_shop (id_product INT, id_shop INT, wholesale_price DECIMAL(20,6))");
+    $pdo->exec("CREATE TABLE {$t}product_attribute (id_product_attribute INT PRIMARY KEY, id_product INT, wholesale_price DECIMAL(20,6))");
+    $pdo->exec("CREATE TABLE {$t}carrier (id_carrier INT PRIMARY KEY, id_reference INT, name VARCHAR(64), deleted TINYINT)");
+    $pdo->exec("CREATE TABLE {$t}orders (id_order INT PRIMARY KEY, id_shop INT, id_carrier INT, module VARCHAR(64), payment VARCHAR(64), reference VARCHAR(9),
+        date_add DATETIME, valid TINYINT, conversion_rate DECIMAL(13,6), total_paid_tax_incl DECIMAL(20,6),
+        total_discounts_tax_excl DECIMAL(20,6), total_discounts_tax_incl DECIMAL(20,6), total_shipping_tax_excl DECIMAL(20,6), total_shipping_tax_incl DECIMAL(20,6))");
+    $pdo->exec("CREATE TABLE {$t}order_detail (id_order_detail INT AUTO_INCREMENT PRIMARY KEY, id_order INT, product_id INT, product_attribute_id INT,
+        product_name VARCHAR(64), product_reference VARCHAR(32), product_quantity INT, product_quantity_refunded INT, product_quantity_return INT,
+        total_price_tax_excl DECIMAL(20,6), total_price_tax_incl DECIMAL(20,6), original_wholesale_price DECIMAL(20,6), purchase_supplier_price DECIMAL(20,6))");
+    $pdo->exec("INSERT INTO {$t}shop VALUES (1, 'Howies'), (2, 'SPZ')");
+    $pdo->exec("INSERT INTO {$t}lang VALUES (1, 'sk')");
+    $pdo->exec("INSERT INTO {$t}product VALUES (1, 0, 10, 0)");
+    // Packeta edited in PrestaShop → new id_carrier, same id_reference
+    $pdo->exec("INSERT INTO {$t}carrier VALUES (5, 5, 'Packeta (old)', 1), (9, 5, 'Packeta', 0), (7, 7, 'Slovenská pošta', 0)");
+    $pdo->exec("INSERT INTO {$t}orders VALUES
+        (1, 1, 5, 'prestashopgopay', 'GoPay', 'A', '2026-10-05 10:00:00', 1, 1, 50.00, 0, 0, 3.00, 3.00),
+        (2, 1, 9, 'erma_cod', 'Dobierka', 'B', '2026-11-05 10:00:00', 1, 1, 100.00, 0, 0, 4.00, 4.00),
+        (3, 2, 7, 'ps_wirepayment', 'Prevod', 'C', '2026-11-06 10:00:00', 1, 1, 20.00, 0, 0, 0, 0)");
+    $pdo->exec("INSERT INTO {$t}order_detail (id_order, product_id, product_attribute_id, product_name, product_reference, product_quantity,
+        product_quantity_refunded, product_quantity_return, total_price_tax_excl, total_price_tax_incl, original_wholesale_price, purchase_supplier_price) VALUES
+        (1, 1, 0, 'Páska', 'P1', 1, 0, 0, 47.00, 47.00, 20.00, 0), (2, 1, 0, 'Páska', 'P1', 2, 0, 0, 96.00, 96.00, 20.00, 0),
+        (3, 1, 0, 'Páska', 'P1', 1, 0, 0, 20.00, 20.00, 10.00, 0)");
+
+    $oc = new Panel\Reports\OrderCosts($db, $t);
+    eq(['5' => 'Packeta', '7' => 'Slovenská pošta'], array_map('strval', $oc->carriers()), 'by id_reference, current name');
+    $mods = array_keys($oc->paymentModules());
+    sort($mods);
+    eq(['erma_cod', 'prestashopgopay', 'ps_wirepayment'], $mods);
+    $row = function (array $v) { return array_merge(['id' => '', 'shop_id' => '', 'type' => 'shipping', 'match_key' => '', 'fixed' => '', 'percent' => '',
+        'valid_from' => '', 'valid_to' => '', 'note' => ''], $v); };
+    $err = $oc->save([$row(['fixed' => '3,10', 'type' => 'x']), $row(['fixed' => 'abc']), $row(['fixed' => '1', 'shop_id' => '3'])], [1, 2], true, $user);
+    eq(3, count($err), 'type, number, shop access');
+    eq(['Riadok 1: zvoľte druh nákladu.'], array_slice($err, 0, 1));
+    eq(['Riadok 1: k tomuto e-shopu nemáte prístup.'], $oc->save([$row(['fixed' => '1'])], [1], false, $user), 'global rule needs admin');
+    eq([], $oc->save([
+        $row(['fixed' => '2,90', 'match_key' => '5', 'label' => 'Packeta', 'valid_to' => '2026-10-31']),
+        $row(['fixed' => '3,20', 'match_key' => '5', 'label' => 'Packeta', 'valid_from' => '2026-11-01']),     // price change from November
+        $row(['fixed' => '4,50']),                                                                                // any carrier
+        $row(['type' => 'payment', 'match_key' => 'prestashopgopay', 'percent' => '2,2', 'fixed' => '0,10']),
+        $row(['type' => 'payment', 'match_key' => 'erma_cod', 'fixed' => '1']),
+        $row(['type' => 'packaging', 'fixed' => '0,50']),
+        $row(['type' => 'packaging', 'fixed' => '0,30', 'shop_id' => '2']),                                       // SPZ: envelope only
+        $row(['fixed' => '', 'percent' => '']),                                                                    // empty new row: ignored
+    ], [1, 2], true, $user));
+    eq(7, count($oc->rules()));
+    $o1 = $oc->forOrder(['id_shop' => 1, 'date' => '2026-10-05', 'carrier' => '5', 'module' => 'prestashopgopay', 'total' => 50]);
+    eq(['2.90', '1.20', '0.50'], [number_format($o1['shipping'], 2), number_format($o1['payment'], 2), number_format($o1['packaging'], 2)], 'October price, 2.2 % of 50 + 0.10');
+    $o2 = $oc->forOrder(['id_shop' => 1, 'date' => '2026-11-05', 'carrier' => '5', 'module' => 'erma_cod', 'total' => 100]);
+    eq(['3.20', '1.00', '0.50'], [number_format($o2['shipping'], 2), number_format($o2['payment'], 2), number_format($o2['packaging'], 2)], 'November price');
+    $o3 = $oc->forOrder(['id_shop' => 2, 'date' => '2026-11-06', 'carrier' => '7', 'module' => 'ps_wirepayment', 'total' => 20]);
+    eq(['4.50', '0.00', '0.30'], [number_format($o3['shipping'], 2), number_format($o3['payment'], 2), number_format($o3['packaging'], 2)], 'generic carrier, e-shop packaging');
+    ok(!$o3['no_shipping']);
+
+    // sales report: contribution = margin + shipping − order costs (month / shop rows and the total)
+    $r = new Panel\Reports\SalesReport($db, $t, 'sk');
+    $d = $r->compute(['from' => '2026-10-01', 'to' => '2026-11-30', 'group' => 'shop'], function () { return false; }, $oc->loader());
+    $s = $d['summary'];
+    ok($d['costs']);
+    eq('93.00', number_format($s['margin'], 2, '.', ''), '(47 − 20) + (96 − 40) + (20 − 10)');
+    eq('10.60', number_format($s['ship_cost'], 2, '.', ''), '2.90 + 3.20 + 4.50');
+    eq('2.20', number_format($s['pay_cost'], 2, '.', ''));
+    eq('1.30', number_format($s['pack_cost'], 2, '.', ''));
+    eq('85.90', number_format($s['contribution'], 2, '.', ''), '93 + 7 shipping paid − 14.10');
+    $byShop = array_column($d['rows'], null, 'label');
+    eq('80.70', number_format($byShop['Howies']['contribution'], 2, '.', ''), '27 + 56 + 7 − (2.90 + 1.20 + 0.50) − (3.20 + 1 + 0.50)');
+    eq('5.20', number_format($byShop['SPZ']['contribution'], 2, '.', ''), '10 − 4.50 − 0.30');
+    $p = $r->compute(['from' => '2026-10-01', 'to' => '2026-11-30', 'group' => 'product'], function () { return false; }, $oc->loader());
+    eq(0.0, $p['rows'][0]['order_costs'], 'per order: not in product rows');
+    eq('85.90', number_format($p['summary']['contribution'], 2, '.', ''), 'but in the total');
+    ok(!$r->compute(['from' => '2026-10-01', 'to' => '2026-11-30', 'group' => 'month'], function () { return false; })['costs'], 'without rules');
+    // delete a rule → order without a shipping rule is counted
+    $generic = array_values(array_filter($oc->rules(), function ($x) { return $x['type'] === 'shipping' && $x['match_key'] === ''; }))[0];
+    eq([], $oc->save([['id' => $generic['id'], 'delete' => 1]], [1, 2], true, $user));
+    eq(1, $r->compute(['from' => '2026-10-01', 'to' => '2026-11-30', 'group' => 'month'], function () { return false; }, $oc->loader())['summary']['no_ship_rule']);
+    foreach ($tables as $x) {
+        $pdo->exec("DROP TABLE IF EXISTS `{$t}$x`");
+    }
+});
+
+test('company result, money, VAT registration turnover, todo, monthly summary text (modules E + F)', function () {
+    $db = panelDb();
+    $user = panelUser($db, 'admin', 100);
+    Schema::migrate($db, __DIR__ . '/../src/applications/panel/sql');
+    $pdo = $db->pdo();
+    $t = 'tbr_';
+    $tables = ['orders', 'order_detail', 'product', 'product_shop', 'product_attribute', 'shop', 'category_lang', 'lang', 'carrier'];
+    foreach ($tables as $x) {
+        $pdo->exec("DROP TABLE IF EXISTS `{$t}$x`");
+    }
+    $pdo->exec("CREATE TABLE {$t}shop (id_shop INT PRIMARY KEY, name VARCHAR(64))");
+    $pdo->exec("CREATE TABLE {$t}lang (id_lang INT PRIMARY KEY, iso_code VARCHAR(2))");
+    $pdo->exec("CREATE TABLE {$t}category_lang (id_category INT, id_shop INT, id_lang INT, name VARCHAR(64))");
+    $pdo->exec("CREATE TABLE {$t}product (id_product INT PRIMARY KEY, wholesale_price DECIMAL(20,6), id_category_default INT, is_virtual TINYINT)");
+    $pdo->exec("CREATE TABLE {$t}product_shop (id_product INT, id_shop INT, wholesale_price DECIMAL(20,6))");
+    $pdo->exec("CREATE TABLE {$t}product_attribute (id_product_attribute INT PRIMARY KEY, id_product INT, wholesale_price DECIMAL(20,6))");
+    $pdo->exec("CREATE TABLE {$t}carrier (id_carrier INT PRIMARY KEY, id_reference INT, name VARCHAR(64), deleted TINYINT)");
+    $pdo->exec("CREATE TABLE {$t}orders (id_order INT PRIMARY KEY, id_shop INT, id_carrier INT, module VARCHAR(64), payment VARCHAR(64), reference VARCHAR(9),
+        date_add DATETIME, valid TINYINT, conversion_rate DECIMAL(13,6), total_paid_tax_incl DECIMAL(20,6),
+        total_discounts_tax_excl DECIMAL(20,6), total_discounts_tax_incl DECIMAL(20,6), total_shipping_tax_excl DECIMAL(20,6), total_shipping_tax_incl DECIMAL(20,6))");
+    $pdo->exec("CREATE TABLE {$t}order_detail (id_order_detail INT AUTO_INCREMENT PRIMARY KEY, id_order INT, product_id INT, product_attribute_id INT,
+        product_name VARCHAR(64), product_reference VARCHAR(32), product_quantity INT, product_quantity_refunded INT, product_quantity_return INT,
+        total_price_tax_excl DECIMAL(20,6), total_price_tax_incl DECIMAL(20,6), original_wholesale_price DECIMAL(20,6), purchase_supplier_price DECIMAL(20,6))");
+    $pdo->exec("INSERT INTO {$t}shop VALUES (1, 'Howies'), (2, 'Iná firma')");
+    $pdo->exec("INSERT INTO {$t}lang VALUES (1, 'sk')");
+    $pdo->exec("INSERT INTO {$t}product VALUES (1, 0, 10, 0)");
+    $pdo->exec("INSERT INTO {$t}carrier VALUES (1, 1, 'Packeta', 0)");
+    $pdo->exec("INSERT INTO {$t}orders VALUES
+        (1, 1, 1, 'cod', 'Dobierka', 'A', '2026-01-10 10:00:00', 1, 1, 105, 0, 0, 5, 5),
+        (2, 1, 1, 'cod', 'Dobierka', 'B', '2026-02-10 10:00:00', 1, 1, 200, 0, 0, 0, 0),
+        (3, 2, 1, 'cod', 'Dobierka', 'C', '2026-01-12 10:00:00', 1, 1, 999, 0, 0, 0, 0)");
+    $pdo->exec("INSERT INTO {$t}order_detail (id_order, product_id, product_attribute_id, product_name, product_reference, product_quantity,
+        product_quantity_refunded, product_quantity_return, total_price_tax_excl, total_price_tax_incl, original_wholesale_price, purchase_supplier_price) VALUES
+        (1, 1, 0, 'Páska', 'P1', 1, 0, 0, 100, 100, 40, 0), (2, 1, 0, 'Páska', 'P1', 2, 0, 0, 200, 200, 40, 0), (3, 1, 0, 'Páska', 'P1', 1, 0, 0, 999, 999, 1, 0)");
+
+    $companies = new Companies($db);
+    $cid = $companies->save(null, ['name' => 'ERMA Group s.r.o.', 'street' => '', 'city' => '', 'zip' => '', 'country' => 'SK', 'ico' => '53036875',
+        'dic' => '', 'registration' => '', 'email' => 'info@erma.sk', 'phone' => '', 'web' => '', 'slogan' => '', 'due_days' => 14, 'invoice_note' => '',
+        'accent_color' => '#f74040', 'active' => 1]);
+    $inv = function (array $v) use ($db, $cid) {
+        $v += ['company_id' => $cid, 'doc_type' => 'invoice', 'status' => 'issued', 'currency' => 'EUR', 'total_vat' => 0, 'shop_order_id' => null,
+               'shop_connection_id' => 0, 'shop_id' => null, 'buyer_name' => 'Odberateľ', 'created_at' => '2026-01-01 00:00:00', 'updated_at' => '2026-01-01 00:00:00'];
+        $v['total'] = $v['total_net'];
+        $v['issue_date'] = $v['delivery_date'];
+        $db->execute('INSERT INTO pt_invoice (' . implode(', ', array_keys($v)) . ') VALUES (' . implode(', ', array_fill(0, count($v), '?')) . ')', array_values($v));
+        return (int)$db->lastInsertId();
+    };
+    $pay = function (int $id, string $date, float $amount) use ($db) {
+        $db->execute('INSERT INTO pt_invoice_payment (invoice_id, paid_on, amount, created_at) VALUES (?, ?, ?, ?)', [$id, $date, $amount, $date . ' 00:00:00']);
+    };
+    $a = $inv(['number' => 'FA1', 'delivery_date' => '2026-01-10', 'due_date' => '2026-01-24', 'total_net' => 105, 'shop_order_id' => 1, 'shop_id' => 1]);
+    $b = $inv(['number' => 'FA2', 'delivery_date' => '2026-01-20', 'due_date' => '2026-02-03', 'total_net' => 300]);
+    $inv(['number' => 'DB1', 'doc_type' => 'credit_note', 'delivery_date' => '2026-02-05', 'due_date' => '2026-02-19', 'total_net' => -50]);
+    $inv(['number' => 'FA3', 'delivery_date' => '2026-02-07', 'due_date' => '2026-02-21', 'total_net' => 80, 'currency' => 'USD']);
+    $inv(['number' => '', 'status' => 'draft', 'delivery_date' => '2026-02-08', 'due_date' => '2026-02-22', 'total_net' => 999]);
+    $pay($a, '2026-01-15', 105);
+    $pay($b, '2026-02-01', 100);
+
+    $x = new Panel\Expenses\Expenses($db);
+    $doc = function (array $v) use ($cid) {
+        return array_merge(array_fill_keys(Panel\Expenses\Expenses::FIELDS, ''), ['company_id' => $cid, 'shop_id' => null, 'doc_type' => 'invoice',
+            'supplier_name' => 'Dodávateľ', 'supplier_country' => 'SK', 'document_number' => 'X', 'issue_date' => null, 'due_date' => null, 'currency' => 'EUR',
+            'total_vat' => 0, 'payment_method' => 'transfer', 'note' => ''], $v, ['total_net' => $v['total']]);
+    };
+    $rent = $x->save(null, $doc(['category_id' => 6, 'delivery_date' => '2026-01-31', 'total' => 60]), $user);
+    $packeta = $x->save(null, $doc(['category_id' => 2, 'delivery_date' => '2026-01-31', 'total' => 7]), $user);
+    $x->save(null, $doc(['category_id' => 1, 'delivery_date' => '2026-02-15', 'due_date' => '2026-03-25', 'total' => 500]), $user);
+    $x->save(null, $doc(['category_id' => 5, 'shop_id' => 1, 'delivery_date' => '2026-02-20', 'due_date' => '2026-03-01', 'total' => 20, 'document_number' => '']), $user);
+    $x->cancel($x->save(null, $doc(['category_id' => 6, 'delivery_date' => '2026-01-15', 'total' => 1000]), $user), 'omyl', $user);
+    $x->markPaid($rent, '2026-01-31', '', $user);
+    $x->markPaid($packeta, '2026-02-15', '', $user);
+
+    $oc = new Panel\Reports\OrderCosts($db, $t);
+    eq([], $oc->save([['id' => '', 'shop_id' => '', 'type' => 'shipping', 'match_key' => '', 'fixed' => '3', 'percent' => '']], [1], true, $user));
+    $sales = new Panel\Reports\SalesReport($db, $t, 'sk');
+    $res = new Panel\Reports\BusinessResult($db, $sales, $oc->loader());
+    $gross = function () { return false; };
+    $r = $res->compute($cid, [1], '2026-01-01', '2026-02-28', $gross);
+    $jan = $r['months']['2026-01'];
+    $feb = $r['months']['2026-02'];
+    eq(['105.00', '40.00', '300.00', '7.00', 'actual', '60.00', '298.00'], [number_format($jan['shop_revenue'], 2, '.', ''), number_format($jan['cogs'], 2, '.', ''),
+        number_format($jan['other_revenue'], 2, '.', ''), number_format($jan['order_costs'], 2, '.', ''), $jan['order_costs_source'],
+        number_format($jan['overhead'], 2, '.', ''), number_format($jan['profit'], 2, '.', '')],
+        'January: shop 100 + 5 shipping, invoice of the order left out, real Packeta cost wins over the estimate 3');
+    eq(['200.00', '-50.00', '3.00', 'estimate', '20.00', '500.00', '47.00'], [number_format($feb['shop_revenue'], 2, '.', ''), number_format($feb['other_revenue'], 2, '.', ''),
+        number_format($feb['order_costs'], 2, '.', ''), $feb['order_costs_source'], number_format($feb['overhead'], 2, '.', ''),
+        number_format($feb['goods_purchases'], 2, '.', ''), number_format($feb['profit'], 2, '.', '')],
+        'February: credit note, no carrier invoice → estimate, goods purchase is stock (not in profit)');
+    eq(['345.00', 'mixed', 1], [number_format($r['total']['profit'], 2, '.', ''), $r['total']['order_costs_source'], $r['foreign']], 'USD invoice counted as foreign, draft ignored');
+    eq(1, count($r['shops']), 'the other company\'s e-shop is not in it');
+    eq(['305.00', '180.00', '179.00', '20.00', '159.00'], [number_format($r['shops'][0]['revenue'], 2, '.', ''), number_format($r['shops'][0]['margin'], 2, '.', ''),
+        number_format($r['shops'][0]['contribution'], 2, '.', ''), number_format($r['shops'][0]['direct'], 2, '.', ''), number_format($r['shops'][0]['result'], 2, '.', '')]);
+    $noShops = $res->compute($cid, [], '2026-01-01', '2026-02-28', $gross);
+    eq(['355.00', '0.00'], [number_format($noShops['total']['other_revenue'], 2, '.', ''), number_format($noShops['total']['shop_revenue'], 2, '.', '')],
+        'a company without e-shops: every invoice is revenue (also those of orders)');
+
+    // money
+    $m = new Panel\Reports\Money($db);
+    eq(['over0', 'over30', 'over60', 'due7', 'due30', 'later', 'later'], [$m::bucket('2026-03-19', '2026-03-20'), $m::bucket('2026-02-15', '2026-03-20'),
+        $m::bucket('2026-01-01', '2026-03-20'), $m::bucket('2026-03-27', '2026-03-20'), $m::bucket('2026-04-10', '2026-03-20'), $m::bucket('2026-05-01', '2026-03-20'), $m::bucket(null, '2026-03-20')]);
+    $rec = $m->receivables($cid, '2026-03-20');
+    eq(['150.00', '150.00', '200.00', '-50.00'], [number_format($rec['total'], 2, '.', ''), number_format($rec['overdue'], 2, '.', ''),
+        number_format($rec['buckets']['over30'], 2, '.', ''), number_format($rec['buckets']['over0'], 2, '.', '')], 'FA2 rest 200, credit note −50, USD left out');
+    $pa = $m->payables($cid, '2026-03-20');
+    eq(['520.00', '20.00', '500.00'], [number_format($pa['total'], 2, '.', ''), number_format($pa['overdue'], 2, '.', ''), number_format($pa['buckets']['due7'], 2, '.', '')]);
+    $fl = $m->flows($cid, '2026-01-01', '2026-03-31');
+    eq([[105.0, 60.0], [100.0, 7.0], [0.0, 0.0]], array_map(function ($x) { return [$x['in'], $x['out']]; }, array_values($fl)));
+
+    // VAT registration turnover (seeded SK rules: 2025+ calendar year 50 000 / 62 500)
+    $vt = new Panel\Reports\VatTurnover($db);
+    eq('year', $vt->ruleOn('SK', '2026-02-28')['period']);
+    eq('rolling12', $vt->ruleOn('SK', '2024-06-30')['period']);
+    $s = $vt->status($cid, $sales, [1], '2026-02-28');
+    eq(['555.00', 'ok', '2026-01-01'], [number_format($s['turnover'], 2, '.', ''), $s['level'], $s['from']], 'shop 305 + invoices 300 − 50 (EUR, not of local orders)');
+    ok($s['projection'] > $s['turnover'], 'extrapolated to the year');
+    ok(is_string($vt->saveRules([['country' => 'SK', 'period' => 'year', 'threshold' => '500', 'threshold_immediate' => '400', 'valid_from' => '2025-01-01']], $user)), 'immediate < threshold refused');
+    ok(is_string($vt->saveRules([], $user)), 'at least one rule');
+    $rule = function ($th, $im) { return ['country' => 'SK', 'period' => 'year', 'threshold' => $th, 'threshold_immediate' => $im, 'valid_from' => '2025-01-01', 'valid_to' => '', 'note' => 'test']; };
+    eq(null, $vt->saveRules([$rule('650', '')], $user));
+    eq('warn', $vt->status($cid, $sales, [1], '2026-02-28')['level'], '85 %');
+    eq(null, $vt->saveRules([$rule('500', '600')], $user));
+    eq('over', $vt->status($cid, $sales, [1], '2026-02-28')['level']);
+    eq(null, $vt->saveRules([$rule('500', '550')], $user));
+    $s = $vt->status($cid, $sales, [1], '2026-02-28');
+    eq('over_immediate', $s['level']);
+    contains('5 pracovných dní', $s['text']);
+    eq(null, $vt->status($cid, $sales, [1], '2024-06-30'), 'no rule for 2024 any more');
+
+    // todo
+    $todo = new Panel\Reports\Todo($db, $t);
+    $e = $todo->expenses([$cid], '2026-03-20');
+    eq([4, 1, 1, 20.0], [$e['no_file'], $e['no_number'], $e['overdue'], $e['overdue_sum']], 'cancelled one left out');
+    eq(['count' => 1, 'oldest' => '2026-02-10'], $todo->ordersWithoutInvoice([1], '2026-03-20', 90), 'order A has an invoice');
+    eq(['count' => 0, 'oldest' => null], $todo->ordersWithoutInvoice([], '2026-03-20'));
+
+    // summary e-mail text
+    $txt = Panel\Reports\MonthlySummary::text('ERMA Group s.r.o.', '2026-02', $feb, $jan, $r['total'], $r['total'], $s, $rec, $pa,
+        ['orders' => 1] + $e, 'https://erma.sk/panel/reports/result');
+    contains('Súhrn firmy ERMA Group s.r.o. za február 2026', $txt);
+    contains('ZISK:           47,00 €  (minulý rok 298,00 €, -84 %)', $txt);
+    contains('(odhad — chýbajú doklady dopravcov)', $txt);
+    contains('- 1 objednávok za 60 dní bez faktúry', $txt);
+    contains('Registrácia k DPH: Obrat', $txt);
+    foreach ($tables as $x) {
+        $pdo->exec("DROP TABLE IF EXISTS `{$t}$x`");
+    }
 });

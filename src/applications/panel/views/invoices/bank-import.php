@@ -1,5 +1,5 @@
 <?php use WebApplication\Csrf; /** @var string $error; array $apis */ ?>
-<p><a href="<?= $e($ctx->url('/invoices')) ?>">← Faktúry</a></p>
+<p><a href="<?= $e($ctx->url('/invoices')) ?>">← Faktúry</a> · <a href="<?= $e($ctx->url('/expenses')) ?>">Náklady</a></p>
 <?php if ($error): ?><p class="flash err"><?= $e($error) ?></p><?php endif ?>
 <?php foreach ($apis as $a): ?>
 <form class="card form" method="post" action="<?= $e($ctx->url('/payments/import/fio')) ?>" style="max-width: 40rem">
@@ -18,7 +18,8 @@
   <?= Csrf::field() ?>
   <p>Nahrajte výpis z banky vo formáte <b>CAMT.053 (XML)</b> — štandard SEPA, ktorý ponúka každá slovenská banka
     (vo Fio banke „SBA XML“, inde „XML výpis CAMT.053“). Panel spáruje prijaté platby s neuhradenými faktúrami podľa
-    <b>variabilného symbolu</b>; pred zápisom návrh skontrolujete. Ten istý pohyb sa nedá zapísať dvakrát.</p>
+    <b>variabilného symbolu</b> a odchádzajúce platby s neuhradenými nákladmi (podľa VS alebo účtu dodávateľa a sumy);
+    pred zápisom návrh skontrolujete. Ten istý pohyb sa nedá zapísať dvakrát.</p>
   <label>Výpis (XML) <input type="file" name="statement" accept=".xml,application/xml,text/xml" required></label>
   <button class="primary">Načítať výpis</button>
 </form>

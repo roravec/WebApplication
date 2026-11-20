@@ -21,6 +21,9 @@ class Rights
     const COMPANIES_MANAGE = 'companies.manage';
     const STOCK_VIEW = 'stock.view';
     const STOCK_EDIT = 'stock.edit';
+    const REPORTS_VIEW = 'reports.view';   // docs/sprava-firmy-specifikacia.md
+    const EXPENSES_VIEW = 'expenses.view';
+    const EXPENSES_EDIT = 'expenses.edit';
 
     /** Pseudo-permission used by route guards: administrators only. */
     const ADMIN_ONLY = 'admin';
@@ -49,6 +52,9 @@ class Rights
             self::COMPANIES_MANAGE => 'Firmy — nastavenia, bankové účty, číselné rady',
             self::STOCK_VIEW => 'Sklad — prezeranie stavu a pohybov',
             self::STOCK_EDIT => 'Sklad — príjemky, výdajky, prevodky, inventúra, karty a sklady',
+            self::REPORTS_VIEW => 'Výsledky — predaje, marža, prehľady firmy',
+            self::EXPENSES_VIEW => 'Náklady — prijaté doklady (prezeranie)',
+            self::EXPENSES_EDIT => 'Náklady — zadávanie dokladov, úhrady, storno, kategórie',
         ];
     }
 

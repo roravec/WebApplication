@@ -94,7 +94,11 @@ class OrdersController
                 $canChange = false;
             }
         }
+        // e-mails to the customer: invoices sent from the panel + what the shop itself sent (its mail log; SQL source only)
+        $panelEmails = $invoice ? $this->ctx->invoices()->emails((int)$invoice['id']) : [];
+        $shopEmails = $source instanceof \Panel\Shop\ShopOrders ? $source->mailLog((string)$order['customer_email'], (string)$order['date_add']) : null;
         return $this->ctx->page('orders/detail', ['o' => $order, 'source' => $source, 'invoice' => $invoice, 'invoiceCompany' => $companyId,
+            'panelEmails' => $panelEmails, 'shopEmails' => $shopEmails,
             'canInvoice' => $this->ctx->can(Rights::INVOICES_EDIT) && $companyId && $this->ctx->canCompany($companyId),
             'canSeeInvoice' => $this->ctx->can(Rights::INVOICES_VIEW),
             'canChangeState' => $canChange, 'states' => $states],

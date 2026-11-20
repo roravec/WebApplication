@@ -105,6 +105,62 @@ class ShopOrders implements OrderSource
         return ['rows' => $rows, 'total' => $total];
     }
 
+    /**
+     * Look of one e-shop for e-mails to its customers (owner 2026-11-20: the customer must see where he bought):
+     * name, web address and its e-mail logo (PS_LOGO_MAIL, else PS_LOGO — the shop's own value, else the global one),
+     * read from the shop tables. Logo bytes are fetched from the shop's web (same hosting); '' when unavailable.
+     * @return array{name:string, web:string, logo:string, logo_mime:string}
+     */
+    public function brand(int $shopId): array
+    {
+        $b = ['name' => '', 'web' => '', 'logo' => '', 'logo_mime' => ''];
+        try {
+            $s = $this->db->fetchOne("SELECT s.name, u.domain_ssl, u.physical_uri FROM {$this->p}shop s
+                LEFT JOIN {$this->p}shop_url u ON u.id_shop = s.id_shop AND u.main = 1 WHERE s.id_shop = ?", [$shopId]);
+            if ($s === false) {
+                return $b;
+            }
+            $b['name'] = (string)$s['name'];
+            $b['web'] = $s['domain_ssl'] ? 'https://' . $s['domain_ssl'] . ($s['physical_uri'] ?: '/') : '';
+            $file = '';
+            foreach (['PS_LOGO_MAIL', 'PS_LOGO'] as $key) {
+                $file = (string)$this->db->fetchValue("SELECT value FROM {$this->p}configuration WHERE name = ? AND (id_shop = ? OR id_shop IS NULL)
+                    AND IFNULL(value, '') <> '' ORDER BY id_shop IS NULL, id_configuration DESC LIMIT 1", [$key, $shopId]);
+                if ($file !== '') {
+                    break;
+                }
+            }
+            if ($file !== '' && $b['web'] !== '' && preg_match('/^[A-Za-z0-9._-]+\.(png|jpe?g|gif)$/i', $file, $m)) {
+                $ctx = stream_context_create(['http' => ['timeout' => 5], 'ssl' => ['verify_peer' => true]]);
+                $bytes = @file_get_contents($b['web'] . 'img/' . $file, false, $ctx);
+                if (is_string($bytes) && $bytes !== '' && strlen($bytes) < 1000000) {
+                    $b['logo'] = $bytes;
+                    $b['logo_mime'] = strtolower($m[1]) === 'png' ? 'image/png' : (strtolower($m[1]) === 'gif' ? 'image/gif' : 'image/jpeg');
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+        return $b;
+    }
+
+    /**
+     * E-mails PrestaShop sent to this address since the order was placed (its own log, table mail — "Log e-mails" is
+     * on in the shops): order confirmation, state changes, … Read only. [] when the log is not available.
+     * @return array<array{template:string, subject:string, date_add:string}>
+     */
+    public function mailLog(string $email, string $since): array
+    {
+        if ($email === '') {
+            return [];
+        }
+        try {
+            return $this->db->query("SELECT template, subject, date_add FROM {$this->p}mail WHERE recipient = ? AND date_add >= ?
+                ORDER BY date_add DESC, id_mail DESC LIMIT 50", [$email, date('Y-m-d H:i:s', strtotime($since) - 60)]);
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
     /** One order with lines, addresses, payments, state history; null if not found. */
     public function find(int $id): ?array
     {

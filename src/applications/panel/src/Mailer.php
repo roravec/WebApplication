@@ -25,7 +25,8 @@ class Mailer
 
     /**
      * @param array $m from, from_name, reply_to, to (string[]), cc (string[]), bcc (string[]), subject, text,
-     *                 attachments: list of [filename, bytes, mime]
+     *                 attachments: list of [filename, bytes, mime]; optional html (+ text as the plain alternative)
+     *                 and embedded: list of [cid, bytes, mime, filename] referenced as <img src="cid:…">
      * @throws \RuntimeException with a readable reason when sending fails
      */
     public function send(array $m): void
@@ -62,8 +63,18 @@ class Mailer
                 }
             }
             $mail->Subject = (string)$m['subject'];
-            $mail->Body = (string)$m['text'];
-            $mail->isHTML(false);
+            if (!empty($m['html'])) {
+                // HTML (e.g. with the e-shop's logo) + the plain text for mail programs without HTML
+                $mail->isHTML(true);
+                $mail->Body = (string)$m['html'];
+                $mail->AltBody = (string)$m['text'];
+                foreach ((array)($m['embedded'] ?? []) as $img) {   // [cid, bytes, mime, filename]
+                    $mail->addStringEmbeddedImage($img[1], $img[0], $img[3] ?? $img[0], PHPMailer::ENCODING_BASE64, $img[2] ?? 'image/png');
+                }
+            } else {
+                $mail->Body = (string)$m['text'];
+                $mail->isHTML(false);
+            }
             foreach ((array)($m['attachments'] ?? []) as $a) {
                 $mail->addStringAttachment($a[1], $a[0], PHPMailer::ENCODING_BASE64, $a[2] ?? 'application/octet-stream');
             }

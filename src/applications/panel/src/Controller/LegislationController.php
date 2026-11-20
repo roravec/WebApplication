@@ -23,12 +23,33 @@ class LegislationController
         $this->ctx = $ctx;
     }
 
-    public function form(Request $req, array $params, array $errors = [], ?array $values = null): string
+    public function form(Request $req, array $params, array $errors = [], ?array $values = null, ?array $vatReg = null): string
     {
         $legal = new Legislation($this->ctx->db());
         $values = $values ?? ['rates' => $legal->allRates(), 'texts' => $legal->allTexts()];
         return $this->ctx->page('settings/legislation', ['values' => $values, 'errors' => $errors,
-            'textsNow' => $legal->textsOn(date('Y-m-d'))], 'Legislatíva', 'legislation');
+            'textsNow' => $legal->textsOn(date('Y-m-d')),
+            'vatReg' => $vatReg ?? (new \Panel\Reports\VatTurnover($this->ctx->db()))->rules()], 'Legislatíva', 'legislation');
+    }
+
+    /** POST /settings/legal/vat-registration — thresholds for the VAT registration of a non-payer (module E). */
+    public function saveVatRegistration(Request $req, array $params)
+    {
+        if (!Csrf::check($req)) {
+            return Response::text('Formulár vypršal, načítajte stránku znova.', 400);
+        }
+        $rows = [];
+        foreach ((array)$req->post('reg', []) as $r) {
+            if (is_array($r)) {
+                $rows[] = $r;
+            }
+        }
+        $error = (new \Panel\Reports\VatTurnover($this->ctx->db()))->saveRules($rows, $this->ctx->user());
+        if ($error !== null) {
+            return Response::html($this->form($req, $params, ['vat_registration' => $error], null, $rows), 422);
+        }
+        Session::flash('msg', 'Hranice registrácie k DPH uložené.');
+        return Response::redirect($this->ctx->url('/settings/legal'));
     }
 
     public function save(Request $req, array $params)

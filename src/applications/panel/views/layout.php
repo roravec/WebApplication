@@ -9,6 +9,8 @@ $nav = [
     ['invoices', '/invoices', 'Faktúry', Rights::INVOICES_VIEW],
     ['customers', '/customers', 'Odberatelia', Rights::INVOICES_VIEW],
     ['stock', '/stock', 'Sklad', Rights::STOCK_VIEW],
+    ['expenses', '/expenses', 'Náklady', Rights::EXPENSES_VIEW],
+    ['reports', '/reports/result', 'Výsledky', Rights::REPORTS_VIEW],
     ['companies', '/companies', 'Firmy', Rights::COMPANIES_MANAGE],
     ['employees', '/employees', 'Zamestnanci', Rights::ADMIN_ONLY],
     ['legislation', '/settings/legal', 'Legislatíva', Rights::ADMIN_ONLY],

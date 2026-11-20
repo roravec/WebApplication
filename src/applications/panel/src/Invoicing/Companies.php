@@ -87,8 +87,18 @@ class Companies
         // new settings added later get their default value without a migration
         $s['omega'] = array_merge(OmegaExport::DEFAULTS, isset($s['omega']) && is_array($s['omega']) ? $s['omega'] : []);
         $s['accountant'] = array_merge(AccountingPackage::DEFAULTS, isset($s['accountant']) && is_array($s['accountant']) ? $s['accountant'] : []);
+        // Výsledky: purchase prices in the shops are without VAT (PrestaShop) — a non-payer can count them with VAT
+        $s['costs'] = array_merge(self::COSTS_DEFAULTS, isset($s['costs']) && is_array($s['costs']) ? $s['costs'] : []);
+        // monthly summary for the owner (module F)
+        $s['summary'] = array_merge(self::SUMMARY_DEFAULTS, isset($s['summary']) && is_array($s['summary']) ? $s['summary'] : []);
         return $s;
     }
+
+    /** purchase_vat: as_entered = the purchase price as entered in the shop; add_vat = + the standard VAT rate (non-payer) */
+    const COSTS_DEFAULTS = ['purchase_vat' => 'as_entered'];
+
+    /** Monthly summary e-mail (Reports\MonthlySummary): address(es), on/off — sent from the 1st of the next month. */
+    const SUMMARY_DEFAULTS = ['email' => '', 'auto' => 0];
 
     public function saveExportSettings(int $id, array $settings): void
     {
@@ -108,6 +118,17 @@ class Companies
         'pay_cod' => 'Faktúra bude uhradená dobierkou.',
         'reminder_subject' => 'Upomienka: {document} {number} — {company}',
         'reminder_body' => "Dobrý deň,\n\nevidujeme neuhradenú {document_acc} č. {number} so splatnosťou {due_date}, zostáva uhradiť {rest}.\nProsíme o úhradu na účet {iban}, variabilný symbol {vs}. Faktúru prikladáme.\n\nAk ste už platili, považujte túto správu za bezpredmetnú.\n\n{company}\n{web}\n{phone}",
+    ];
+
+    /**
+     * Texts for documents from an e-shop order while the company's texts are the defaults above (owner 2026-11-20:
+     * the customer must recognise the shop he bought in, not be surprised by an unknown company). {shop}, {shop_web}.
+     */
+    const SHOP_MAIL = [
+        'subject' => '{document} {number} k objednávke {order} — {shop}',
+        'body' => "Dobrý deň,\n\nďakujeme za Vašu objednávku {order} v e-shope {shop}. V prílohe Vám posielame {document_acc} č. {number} na sumu {total}.\n{payment_info}\n\nĎakujeme za nákup.\n\n{shop}\n{shop_web}",
+        'reminder_subject' => 'Upomienka: {document} {number} k objednávke {order} — {shop}',
+        'reminder_body' => "Dobrý deň,\n\nk Vašej objednávke {order} v e-shope {shop} evidujeme neuhradenú {document_acc} č. {number} so splatnosťou {due_date}, zostáva uhradiť {rest}.\nProsíme o úhradu na účet {iban}, variabilný symbol {vs}. Faktúru prikladáme.\n\nAk ste už platili, považujte túto správu za bezpredmetnú.\n\n{shop}\n{shop_web}",
     ];
 
     /** E-mail settings of a company (JSON company.mail_settings) with defaults for missing keys. */

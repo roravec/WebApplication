@@ -178,5 +178,45 @@
       .catch(function () { note.textContent = 'Register je nedostupný.'; });
   });
 
-  document.addEventListener('DOMContentLoaded', function () { syncToggles(); recalc(); });
+  // ---------------------------------------------------------------- received document (Náklady): known supplier → fill the rest
+  document.addEventListener('change', function (ev) {
+    var t = ev.target, form = t.form;
+    if (!form || !form.hasAttribute('data-expense-form')) return;
+    if (t.name === 'supplier_name') {
+      var el = document.getElementById('expense-supplier-data'), data = {};
+      try { data = JSON.parse(el ? el.textContent : '{}'); } catch (e) { return; }
+      var s = data[t.value];
+      if (!s) return;
+      Object.keys(s).forEach(function (k) {
+        var f = form.elements[k];
+        if (f && k !== 'supplier_name' && s[k] !== null && s[k] !== '' && (!f.value || f.tagName === 'SELECT')) f.value = s[k];
+      });
+    }
+    if (t.hasAttribute('data-vat-company')) expenseVat(form);
+  });
+  function expenseVat(form) {
+    var sel = form.querySelector('[data-vat-company]'), note = form.querySelector('[data-vat-note]');
+    if (!sel || !note) return;
+    var payer = sel.options[sel.selectedIndex].getAttribute('data-vat') === '1';
+    note.textContent = payer ? 'Len odpočítateľná DPH z dokladu.' : 'Firma nie je platiteľ DPH — DPH sa neodpočítava, celá suma je náklad (uloží sa 0).';
+  }
+
+  // ---------------------------------------------------------------- order cost rules: show the select of the chosen type
+  function ocRow(row) {
+    var t = row.querySelector('[data-oc-type]');
+    if (!t) return;
+    Array.prototype.forEach.call(row.querySelectorAll('[data-oc-for]'), function (el) {
+      el.style.display = el.getAttribute('data-oc-for') === t.value ? '' : 'none';
+    });
+  }
+  document.addEventListener('change', function (ev) {
+    if (ev.target.hasAttribute && ev.target.hasAttribute('data-oc-type')) ocRow(closest(ev.target, '[data-oc-row]'));
+  });
+
+  document.addEventListener('DOMContentLoaded', function () {
+    syncToggles(); recalc();
+    Array.prototype.forEach.call(document.querySelectorAll('[data-oc-row]'), ocRow);
+    var ef = document.querySelector('[data-expense-form]');
+    if (ef) expenseVat(ef);
+  });
 })();

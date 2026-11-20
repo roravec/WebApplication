@@ -78,19 +78,73 @@ $cur = (string)$o['currency'];
   </section>
   <section class="card">
     <h2>Faktúra</h2>
+    <?php
+      $invoiceSent = array_values(array_filter($panelEmails, function ($m) { return $m['status'] === 'sent' && ($m['kind'] ?? 'invoice') === 'invoice'; }));
+      $orderAction = function ($path) use ($ctx, $src, $o) { return $ctx->orderUrl($src, (int)$o['id_order'], $path); };
+    ?>
     <?php if ($invoice): ?>
       <p><?php if ($canSeeInvoice): ?><a href="<?= $e($ctx->url('/invoices/' . $invoice['id'])) ?>"><?= $e($invoice['number'] ?: 'Koncept faktúry') ?></a><?php else: ?><?= $e($invoice['number'] ?: 'Koncept faktúry') ?><?php endif ?>
-        <?= $invoice['status'] === 'draft' ? '<span class="badge draft">koncept</span>' : '<span class="badge issued">vystavená</span>' ?></p>
+        <?= $invoice['status'] === 'draft' ? '<span class="badge draft">koncept</span>' : '<span class="badge issued">vystavená</span>' ?>
+        <?php if ($invoice['status'] !== 'draft' && $canSeeInvoice): ?> · <a href="<?= $e($ctx->url('/invoices/' . $invoice['id'] . '/pdf')) ?>">PDF</a><?php endif ?></p>
+      <?php if ($canInvoice && $invoice['status'] === 'draft'): ?>
+        <form method="post" action="<?= $e($orderAction('/invoice/issue')) ?>" class="inline">
+          <?= WebApplication\Csrf::field() ?>
+          <button class="primary" onclick="return confirm('Vystaviť faktúru? Po vystavení sa už nedá meniť (len dobropisom).')">Vystaviť faktúru</button>
+        </form>
+      <?php elseif ($canInvoice && $invoice['status'] === 'issued'): ?>
+        <form method="post" action="<?= $e($orderAction('/invoice/send')) ?>" class="inline">
+          <?= WebApplication\Csrf::field() ?>
+          <?php if ($invoiceSent): ?>
+            <input type="hidden" name="again" value="1">
+            <p class="muted small">Poslaná <?= $e($f->dateTime($invoiceSent[0]['created_at'])) ?> na <?= $e($invoiceSent[0]['recipients']) ?><?= count($invoiceSent) > 1 ? ' (spolu ' . count($invoiceSent) . '×)' : '' ?>.</p>
+            <button onclick="return confirm('Faktúra už bola zákazníkovi poslaná. Poslať ju ZNOVA?')">Poslať znova</button>
+          <?php else: ?>
+            <button class="primary" onclick="return confirm('Poslať faktúru zákazníkovi na <?= $e($o['customer_email']) ?>?')">Poslať faktúru zákazníkovi</button>
+          <?php endif ?>
+        </form>
+        <?php if ($canSeeInvoice): ?><p class="muted small"><a href="<?= $e($ctx->url('/invoices/' . $invoice['id'] . '/send')) ?>">Upraviť text e-mailu pred odoslaním</a></p><?php endif ?>
+      <?php endif ?>
     <?php elseif (!$invoiceCompany): ?>
       <p class="muted">E-shop nie je priradený k firme, ktorá zaň fakturuje (Firmy → E-shopy).</p>
     <?php elseif ($canInvoice): ?>
-      <form method="post" action="<?= $e($ctx->orderUrl($src, (int)$o['id_order'], '/invoice')) ?>">
+      <form method="post" action="<?= $e($orderAction('/invoice/issue')) ?>" class="inline">
         <?= WebApplication\Csrf::field() ?>
-        <button class="primary">Pripraviť faktúru</button>
+        <button class="primary" onclick="return confirm('Vystaviť faktúru z položiek objednávky? Po vystavení sa už nedá meniť (len dobropisom).')">Vystaviť faktúru</button>
       </form>
-      <p class="muted small">Vytvorí koncept z položiek objednávky; pred vystavením ho skontrolujete.</p>
+      <form method="post" action="<?= $e($orderAction('/invoice')) ?>" class="inline">
+        <?= WebApplication\Csrf::field() ?>
+        <button>Pripraviť koncept na úpravu</button>
+      </form>
+      <p class="muted small">„Vystaviť faktúru“ = hneď s číslom z položiek objednávky. Koncept = najprv upraviť, potom vystaviť.</p>
     <?php else: ?>
       <p class="muted">Bez faktúry.</p>
+    <?php endif ?>
+  </section>
+  <section class="card">
+    <h2>E-maily zákazníkovi</h2>
+    <?php
+      $mails = [];
+      foreach ($panelEmails as $m) {
+          $mails[] = ['at' => $m['created_at'], 'who' => 'panel', 'what' => $m['subject'] . ' (' . (($m['kind'] ?? '') === 'reminder' ? 'upomienka' : 'faktúra') . ')',
+              'to' => $m['recipients'], 'ok' => $m['status'] === 'sent'];
+      }
+      foreach ($shopEmails ?: [] as $m) {
+          $mails[] = ['at' => $m['date_add'], 'who' => 'e-shop', 'what' => $m['subject'] . ' (' . $m['template'] . ')', 'to' => $o['customer_email'], 'ok' => true];
+      }
+      usort($mails, function ($a, $b) { return strcmp($b['at'], $a['at']); });
+    ?>
+    <?php if (!$mails): ?>
+      <p class="muted">Zatiaľ žiadny<?= $shopEmails === null ? ' z panela (e-maily e-shopu sa pri tomto pripojení nedajú zobraziť)' : '' ?>.</p>
+    <?php else: ?>
+      <table class="grid small">
+        <thead><tr><th>Kedy</th><th>Odkiaľ</th><th>Čo</th><th>Komu</th></tr></thead>
+        <tbody>
+        <?php foreach ($mails as $m): ?>
+          <tr class="<?= $m['ok'] ? '' : 'inactive' ?>"><td><?= $e($f->dateTime($m['at'])) ?></td><td><?= $e($m['who']) ?></td>
+            <td><?= $e($m['what']) ?><?= $m['ok'] ? '' : ' — <b>neodoslané</b>' ?></td><td><?= $e($m['to']) ?></td></tr>
+        <?php endforeach ?>
+        </tbody>
+      </table>
     <?php endif ?>
   </section>
 </div>

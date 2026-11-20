@@ -56,6 +56,8 @@ class CompaniesController
             $values['omega'] = $id ? $repo->exportSettings($id)['omega'] : OmegaExport::DEFAULTS;
             $values['accountant'] = $id ? $repo->exportSettings($id)['accountant'] : \Panel\Invoicing\AccountingPackage::DEFAULTS;
             $values['mail'] = $id ? $repo->mailSettings($id) : Companies::MAIL_DEFAULTS;
+            $values['costs'] = $id ? $repo->exportSettings($id)['costs'] : Companies::COSTS_DEFAULTS;
+            $values['summary'] = $id ? $repo->exportSettings($id)['summary'] : Companies::SUMMARY_DEFAULTS;
         }
         $shops = $this->shopGroups();
         $series = [];
@@ -189,6 +191,13 @@ class CompaniesController
         $errors += $omegaErrors;
         list($v['accountant'], $accErrors) = \Panel\Invoicing\AccountingPackage::readSettings($req->post());
         $errors += $accErrors;
+        $v['costs'] = ['purchase_vat' => $req->post('cost_purchase_vat') === 'add_vat' ? 'add_vat' : 'as_entered'];
+        $v['summary'] = ['email' => trim((string)$req->post('sum_email', '')), 'auto' => $req->post('sum_auto') ? 1 : 0];
+        if ($v['summary']['email'] !== '' && \Panel\Mailer::parseList($v['summary']['email']) === null) {
+            $errors['summary'] = 'Neplatná e-mailová adresa pre mesačný súhrn.';
+        } elseif ($v['summary']['auto'] && $v['summary']['email'] === '') {
+            $errors['summary'] = 'Na posielanie mesačného súhrnu zadajte e-mail.';
+        }
         $v['mail'] = [];
         foreach (array_keys(Companies::MAIL_DEFAULTS) as $k) {
             $v['mail'][$k] = trim((string)$req->post('mail_' . $k, ''));
@@ -241,7 +250,8 @@ class CompaniesController
                 }
             }
             $repo->saveShops($id, $v['shops'], $v['shop_sources']);
-            $repo->saveExportSettings($id, array_merge($repo->exportSettings($id), ['omega' => $v['omega'], 'accountant' => $v['accountant']]));
+            $repo->saveExportSettings($id, array_merge($repo->exportSettings($id), ['omega' => $v['omega'], 'accountant' => $v['accountant'],
+                'costs' => $v['costs'], 'summary' => $v['summary']]));
             $repo->saveMailSettings($id, $v['mail']);
             foreach ($images as $kind => $img) {
                 $repo->setImage($id, $kind, $img === null ? null : $img[0], $img === null ? '' : $img[1]);
@@ -270,6 +280,26 @@ class CompaniesController
         }
         return (new Response($img[0], 200, ['Content-Type' => $img[1], 'Cache-Control' => 'private, max-age=300',
             'X-Content-Type-Options' => 'nosniff']));
+    }
+
+    /** GET /companies/{id}/preview[?pdf=1] — sample invoice with the company's current data, logo, stamp and account. */
+    public function preview(Request $req, array $params): Response
+    {
+        $id = (int)$params['id'];
+        if (!$this->ctx->canCompany($id) || $this->ctx->companies()->find($id) === null) {
+            return Response::text('Not Found', 404);
+        }
+        $renderer = $this->ctx->renderer();
+        $inv = $renderer->sample($id);
+        try {
+            if ($req->query('pdf')) {
+                return new Response(\Panel\Invoicing\Pdf::fromHtml($renderer->html($inv, true)), 200, ['Content-Type' => 'application/pdf',
+                    'Content-Disposition' => 'inline; filename="nahlad-faktury.pdf"', 'Cache-Control' => 'private, no-store']);
+            }
+            return Response::html($renderer->html($inv, false));
+        } catch (\Throwable $e) {
+            return Response::text('Náhľad sa nepodarilo vytvoriť: ' . $e->getMessage(), 500);
+        }
     }
 
     // ------------------------------------------------------------------ number series

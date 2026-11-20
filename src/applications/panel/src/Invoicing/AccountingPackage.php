@@ -14,6 +14,7 @@ use WebApplication\Entity\Client;
  *   faktury/*.pdf, dobropisy/*.pdf the archived PDFs of all documents of the package
  *   prehlad-dokladov-RRRR-MM.csv  overview of the documents (Excel, ; and decimal comma)
  *   uhrady-RRRR-MM.csv            payments recorded in the month
+ *   prijate/*                     files of the received documents (Náklady, module C) + prijate-doklady-RRRR-MM.csv
  *   NAVOD.txt                     how to import it in Omega
  * Documents: issued, issue date up to the end of the month, not in an earlier package (also late ones from previous
  * months). Each document goes into exactly one package; a sent package keeps its document list, so a re-send or a
@@ -34,6 +35,7 @@ class AccountingPackage
     /** @var Invoices */ private $invoices;
     /** @var Companies */ private $companies;
     /** @var callable function (array $invoice): string PDF bytes */ private $pdf;
+    /** @var \Panel\Expenses\Expenses|null */ private $expenses = null;
 
     public function __construct(Database $db, Invoices $invoices, Companies $companies, callable $pdf)
     {
@@ -41,6 +43,13 @@ class AccountingPackage
         $this->invoices = $invoices;
         $this->companies = $companies;
         $this->pdf = $pdf;
+    }
+
+    /** Received documents go into the package too (docs/sprava-firmy-specifikacia.md, module C). */
+    public function withExpenses(\Panel\Expenses\Expenses $expenses): self
+    {
+        $this->expenses = $expenses;
+        return $this;
     }
 
     private function t(string $name): string
@@ -106,7 +115,10 @@ class AccountingPackage
         if ($pkg && $pkg['doc_ids'] !== null) {
             $ids = array_map('intval', (array)json_decode($pkg['doc_ids'], true));
             $omegaIds = array_map('intval', (array)json_decode((string)$pkg['omega_ids'], true));
+            $expenseIds = array_map('intval', (array)json_decode((string)($pkg['expense_ids'] ?? '[]'), true));
+            $expenses = $this->expenses ? $this->expenses->byIds($expenseIds) : [];
         } else {
+            $expenses = $this->expenses ? $this->expenses->forAccounting($companyId, $from, $to) : [];
             $ids = array_map('intval', array_column($this->db->query("SELECT id FROM {$this->t('invoice')}
                 WHERE company_id = ? AND status = 'issued' AND issue_date BETWEEN ? AND ? AND accounting_package_id IS NULL
                 ORDER BY doc_type, issue_date, number", [$companyId, date('Y-m-d', strtotime($from . ' -1 year')), $to]), 'id'));
@@ -125,7 +137,7 @@ class AccountingPackage
         $payments = $this->db->query("SELECT p.paid_on, p.amount, p.method, p.note, p.bank_ref, i.number, i.variable_symbol, i.buyer_name, i.currency
             FROM {$this->t('invoice_payment')} p JOIN {$this->t('invoice')} i ON i.id = p.invoice_id
             WHERE i.company_id = ? AND p.paid_on BETWEEN ? AND ? ORDER BY p.paid_on, p.id", [$companyId, $from, $to]);
-        return ['package' => $pkg, 'docs' => $docs, 'omega' => $omega, 'payments' => $payments, 'from' => $from, 'to' => $to];
+        return ['package' => $pkg, 'docs' => $docs, 'omega' => $omega, 'payments' => $payments, 'expenses' => $expenses, 'from' => $from, 'to' => $to];
     }
 
     /**
@@ -204,14 +216,51 @@ class AccountingPackage
             }
             $zip->add("$base/uhrady-$period.csv", self::csv($prow));
         }
+        // received documents (costs): their files + overview
+        $expSum = 0.0;
+        if ($c['expenses']) {
+            $files = [];
+            $used = [];
+            foreach ($this->expenses->filesOf(array_column($c['expenses'], 'id')) as $f) {
+                $files[(int)$f['expense_id']][] = $f;
+            }
+            $erow = [['Dodávateľ', 'IČO', 'DIČ', 'IČ DPH', 'Číslo dokladu', 'Typ', 'VS', 'Vystavený', 'Dodanie', 'Splatnosť', 'Základ', 'DPH', 'Spolu',
+                      'Mena', 'Úhrada', 'Stav', 'Uhradené dňa', 'Kategória', 'Poznámka', 'Súbory']];
+            foreach ($c['expenses'] as $e) {
+                $expSum += (float)$e['total'];
+                $names = [];
+                foreach ($files[(int)$e['id']] ?? [] as $i => $f) {
+                    $ext = strtolower(pathinfo((string)$f['filename'], PATHINFO_EXTENSION)) ?: (\Panel\Expenses\Expenses::FILE_TYPES[$f['mime']] ?? 'bin');
+                    $name = substr($e['delivery_date'], 0, 10) . '_' . trim(preg_replace('/[^A-Za-z0-9_-]+/', '-', self::ascii($e['supplier_name'] . ' ' . $e['document_number'])), '-')
+                        . ($i ? '_' . ($i + 1) : '') . '.' . preg_replace('/[^a-z0-9]/', '', $ext);
+                    if (isset($used[$name])) {   // same supplier + number + date twice
+                        $name = pathinfo($name, PATHINFO_FILENAME) . '_' . $f['id'] . '.' . pathinfo($name, PATHINFO_EXTENSION);
+                    }
+                    $used[$name] = true;
+                    $zip->add("$base/prijate/$name", (string)$f['data']);
+                    $names[] = $name;
+                }
+                if (!$names) {
+                    $problems[] = 'Prijatý doklad bez súboru: ' . $e['supplier_name'] . ' ' . $e['document_number'] . ' (' . self::d($e['delivery_date']) . ')';
+                }
+                $erow[] = [$e['supplier_name'], $e['supplier_ico'], $e['supplier_dic'], $e['supplier_icdph'], $e['document_number'],
+                    \Panel\Expenses\Expenses::DOC_TYPES[$e['doc_type']] ?? $e['doc_type'], $e['variable_symbol'], self::d($e['issue_date']),
+                    self::d($e['delivery_date']), self::d($e['due_date']), self::n($e['total_net']), self::n($e['total_vat']), self::n($e['total']),
+                    $e['currency'], \Panel\Expenses\Expenses::PAYMENT_METHODS[$e['payment_method']] ?? $e['payment_method'],
+                    \Panel\Expenses\Expenses::STATUSES[$e['status']] ?? $e['status'], self::d($e['paid_on']), (string)$e['category'], (string)$e['note'],
+                    implode(', ', $names)];
+            }
+            $zip->add("$base/prijate-doklady-$period.csv", self::csv($erow));
+        }
         if ($zip->count()) {
             $zip->add("$base/NAVOD.txt", self::guide($period, (bool)$omegaIds, $problems));
         }
         return ['zip' => $zip->count() ? $zip->bytes() : '', 'name' => "$base.zip", 'doc_ids' => array_map(function ($d) { return (int)$d['id']; }, $c['docs']),
             'omega_ids' => $omegaIds, 'problems' => $problems,
+            'expense_ids' => array_map('intval', array_column($c['expenses'], 'id')),
             'summary' => ['invoices' => $sum['invoice'][0], 'invoices_total' => $sum['invoice'][1], 'credit_notes' => $sum['credit_note'][0],
                 'credit_total' => $sum['credit_note'][1], 'payments' => count($c['payments']), 'payments_total' => $paySum,
-                'omega' => count($omegaIds), 'currency' => $c['docs'] ? $c['docs'][0]['currency'] : 'EUR']];
+                'omega' => count($omegaIds), 'expenses' => count($c['expenses']), 'expenses_total' => $expSum, 'currency' => $c['docs'] ? $c['docs'][0]['currency'] : 'EUR']];
     }
 
     /**
@@ -265,12 +314,18 @@ class AccountingPackage
                 $this->db->execute("UPDATE {$this->t('invoice')} SET omega_exported_at = ? WHERE omega_exported_at IS NULL AND id IN ("
                     . implode(',', array_map('intval', $b['omega_ids'])) . ')', [date('Y-m-d H:i:s')]);
             }
-            $this->db->execute("UPDATE {$this->t('accounting_package')} SET status = 'sent', error = '', sent_at = ?, recipients = ?, doc_ids = ?, omega_ids = ?
-                WHERE id = ?", [date('Y-m-d H:i:s'), mb_substr(implode(', ', $to), 0, 500, 'UTF-8'), json_encode($b['doc_ids']), json_encode($b['omega_ids']), $id]);
+            if ($this->expenses && $b['expense_ids']) {
+                $this->expenses->markSent($b['expense_ids'], $id);
+            }
+            $this->db->execute("UPDATE {$this->t('accounting_package')} SET status = 'sent', error = '', sent_at = ?, recipients = ?, doc_ids = ?, omega_ids = ?,
+                expense_ids = ? WHERE id = ?", [date('Y-m-d H:i:s'), mb_substr(implode(', ', $to), 0, 500, 'UTF-8'), json_encode($b['doc_ids']),
+                json_encode($b['omega_ids']), json_encode($b['expense_ids']), $id]);
         });
-        Audit::log($this->db, $user, 'company', $companyId, 'accounting', self::label($period) . ': ' . self::docs(count($b['doc_ids'])) . ' → '
+        Audit::log($this->db, $user, 'company', $companyId, 'accounting', self::label($period) . ': ' . self::docs(count($b['doc_ids']))
+            . ($b['expense_ids'] ? ' + prijaté: ' . count($b['expense_ids']) : '') . ' → '
             . implode(', ', $to) . ($trigger === 'auto' ? ' (automaticky)' : ''));
         return ['ok' => true, 'message' => 'Účtovníkovi odoslané doklady za ' . $label . ': ' . self::docs(count($b['doc_ids']))
+            . ($b['expense_ids'] ? ', prijaté: ' . self::docs(count($b['expense_ids'])) : '')
             . ($b['problems'] ? ' — pozor: ' . implode('; ', $b['problems']) : '') . '.'];
     }
 
@@ -283,6 +338,9 @@ class AccountingPackage
     {
         $today = $today ?? date('Y-m-d');
         $period = self::previousPeriod($today);
+        if ($this->expenses) {
+            $this->expenses->generateRecurring($today);   // recurring costs first — they belong into the package
+        }
         $out = [];
         foreach ($this->db->query("SELECT id FROM {$this->t('company')} WHERE active = 1") as $r) {
             $id = (int)$r['id'];
@@ -324,17 +382,19 @@ class AccountingPackage
         $s = $b['summary'];
         $m = function ($x) use ($s) { return number_format((float)$x, 2, ',', ' ') . ' ' . $s['currency']; };
         $t = "Dobrý deň,\n\nposielame doklady firmy " . $company['name'] . ' za ' . self::label($period) . ".\n\n";
-        if (!$b['doc_ids'] && !$s['payments']) {
-            return $t . "Za tento mesiac nie sú žiadne vystavené doklady ani úhrady.\n\nE-mail poslal automaticky ERMA panel.";
+        if (!$b['doc_ids'] && !$s['payments'] && !$s['expenses']) {
+            return $t . "Za tento mesiac nie sú žiadne vystavené ani prijaté doklady ani úhrady.\n\nE-mail poslal automaticky ERMA panel.";
         }
         $t .= '- faktúry: ' . $s['invoices'] . ($s['invoices'] ? ' (spolu ' . $m($s['invoices_total']) . ')' : '') . "\n"
             . '- dobropisy: ' . $s['credit_notes'] . ($s['credit_notes'] ? ' (spolu ' . $m($s['credit_total']) . ')' : '') . "\n"
-            . '- úhrady: ' . $s['payments'] . ($s['payments'] ? ' (spolu ' . $m($s['payments_total']) . ')' : '') . "\n\n"
+            . '- úhrady: ' . $s['payments'] . ($s['payments'] ? ' (spolu ' . $m($s['payments_total']) . ')' : '') . "\n"
+            . '- prijaté doklady (náklady): ' . $s['expenses'] . ($s['expenses'] ? ' (spolu ' . $m($s['expenses_total']) . ')' : '') . "\n\n"
             . 'V prílohe (' . $b['name'] . "):\n"
             . ($s['omega'] ? '- omega-' . $period . '.txt — ' . self::docs($s['omega']) . " na import do Omegy (Firma → Import → Import z textového súboru)\n" : '')
-            . "- PDF všetkých dokladov (priečinky faktury, dobropisy)\n"
+            . ($b['doc_ids'] ? "- PDF vystavených dokladov (priečinky faktury, dobropisy)\n" : '')
             . ($b['doc_ids'] ? "- prehlad-dokladov-$period.csv — zoznam dokladov (Excel)\n" : '')
-            . ($s['payments'] ? "- uhrady-$period.csv — prijaté úhrady\n" : '');
+            . ($s['payments'] ? "- uhrady-$period.csv — prijaté úhrady\n" : '')
+            . ($s['expenses'] ? "- prijate/ — súbory prijatých dokladov, prijate-doklady-$period.csv — ich zoznam\n" : '');
         if ($b['problems']) {
             $t .= "\nPozor:\n- " . implode("\n- ", $b['problems']) . "\n";
         }
@@ -349,7 +409,8 @@ class AccountingPackage
                 . "(kódy evidencie a číselných radov sú nastavené v ERMA paneli pri firme; ak nesedia s Omegou, dajte vedieť).\r\n"
                 . "Doklady, ktoré už boli do Omegy exportované skôr, v súbore nie sú (v prehľade sú označené).\r\n\r\n";
         }
-        $t .= "PDF dokladov: priečinky faktury a dobropisy.\r\nPrehľad dokladov a úhrad: súbory .csv (otvoria sa v Exceli).\r\n";
+        $t .= "PDF vystavených dokladov: priečinky faktury a dobropisy.\r\nPrijaté doklady (náklady): priečinok prijate, zoznam prijate-doklady-$period.csv.\r\n"
+            . "Prehľad dokladov a úhrad: súbory .csv (otvoria sa v Exceli).\r\n";
         if ($problems) {
             $t .= "\r\nPozor:\r\n- " . implode("\r\n- ", $problems) . "\r\n";
         }

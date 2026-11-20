@@ -217,11 +217,95 @@ class InvoicesController
         }
         $src = (int)($params['src'] ?? 0);
         $orderId = (int)$params['id'];
-        $back = $this->ctx->orderUrl($src, $orderId);
         $existing = $this->ctx->invoices()->findByOrder($src, $orderId);
         if ($existing !== null) {
             return Response::redirect($this->ctx->url('/invoices/' . $existing['id']));
         }
+        $id = $this->draftFromOrder($src, $orderId);
+        if ($id instanceof Response) {
+            return $id;
+        }
+        Session::flash('msg', 'Koncept faktúry pripravený z objednávky. Skontrolujte ho a vystavte.');
+        return Response::redirect($this->ctx->url('/invoices/' . $id));
+    }
+
+    /**
+     * Order page, one click (owner 2026-11-20: "a button to generate the invoice when I am sure the order is OK"):
+     * the draft from the order (when there is none yet) issued right away; back on the order page.
+     */
+    public function issueFromOrder(Request $req, array $params)
+    {
+        if (!Csrf::check($req)) {
+            return Response::text('Formulár vypršal, načítajte stránku znova.', 400);
+        }
+        $src = (int)($params['src'] ?? 0);
+        $orderId = (int)$params['id'];
+        $back = Response::redirect($this->ctx->orderUrl($src, $orderId));
+        $existing = $this->ctx->invoices()->findByOrder($src, $orderId);
+        if ($existing !== null && $existing['status'] !== 'draft') {
+            Session::flash('msg', 'Faktúra k objednávke už je vystavená: ' . $existing['number'] . '.');
+            return $back;
+        }
+        $id = $existing !== null ? (int)$existing['id'] : $this->draftFromOrder($src, $orderId);
+        if ($id instanceof Response) {
+            return $id;
+        }
+        try {
+            $num = $this->ctx->invoices()->issue($id, $this->ctx->user());
+            $pdfError = $this->ctx->renderer()->archive($id);
+            Session::flash('msg', 'Faktúra vystavená: ' . $num['number'] . '.' . ($pdfError ? ' PDF sa uloží pri prvom otvorení (' . $pdfError . ').' : '')
+                . ' Zákazníkovi ju pošlete tlačidlom „Poslať faktúru zákazníkovi“.');
+        } catch (\RuntimeException $e) {
+            Session::flash('error', 'Faktúra nebola vystavená: ' . $e->getMessage() . ' Koncept nájdete v Faktúrach.');
+        }
+        return $back;
+    }
+
+    /**
+     * Order page: the issued invoice to the customer with the company's e-mail text. Sent before → only after the
+     * explicit second confirmation (field again=1), so the customer does not get it twice by mistake.
+     */
+    public function sendFromOrder(Request $req, array $params)
+    {
+        if (!Csrf::check($req)) {
+            return Response::text('Formulár vypršal, načítajte stránku znova.', 400);
+        }
+        $src = (int)($params['src'] ?? 0);
+        $orderId = (int)$params['id'];
+        $back = Response::redirect($this->ctx->orderUrl($src, $orderId));
+        $found = $this->ctx->invoices()->findByOrder($src, $orderId);
+        $inv = $found ? $this->load((int)$found['id']) : null;
+        if (!is_array($inv) || $inv['status'] !== 'issued') {
+            Session::flash('error', 'Najprv vystavte faktúru.');
+            return $back;
+        }
+        $sent = array_values(array_filter($this->ctx->invoices()->emails((int)$inv['id']),
+            function ($m) { return $m['status'] === 'sent' && ($m['kind'] ?? 'invoice') === 'invoice'; }));
+        if ($sent && !$req->post('again')) {
+            Session::flash('error', 'Faktúra už bola zákazníkovi poslaná (' . $sent[0]['created_at'] . ', ' . $sent[0]['recipients']
+                . '). Ak ju chcete poslať znova, potvrďte tlačidlom „Poslať znova“.');
+            return $back;
+        }
+        $d = $this->emailDefaults($inv, 'invoice');
+        $to = \Panel\Mailer::parseList($d['to']);
+        if (!$to) {
+            Session::flash('error', 'Objednávka nemá platný e-mail zákazníka — pošlite faktúru cez Faktúry → Poslať e-mailom.');
+            return $back;
+        }
+        if (!filter_var($d['from'], FILTER_VALIDATE_EMAIL)) {
+            Session::flash('error', 'Firma nemá platný e-mail odosielateľa (Firmy → E-mail s faktúrou).');
+            return $back;
+        }
+        $error = $this->deliver($inv, $d, $to, [], \Panel\Mailer::parseList($d['bcc']) ?: [], $d['subject'], $d['text'], 'invoice');
+        Session::flash($error === '' ? 'msg' : 'error', $error === '' ? 'Faktúra ' . $inv['number'] . ' poslaná zákazníkovi: ' . implode(', ', $to) . '.'
+            : 'E-mail sa nepodarilo odoslať: ' . $error);
+        return $back;
+    }
+
+    /** @return int|Response id of the new draft, or the answer (error message) */
+    private function draftFromOrder(int $src, int $orderId)
+    {
+        $back = $this->ctx->orderUrl($src, $orderId);
         $source = $this->ctx->orderSource($src);
         try {
             $order = $source ? $source->find($orderId) : null;
@@ -242,13 +326,11 @@ class InvoicesController
             return Response::redirect($back);
         }
         try {
-            $id = $this->ctx->invoices()->createFromOrder($order, $companyId, $this->ctx->user());
+            return (int)$this->ctx->invoices()->createFromOrder($order, $companyId, $this->ctx->user());
         } catch (\RuntimeException $e) {
             Session::flash('error', $e->getMessage());
             return Response::redirect($back);
         }
-        Session::flash('msg', 'Koncept faktúry pripravený z objednávky ' . $order['reference'] . '. Skontrolujte ho a vystavte.');
-        return Response::redirect($this->ctx->url('/invoices/' . $id));
     }
 
     /** A4 document for printing / saving as PDF (later also the source of the PDF file). */
@@ -369,17 +451,61 @@ class InvoicesController
         ];
         $pay = $inv['payment_method'] === 'transfer' ? $s['pay_transfer'] : ($inv['payment_method'] === 'cod' ? $s['pay_cod'] : $s['pay_paid']);
         $vars['payment_info'] = Legislation::fill($pay, $vars);
+        // document from an e-shop order: the shop's name, web and logo (owner 2026-11-20: the customer must see where he bought)
+        $brand = $this->shopBrand($inv);
+        $vars['shop'] = $brand ? $brand['name'] : (string)$company['name'];
+        $vars['shop_web'] = $brand ? $brand['web'] : (string)$company['web'];
+        $subject = $kind === 'reminder' ? $s['reminder_subject'] : $s['subject'];
+        $body = $kind === 'reminder' ? $s['reminder_body'] : $s['body'];
+        if ($brand) {   // texts the company has not changed → the e-shop version
+            $key = $kind === 'reminder' ? 'reminder_' : '';
+            $subject = $subject === \Panel\Invoicing\Companies::MAIL_DEFAULTS[$key . 'subject'] ? \Panel\Invoicing\Companies::SHOP_MAIL[$key . 'subject'] : $subject;
+            $body = $body === \Panel\Invoicing\Companies::MAIL_DEFAULTS[$key . 'body'] ? \Panel\Invoicing\Companies::SHOP_MAIL[$key . 'body'] : $body;
+        }
         return [
             'to' => (string)$inv['buyer_email'],
             'cc' => '',
             'bcc' => $s['bcc'],
-            'subject' => Legislation::fill($kind === 'reminder' ? $s['reminder_subject'] : $s['subject'], $vars),
-            'text' => trim(preg_replace("/\n{3,}/", "\n\n", Legislation::fill($kind === 'reminder' ? $s['reminder_body'] : $s['body'], $vars))),
+            'subject' => Legislation::fill($subject, $vars),
+            'text' => trim(preg_replace("/\n{3,}/", "\n\n", Legislation::fill($body, $vars))),
             'kind' => $kind,
             'from' => $s['from_email'] ?: (string)$company['email'],
-            'from_name' => $s['from_name'] ?: (string)$company['name'],
+            'from_name' => $s['from_name'] ?: ($brand ? $brand['name'] : (string)$company['name']),
             'reply_to' => $s['reply_to'],
+            'brand' => $brand,
+            'footer' => $brand ? Legislation::fill(($inv['doc_type'] === 'credit_note' ? 'Dobropis' : 'Faktúru')
+                . ' vystavuje {company}, prevádzkovateľ e-shopu {shop}.', $vars) : '',
         ];
+    }
+
+    /** Name / web / logo of the e-shop the document's order came from (shop tables of this database); null otherwise. */
+    private function shopBrand(array $inv): ?array
+    {
+        if (empty($inv['shop_id']) || (int)($inv['shop_connection_id'] ?? 0) !== 0 || !$this->ctx->shopOrders()->available()) {
+            return null;
+        }
+        $b = $this->ctx->shopOrders()->brand((int)$inv['shop_id']);
+        return $b['name'] !== '' ? $b : null;
+    }
+
+    /** HTML e-mail in the e-shop's look: its logo (or name) on top, the text, who issues the document at the bottom. */
+    private function brandedHtml(array $brand, string $text, string $footer, bool $logo): string
+    {
+        $e = function ($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); };
+        $head = $logo ? '<img src="cid:shoplogo" alt="' . $e($brand['name']) . '" style="max-width:240px;max-height:90px;border:0">'
+            : '<span style="font-size:22px;font-weight:bold">' . $e($brand['name']) . '</span>';
+        $body = nl2br($e($text));
+        if ($brand['web'] !== '') {
+            $body = str_replace($e($brand['web']), '<a href="' . $e($brand['web']) . '" style="color:#1a56db">' . $e($brand['web']) . '</a>', $body);
+        }
+        return '<!doctype html><html lang="sk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>'
+            . '<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;color:#1f2937">'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:24px 0"><tr><td align="center">'
+            . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:100%;background:#ffffff;border-radius:8px">'
+            . '<tr><td style="padding:24px 28px;border-bottom:1px solid #e5e7eb">' . $head . '</td></tr>'
+            . '<tr><td style="padding:24px 28px;font-size:15px;line-height:1.55">' . $body . '</td></tr>'
+            . ($footer !== '' ? '<tr><td style="padding:16px 28px;font-size:12px;color:#6b7280;border-top:1px solid #e5e7eb">' . $e($footer) . '</td></tr>' : '')
+            . '</table></td></tr></table></body></html>';
     }
 
     public function sendForm(Request $req, array $params, array $errors = [], ?array $values = null)
@@ -434,20 +560,37 @@ class InvoicesController
         if ($errors) {
             return Response::html($this->sendForm($req, $params, $errors, $v), 422);
         }
-        $recipients = array_merge($to, $cc ?: [], $bcc ?: []);
+        $error = $this->deliver($inv, $d, $to, $cc ?: [], $bcc ?: [], $v['subject'], $v['text'], $kind);
+        if ($error !== '') {
+            return Response::html($this->sendForm($req, $params, ['send' => 'E-mail sa nepodarilo odoslať: ' . $error], $v), 502);
+        }
+        Session::flash('msg', ($kind === 'reminder' ? 'Upomienka odoslaná: ' : 'E-mail odoslaný: ') . implode(', ', $to) . '.');
+        return Response::redirect($this->ctx->url('/invoices/' . $inv['id']));
+    }
+
+    /** E-mail with the PDF of the document; logged (sent / failed). @return string '' or the error */
+    private function deliver(array $inv, array $d, array $to, array $cc, array $bcc, string $subject, string $text, string $kind): string
+    {
+        $recipients = array_merge($to, $cc, $bcc);
         try {
             list($pdf) = $this->ctx->renderer()->pdf($inv);
             $name = preg_replace('/[^A-Za-z0-9_-]+/', '-', (string)$inv['number']) . '.pdf';
-            $this->mailer()->send(['from' => $d['from'], 'from_name' => $d['from_name'], 'reply_to' => $d['reply_to'],
-                'to' => $to, 'cc' => $cc ?: [], 'bcc' => $bcc ?: [], 'subject' => $v['subject'], 'text' => $v['text'],
-                'attachments' => [[$name, $pdf, 'application/pdf']]]);
+            $m = ['from' => $d['from'], 'from_name' => $d['from_name'], 'reply_to' => $d['reply_to'],
+                'to' => $to, 'cc' => $cc, 'bcc' => $bcc, 'subject' => $subject, 'text' => $text,
+                'attachments' => [[$name, $pdf, 'application/pdf']]];
+            if (!empty($d['brand'])) {   // e-shop look: logo + text + who issues the document
+                $logo = $d['brand']['logo'] !== '';
+                $m['html'] = $this->brandedHtml($d['brand'], $text, (string)$d['footer'], $logo);
+                $m['text'] = $text . ($d['footer'] !== '' ? "\n\n-- \n" . $d['footer'] : '');
+                $m['embedded'] = $logo ? [['shoplogo', $d['brand']['logo'], $d['brand']['logo_mime'], 'logo']] : [];
+            }
+            $this->mailer()->send($m);
         } catch (\Throwable $e) {
-            $this->ctx->invoices()->logEmail((int)$inv['id'], $recipients, $v['subject'], 'failed', $e->getMessage(), $this->ctx->user(), $kind);
-            return Response::html($this->sendForm($req, $params, ['send' => 'E-mail sa nepodarilo odoslať: ' . $e->getMessage()], $v), 502);
+            $this->ctx->invoices()->logEmail((int)$inv['id'], $recipients, $subject, 'failed', $e->getMessage(), $this->ctx->user(), $kind);
+            return $e->getMessage();
         }
-        $this->ctx->invoices()->logEmail((int)$inv['id'], $recipients, $v['subject'], 'sent', '', $this->ctx->user(), $kind);
-        Session::flash('msg', ($kind === 'reminder' ? 'Upomienka odoslaná: ' : 'E-mail odoslaný: ') . implode(', ', $to) . '.');
-        return Response::redirect($this->ctx->url('/invoices/' . $inv['id']));
+        $this->ctx->invoices()->logEmail((int)$inv['id'], $recipients, $subject, 'sent', '', $this->ctx->user(), $kind);
+        return '';
     }
 
     private function mailer(): \Panel\Mailer

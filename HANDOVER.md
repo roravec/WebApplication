@@ -288,7 +288,7 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
      next one). Assigned only after a successful send; a sent package keeps its list → "Poslať znova" / ZIP later =
      identical content. Download never marks anything.
    - Automatic: the hosting has no reliable cron → the **dashboard** sends due packages (first visit from day N of
-     the next month); optional cron URL `/panel/cron/accounting?token=<apps.panel.cron_token>` (404 without a token).
+     the next month); optional cron URL `/panel/cron/accounting?token=<apps.panel.cron_token>` (404 without a token) — also sends the monthly summaries.
      Double sending prevented by claiming the row (INSERT IGNORE / conditional UPDATE); a failed attempt is retried
      at most once an hour; a crashed "sending" is taken over after 30 min. Audit: `accounting`, `accounting_failed`.
    - Tests: 52 pass on PHP 7.3 + 8.4 (ZIP read back with CRC check, content, failure, send once / again, late document,
@@ -347,6 +347,66 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
    SMTP): built by the script, content verified equal to the hand-built one (only line endings + the fixed root pages
    differ), tested in a temp container on the dev server: hbkpravotice, bnhl, erma, panel login → dashboard; `/config/*`,
    `/vendor/*` → 403. Dev server re-synced with the script, crawl OK.
+24. **Phase A LIVE (2026-11-20)** — owner uploaded + switched; all sites OK (also erma.sk without www). config.php
+   filled by Claude on the owner's request (molesk login from the hosting configs, SMTP info@erma.sk / active24 from the
+   AmerickeSPZ shop settings; never printed). Backup before: ps-pack in the web root, both databases
+   (`$EXTRA_DATABASES` for ermaskretail) → home server `/mnt/storage/erma/backups` (RAID1; SSD extended by the owner).
+   Findings: `ermaskretail` already holds `aqua_*`, `lcs_*`, `branchmanager_*` (only ADD tables there);
+   aqua.erma.sk / mobileservice.erma.sk have their own folders on the hosting. Panel fixes after the first start: item
+   in Next tasks 4 (000_framework_tables.sql, /setup, login = e-mail). Web_ERMA is a git repo now.
+25. **Shop go-live + A2 ready (2026-11-20)** — Web_store tools + rehearsal on a simulation of the hosting
+   (Web_store `docs/upgrade-plan.md` „A′“, „C. Go-live day“; here `docs/nasadenie-a-udrzba.md` phase C). A2 is done by
+   `erma-deploy.php` at the switch (copies panel_* + hbkpravotice_*, rewrites config.php database, rollback restores).
+   Waiting for the owner's evening.
+26. **LIVE 2026-11-20 evening: PrestaShop 9.2.0 on PHP 8.5 in `ermaskretail` + A2** (owner: "the goal is the newest
+   version, 8.2.9 is only a step"). Round 1 = 8.2.9 (switched, then rolled back), round 2 = 9.2.0 from the same frozen
+   data (Web_store `devserver/upgrade-run9.sh`: ps_mbo removed completely — its 2.4.1 services break the PS 9 container;
+   old GoPay out; official GoPay `prestashopgopay` 1.0.9 in with the accounts copied from the old module per shop
+   (`gopay-migrate.php`); its SDK needed a patch, `gopay-guzzle-patch.py` — blockreassurance / productcomments ship
+   Guzzle 5). Hosting: PHP is set PER HOSTNAME (aliases kept 7.3 until support switched them; afterwards their SSL
+   certificates had to be re-issued). Whole framework (panel, hbkpravotice, bnhl, erma) runs on PHP 8.5 + ermaskretail.
+   Old tools admin/, sklad/, beta/ on PHP 8.5: not verified (owner checks). erma_cod 1.0.2: the order summaries show
+   the COD fee + total while "Dobierka" is selected (consumer law: total price before ordering).
+27. **Panel — invoice from the order page** (owner 2026-11-20: a button to generate the invoice "when I'm sure the order
+   is OK", a second one to send it, and the e-mails the customer got must be visible so nothing goes twice):
+   order detail → "Vystaviť faktúru" (draft from the order + issued at once; "Pripraviť koncept na úpravu" stays),
+   "Poslať faktúru zákazníkovi" (company e-mail text; sent before → only via "Poslať znova" with confirmation),
+   "E-maily zákazníkovi" = panel invoice e-mails + the shop's own mail log (`ps_mail`, PS_LOG_EMAILS is on; matched by
+   recipient + date ≥ order; SQL source only). Invoice stamp: already in Firmy → firma (logo + pečiatka, printed beside
+   "Vystavil"). Tested on dev (issue → FA2026/000200 → sent via Mailpit → second send refused).
+   **E-mail in the e-shop's look** (owner: the customer must not be surprised who sends what invoice): documents from a
+   shop order → HTML e-mail with the shop's e-mail logo (PS_LOGO_MAIL / PS_LOGO of that shop, fetched from its web,
+   embedded as cid:shoplogo; name only when unavailable), sender name = shop name (address stays the company's),
+   texts `Companies::SHOP_MAIL` while the company kept the default texts ({shop}, {shop_web} usable in own texts),
+   footer "Faktúru vystavuje {company}, prevádzkovateľ e-shopu {shop}"; plain-text alternative. `ShopOrders::brand()`.
+   **Invoice preview in Firmy → firma** ("Náhľad" / "PDF"): `InvoiceRenderer::sample()` — today's data, logo, stamp,
+   first active account, nothing saved.
+   **Next (owner 2026-11-20, all wanted, "as many easy things as possible"):** order editing (products / quantities /
+   prices / carrier / addresses / note), shipping (Packeta + post: shipments, labels, tracking, bulk states), returns
+   + credit notes (incl. GoPay refund), products / prices / discounts / categories for all shops. Writes ONLY through
+   the PrestaShop Webservice (order line editing is limited there → may need an own PS module endpoint — decide).
+28. **Správa firmy** (owner 2026-11-20: "think it through and build a polished system for running the company"):
+   design + phases in **docs/sprava-firmy-specifikacia.md** (A sales & margin, B purchase prices, C received documents /
+   costs, D order costs, E result & cash flow & receivables / payables & VAT-registration turnover, F dashboard).
+   Phase 1 (A) done: Výsledky → Predaje a marža, permission `reports.view`, test, verified on dev. Phase 2 (B) done: Výsledky → Nákupné ceny
+   (writes wholesale_price via the local connection's Webservice, queue in the session, audit), company setting
+   costs.purchase_vat (non-payer + VAT). Phase 3 part C1 done: **Náklady** (`/expenses`, rights `expenses.view/edit`)
+   — received documents with files (PDF/photo/XML, in the DB), supplier autofill + RPO, duplicate check, paid / unpaid,
+   cancel with reason (never deleted), categories with kind (goods / order / overhead), CSV; they go into the monthly
+   accountant package (`prijate/` + CSV, `accounting_package.expense_ids`). Migration 013. Test + verified on dev.
+   Phase 3 part C2 done (migration 014): statement import pairs OUTGOING payments with unpaid costs (VS, else supplier
+   IBAN + amount) or creates a new paid cost (bank fee); `expense.bank_ref` unique; import page now for invoices.edit OR
+   expenses.edit. Recurring costs (Náklady → Opakované, `expense_recurring`, `Expenses::generateRecurring` — run on the
+   Náklady list, dashboard/cron via AccountingPackage::sendDue, manual package send). Tests 60/60, verified on dev.
+   Phase 4 (D) done (migration 015): Výsledky → Náklady objednávok (`order_cost_rule`: shipping by carrier id_reference,
+   payment by module, packaging; fixed + %; valid from/to; most specific rule wins) → Predaje a marža show the
+   contribution margin (cards, month/shop columns, CSV). `Reports\OrderCosts`. Tests 61/61, verified on dev.
+   Phases 5 (E) + 6 (F) done (migration 016): Výsledky → Výsledok firmy (`Reports\BusinessResult`: profit by month vs.
+   last year, by e-shop, order costs real vs. estimate), Výsledky → Peniaze (`Reports\Money`: receivables/payables aging,
+   in/out by month), VAT registration turnover (`Reports\VatTurnover`, thresholds = data in Legislatíva,
+   `vat_registration_rule`), dashboard "Treba urobiť" + company cards (`Reports\Todo`), monthly summary e-mail
+   (`Reports\MonthlySummary`, company setting Firmy → Výsledky, `monthly_summary`; dashboard + cron URL). Tests 62/62,
+   lint 7.3/8.4, all pages verified on dev, summary delivered to Mailpit. ALL modules A–F of the spec done.
 
 ### Dev environment (home server)
 - `~/webapplication-dev` (copy via `tar | ssh`, not a git clone), `dev/compose.yml`, web **http://192.168.0.11:8090/**:

@@ -50,7 +50,8 @@ class CustomersController
     /** JSON: company data by IČO from the register of legal entities (RPO). */
     public function rpo(Request $req, array $params): Response
     {
-        if (!$this->ctx->can(\Panel\Rights::INVOICES_EDIT) && !$this->ctx->can(\Panel\Rights::COMPANIES_MANAGE)) {
+        if (!$this->ctx->can(\Panel\Rights::INVOICES_EDIT) && !$this->ctx->can(\Panel\Rights::COMPANIES_MANAGE)
+            && !$this->ctx->can(\Panel\Rights::EXPENSES_EDIT)) {
             return Response::json(['error' => 'Prístup zamietnutý.'], 403);
         }
         try {

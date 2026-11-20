@@ -23,6 +23,7 @@ Pri každej novej funkcii (e-faktúra, PDF, PAY by square …) ho doplniť.
 | Platiteľ / neplatiteľ DPH firmy, IČ DPH, od kedy | **Firmy → firma → Režim DPH** | `company_vat` | podľa dátumu dodania |
 | Údaje firmy na doklade (OR zápis, adresa, IČO, DIČ, kontakty, logo, pečiatka) | **Firmy → firma** | `company` | zmrazia sa pri vystavení |
 | Číselné rady, formát čísla a VS, nulovanie, ďalšie číslo | **Firmy → firma → Číselné rady** | `series`, `series_counter` | formát použitého radu sa už nedá zmeniť (založí sa nový rad) |
+| Hranica obratu na registráciu k DPH (obdobie kalendárny rok / 12 mesiacov, hranica, okamžitá hranica; SK od 2025: 50 000 € / 62 500 €, § 4 zákona o DPH) | **Legislatíva → Registrácia k DPH** | `vat_registration_rule` | Výsledok firmy, nástenka a mesačný súhrn neplatiteľa (`Reports\VatTurnover`) podľa dátumu |
 | Export do Omegy: verzia formátu KROS, kódy evidencie, číselných radov, desatinný oddeľovač | **Firmy → firma → Export do Omegy** | `company.export_settings` (JSON) | pri exporte |
 
 Zmena v paneli sa zapíše do histórie (`audit`). Formulár Legislatívy nedovolí uložiť stav bez základnej sadzby
@@ -44,6 +45,7 @@ alebo bez niektorého typu textu (ochrana pred omylom vymazaním).
 | Register právnických osôb (RPO) | `Invoicing\Rpo`, `HttpClient` | API ŠÚ SR, licencia CC BY 4.0 (zdroj sa zobrazuje); pri zmene API upraviť `map()` + test |
 | Archív PDF vystavených dokladov | `invoice_pdf` (PDF + SHA-256), `InvoiceRenderer::archive()` | úschova 10 rokov (zákon o účtovníctve § 35); uložené PDF sa nikdy nemení |
 | Mesačný balík pre účtovníka | `Invoicing\AccountingPackage` (súbor pre Omegu cez `OmegaExport`, PDF z archívu, CSV prehľady) | sám nemá zákonné pravidlá — formát Omegy sa mení len v `OmegaExport` (verzie); do balíka idú archivované PDF, takže účtovník dostane presne vystavené doklady |
+| Prijaté doklady (Náklady): odpočet DPH len platiteľ (podľa `company_vat` k dátumu dodania, inak DPH = 0), dobropis dodávateľa záporne, nič sa nemaže (storno s dôvodom, súbory v `expense_file` so SHA-256 — úschova 10 rokov, § 35 zákona o účtovníctve) | `ExpensesController::save()`, `Expenses` | jedno miesto; zmena pravidla = tam + test „received documents“ |
 | Typy dokladov (faktúra, dobropis; neskôr zálohová faktúra …) | `Numbering::TYPES`, `Invoices` | nový typ dokladu má vlastné pravidlá |
 | Databáza | `panel/sql/NNN_*.sql` — nová migrácia, aplikuje sa sama | |
 

@@ -108,8 +108,14 @@ class PanelContext
     public function accounting(): \Panel\Invoicing\AccountingPackage
     {
         $renderer = $this->renderer();
-        return new \Panel\Invoicing\AccountingPackage($this->db(), $this->invoices(), $this->companies(),
-            function (array $inv) use ($renderer) { return $renderer->pdf($inv)[0]; });
+        return (new \Panel\Invoicing\AccountingPackage($this->db(), $this->invoices(), $this->companies(),
+            function (array $inv) use ($renderer) { return $renderer->pdf($inv)[0]; }))->withExpenses($this->expenses());
+    }
+
+    /** Received documents and costs (docs/sprava-firmy-specifikacia.md, module C). */
+    public function expenses(): \Panel\Expenses\Expenses
+    {
+        return new \Panel\Expenses\Expenses($this->db());
     }
 
     public function db(): \WebApplication\Database\Database
@@ -168,6 +174,58 @@ class PanelContext
                 $local ? (string)$local['name'] : 'E-shopy (databáza)');
         }
         return $this->shopOrders;
+    }
+
+    /** Sales and margin of the e-shops in this database (docs/sprava-firmy-specifikacia.md, module A). */
+    public function salesReport(): \Panel\Reports\SalesReport
+    {
+        $cfg = $this->shopConfig();
+        return new \Panel\Reports\SalesReport($this->app->getDatabase(), (string)($cfg['prefix'] ?? 'ps_'), (string)($cfg['lang'] ?? 'sk'));
+    }
+
+    /** Order cost rules (module D): shipping, payment fees, packaging per order. */
+    public function orderCosts(): \Panel\Reports\OrderCosts
+    {
+        return new \Panel\Reports\OrderCosts($this->app->getDatabase(), (string)($this->shopConfig()['prefix'] ?? 'ps_'));
+    }
+
+    /**
+     * Per shop and date: net amounts for a VAT payer, gross for a non-payer; a non-payer whose company setting says
+     * "pripočítať DPH" counts purchase prices (entered without VAT in the shop) with the standard rate of that date.
+     * For SalesReport::compute.
+     */
+    public function vatBasis(): callable
+    {
+        $companies = $this->companies();
+        $legislation = new \Panel\Invoicing\Legislation($this->db());
+        $cache = [];
+        return function (int $shop, string $date) use ($companies, $legislation, &$cache) {
+            $company = $companies->companyForShop(0, $shop);
+            $k = (int)$company . '|' . substr($date, 0, 7);
+            if (!isset($cache[$k])) {
+                if (!$company) {
+                    $cache[$k] = ['net' => false, 'cost_factor' => 1.0];   // no company: as a non-payer, prices as entered
+                } else {
+                    $payer = (bool)$companies->vatOn($company, $date)['vat_payer'];
+                    $addVat = !$payer && $companies->exportSettings($company)['costs']['purchase_vat'] === 'add_vat';
+                    $rate = $addVat ? (float)$legislation->standardRate('SK', $date) : 0.0;
+                    $cache[$k] = ['net' => $payer, 'cost_factor' => 1 + $rate / 100];
+                }
+            }
+            return $cache[$k];
+        };
+    }
+
+    /** E-shops of this database (order source 0) invoiced by the company. @return int[] */
+    public function companyShops(int $companyId): array
+    {
+        $out = [];
+        foreach ($this->companies()->shopMap() as $key => $cid) {
+            if ($cid === $companyId && strpos($key, '0:') === 0) {
+                $out[] = (int)substr($key, 2);
+            }
+        }
+        return $out;
     }
 
     private function shopConfig(): array

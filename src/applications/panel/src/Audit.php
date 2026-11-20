@@ -12,6 +12,7 @@ class Audit
         'credit_note' => 'vytvoril dobropis', 'print' => 'vytlačil', 'send' => 'odoslal e-mailom', 'remind' => 'poslal upomienku', 'send_failed' => 'neodoslal e-mail (chyba)', 'export' => 'exportoval',
         'payment' => 'zapísal úhradu', 'payment_delete' => 'zmazal úhradu', 'bank_import' => 'importoval výpis', 'bank_download' => 'stiahol pohyby z banky', 'state' => 'zmenil stav objednávky',
         'accounting' => 'poslal doklady účtovníkovi', 'accounting_failed' => 'neodoslal doklady účtovníkovi (chyba)',
+        'paid' => 'označil ako uhradený', 'unpaid' => 'zrušil úhradu', 'cancel' => 'stornoval', 'file' => 'priložil súbor', 'save' => 'uložil', 'summary' => 'poslal mesačný súhrn',
     ];
 
     public static function log(Database $db, ?Client $user, string $entity, int $entityId, string $action, string $details = ''): void

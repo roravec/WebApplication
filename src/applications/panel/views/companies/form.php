@@ -96,6 +96,14 @@ $bankRow = function (array $b) use ($e) { ?>
       <?php endif ?>
       <label>Nahrať PNG/JPG (max 2 MB) <input type="file" name="stamp" accept="image/png,image/jpeg"><?= $err('stamp') ?></label>
     </section>
+    <?php if ($company): ?>
+    <section class="card">
+      <h2>Náhľad faktúry</h2>
+      <p class="muted small">Vzorová faktúra s uloženými údajmi firmy, logom, pečiatkou a bankovým účtom (po zmene najprv uložte).</p>
+      <p><a class="button" href="<?= $e($ctx->url('/companies/' . $company['id'] . '/preview')) ?>" target="_blank">Náhľad</a>
+         <a class="button" href="<?= $e($ctx->url('/companies/' . $company['id'] . '/preview?pdf=1')) ?>" target="_blank">PDF</a></p>
+    </section>
+    <?php endif ?>
     <section class="card">
       <h2>E-shopy</h2>
       <p class="muted small">Objednávky ktorých e-shopov fakturuje táto firma.</p>
@@ -140,12 +148,29 @@ $bankRow = function (array $b) use ($e) { ?>
     <label class="check"><input type="checkbox" name="acc_auto" value="1"<?= $ac['auto'] ? ' checked' : '' ?>> Posielať automaticky za predchádzajúci mesiac</label>
     <label>od dňa v mesiaci <input type="number" name="acc_day" min="1" max="28" value="<?= (int)$ac['day'] ?>"></label>
   </section>
+  <?php $cs = $values['costs'] ?? Panel\Invoicing\Companies::COSTS_DEFAULTS; ?>
+  <section class="card form-grid">
+    <h2>Výsledky (prehľady)</h2>
+    <p class="wide muted small">Nákupné ceny v e-shopoch sú bez DPH. Firma, ktorá nie je platiteľ DPH, si DPH od dodávateľa neodpočíta —
+      jej skutočný náklad je s DPH. Platí len pre obdobia, keď firma nie je platiteľ.</p>
+    <label class="wide">Nákupné ceny tovaru v prehľadoch
+      <select name="cost_purchase_vat">
+        <option value="as_entered"<?= $cs['purchase_vat'] === 'as_entered' ? ' selected' : '' ?>>tak, ako sú v e-shope</option>
+        <option value="add_vat"<?= $cs['purchase_vat'] === 'add_vat' ? ' selected' : '' ?>>pripočítať DPH (nakupujeme od platiteľov DPH)</option>
+      </select></label>
+    <?php $sm = $values['summary'] ?? Panel\Invoicing\Companies::SUMMARY_DEFAULTS; ?>
+    <?= $err('summary') ?>
+    <label class="wide">Mesačný súhrn e-mailom (majiteľ) <input name="sum_email" value="<?= $e($sm['email']) ?>" placeholder="majitel@example.sk (viac adries oddeľte čiarkou)"></label>
+    <label class="check wide"><input type="checkbox" name="sum_auto" value="1"<?= $sm['auto'] ? ' checked' : '' ?>> Po skončení mesiaca poslať súhrn:
+      tržby, zisk, porovnanie s minulým rokom, pohľadávky a záväzky, obrat pre DPH, čo treba urobiť</label>
+  </section>
   <?php $ms = $values['mail']; ?>
   <section class="card form-grid">
     <h2>E-mail s faktúrou</h2>
     <p class="wide muted small">Odosielateľ a text e-mailu, ktorým sa posiela faktúra (pred odoslaním sa dá upraviť).
       Zástupné znaky: {document} {document_lower} {document_acc} (faktúru / dobropis) {number} {total} {due_date} {vs} {iban} {order} {customer} {company}
-      {web} {email} {phone} {payment_info}. Prístup k SMTP serveru je v config.php, nie tu.</p>
+      {web} {email} {phone} {payment_info}, pri faktúre z objednávky aj {shop} {shop_web} (e-shop). Kým texty nezmeníte, faktúra
+      z objednávky ide v štýle e-shopu (jeho logo a názov). Prístup k SMTP serveru je v config.php, nie tu.</p>
     <?= $err('mail') ?>
     <label>Meno odosielateľa <input name="mail_from_name" value="<?= $e($ms['from_name']) ?>" placeholder="<?= $e($v('name')) ?>"></label>
     <label>E-mail odosielateľa <input name="mail_from_email" value="<?= $e($ms['from_email']) ?>" placeholder="<?= $e($v('email')) ?>"></label>

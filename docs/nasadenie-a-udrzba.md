@@ -132,6 +132,9 @@ Po prepnutí: používatelia hbkpravotice s „Remember me“ sa raz prihlásia 
 
 ## Fáza A2 — preklopenie na `ermaskretail` (keď A beží bez problémov, ~15 min)
 
+**Od 20. 11. 2026 sa robí spolu s fázou C** — tlačidlami „Import A2“ a „Prepnúť“ v `erma-deploy.php` (nižšie). Body
+pod týmto odsekom opisujú, čo sa pri tom deje.
+
 1. Záloha (ako vždy). Chvíľu nikto nevystavuje faktúry a nehrá sa zápas (StadiumControl zapisuje počas zápasu).
 2. **Kopírovanie tabuliek** `panel_*` a `hbkpravotice_*` z `molesk` do `ermaskretail` — funkcia v paneli (pozri
    „Údržba e-shopov a databáz v paneli“ nižšie) alebo jednorazový skript; po skopírovaní porovná počty riadkov a
@@ -146,26 +149,44 @@ Postup v Web_store `docs/pravne-nalezitosti.md` („Nasadenie“): nahrať modul
 spustiť `legal-apply.php` cez tajnú adresu. Funguje aj na dnešnom 1.7.6. Ak nie teraz, urobí ich automaticky
 aktualizácia (fáza C). Oznámenie o zákonnej záruke je povinné od 27. 9. 2026.
 
-## Fáza C — e-shop na PrestaShop 8.2.9 (večer, e-shopy 2–4 h v údržbe)
+## Fáza C — e-shop na PrestaShop 8.2.9 + A2 v ten istý večer (údržba ≈ 1 h)
 
-Celý postup je dohodnutý a nacvičený (Web_store `docs/upgrade-plan.md`, „Production procedure“ A/B/C):
-databáza **`ermaskretail`** (nie nová prázdna), aktualizácia na domácom serveri, nahratie do `/store_new/`, kontrola na
-`https://<doména>/store_new/`, prepnutie priečinkov, návrat späť kedykoľvek do zmazania `/store_old/`.
+**Rozhodnutie 20. 11. 2026 (majiteľ: „poďme na to už“): C a A2 naraz** — jeden nástroj presunie e-shop aj tabuľky
+panela a hbkpravotice do `ermaskretail`; panel potom číta e-shop vo svojej databáze, žiadne medzikroky cez Webservice.
 
-Ešte chýba (pripraví Claude): nástroje `store-package.sh`, `store-import.php`, `store-switch.php` a ich nácvik.
+**Nástroje — hotové a nacvičené 20. 11. 2026** (Web_store `devserver/`, podrobne `docs/upgrade-plan.md` „A′“):
+produkčná kópia bez internetu (`prod-copy.sh`) → aktualizácia (`upgrade-run.sh`, ~4 min) → balík
+(`store-package.sh`, ~206 MB: jeden archív súborov + databáza po častiach + A2) → **`erma-deploy.php`** na hostingu
+(jedna stránka s tlačidlami: kontrola · rozbaliť /store_new/ · import e-shopu · import A2 · overiť · prepnúť ·
+zapnúť e-shopy · vrátiť späť · zmazať /store_old/ · zmazať nástroj). Generálka na **simulácii hostingu**
+(`hostsim.sh`: celé FTP zo zálohy, HTTPS, molesk + ermaskretail) prešla celá vrátane poistky, návratu späť a
+opätovného prepnutia; panel, StadiumControl a obrázky produktov po prepnutí OK.
+
+**Postup ostrého večera krok po kroku s cestami a adresami: [`spustenie-eshopu.md`](spustenie-eshopu.md).** Skrátene
+(technicky: Web_store `docs/upgrade-plan.md`, „C. Go-live day“):
+1. Ty: starý e-shop do údržby (všetky obchody, tvoja IP povolená); panel a StadiumControl v tú chvíľu nepoužívať.
+2. Ty: ps-pack do koreňa → len **Dump databases** → stiahnuť do `Web_store\backups\` → Delete everything.
+3. Claude (~15 min): aktualizácia na domácom serveri → balík `ERMA-nasadenie\C-<dátum>\` s doplneným prístupom.
+4. Ty: FTP nahrať `erma-deploy.php` + priečinok `_deploy_…` do koreňa (binárne).
+5. Ty: `https://www.erma.sk/erma-deploy.php?key=…` → Rozbaliť → Import e-shopu → Import A2 → Overiť.
+6. Kontrola `https://howieshockey.sk/store_new/` atď. (ty prehliadačom, Claude verejné stránky).
+7. Ty: **Prepnúť** → kontrola → **Zapnúť e-shopy** (ERMA obchod ostáva v údržbe). Problém → **Vrátiť späť**.
+8. Hosting: vypnúť cron `cron_howies_activate.php`, `cron_usspz_del.php`; erma_stockactive „synchronizovať“; platby
+   GoPay toho večera porovnať. Faktúry PrestaShopu sú vypnuté samé (`PS_INVOICE` 0 v aktualizácii).
+9. Po pár dňoch: **Zmazať /store_old/** a **Zmazať nástroj**.
 
 **Aby sa nestratila ani jedna objednávka** (podrobne Web_store `docs/upgrade-plan.md`, „Keeping the data current“):
 - nový e-shop beží na kópii databázy z jedného okamihu → **údržba všetkých e-shopov sa zapne PRED zálohou databázy**
   a počas nej sa v starom e-shope nič nemení (ani z panelu);
-- `store-switch.php` pred prepnutím porovná starú a novú databázu a **prepnutie odmietne**, ak sa starý e-shop po
-  záložení zmenil;
-- súbory e-shopu sa nahrajú **deň vopred**; v deň prepnutia sa berie len databáza → údržba ~1 h;
+- `erma-deploy.php` pred prepnutím porovná starú a novú databázu (objednávky, zákazníci, košíky, správy, platby;
+  tabuľky panela a hbkpravotice obsahom) a **prepnutie odmietne**, ak sa po záložení niečo zmenilo — nacvičené;
+- súbory e-shopu sú zo zálohy 20. 11. (v e-shope sa odvtedy nemenia moduly / šablóna / kód); v deň prepnutia sa
+  berie len databáza → údržba ~1 h;
 - obrázky a súbory zákazníkov (`img/`, `upload/`, `download/`) sa pri prepnutí presunú, nekopírujú;
 - platby GoPay z toho večera sa po prepnutí porovnajú so stavmi objednávok; cron úlohy starého modulu sa vypnú.
 
-Po prepnutí: ak je už panel v `ermaskretail` (A2), prepnúť v ňom spojenie s e-shopom na „táto databáza“; vypnúť faktúry
-v PrestaShope (`PS_INVOICE` 0), prvú zásielku Packeta skontrolovať v klientskej sekcii Packety, prvú platbu GoPay
-skontrolovať v GoPay.
+Po prepnutí: panel číta e-shop vo svojej databáze sám (overené v simulácii); prvú zásielku Packeta skontrolovať v
+klientskej sekcii Packety, prvú platbu GoPay skontrolovať v GoPay.
 
 ## Fáza D — upratanie (2–4 týždne po C, keď je všetko v poriadku)
 

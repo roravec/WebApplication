@@ -19,9 +19,9 @@ $sent = $pkg && $pkg['status'] === 'sent';
   <p>
     <?php if ($sent): ?>
       <span class="badge pay-paid">odoslané</span> <?= $e($f->dateTime($pkg['sent_at'])) ?> na <?= $e($pkg['recipients']) ?> ·
-      <?= $e(AccountingPackage::docs(count((array)json_decode((string)$pkg['doc_ids'], true)))) ?>
+      <?= $e(AccountingPackage::docs(count((array)json_decode((string)$pkg['doc_ids'], true)))) ?><?php $sentExp = count((array)json_decode((string)($pkg['expense_ids'] ?? '[]'), true)); if ($sentExp): ?>, prijaté: <?= $e(AccountingPackage::docs($sentExp)) ?><?php endif ?>
     <?php else: ?>
-      Pripravené: <b><?= $e(AccountingPackage::docs((int)$preview['docs'])) ?></b> (do Omegy <?= (int)$preview['omega'] ?>), úhrady: <b><?= (int)$preview['payments'] ?></b>.
+      Pripravené: <b><?= $e(AccountingPackage::docs((int)$preview['docs'])) ?></b> (do Omegy <?= (int)$preview['omega'] ?>), úhrady: <b><?= (int)$preview['payments'] ?></b>, prijaté doklady (náklady): <b><?= (int)$preview['expenses'] ?></b>.
       <?php if ($pkg && $pkg['status'] === 'failed'): ?><br><span class="badge pay-overdue">neodoslané</span> <?= $e($pkg['error']) ?><?php endif ?>
     <?php endif ?>
   </p>

@@ -1,5 +1,5 @@
 <?php use Panel\Invoicing\Legislation; use WebApplication\Csrf;
-/** @var array $values (rates, texts), $errors, $textsNow */
+/** @var array $values (rates, texts), $errors, $textsNow, $vatReg */
 $err = function ($k) use ($errors, $e) { return isset($errors[$k]) ? '<p class="field-err">' . $e($errors[$k]) . '</p>' : ''; };
 $rateRow = function (array $r) use ($e) { ?>
   <tr>
@@ -51,4 +51,33 @@ $textRow = function (array $t) use ($e) { ?>
     <p><button type="button" data-add-row="text-rows">+ Text</button></p>
   </section>
   <p><button class="primary">Uložiť</button></p>
+</form>
+
+<form method="post" action="<?= $e($ctx->url('/settings/legal/vat-registration')) ?>">
+  <?= Csrf::field() ?>
+  <section class="card">
+    <h2>Registrácia k DPH — hranica obratu</h2>
+    <p class="muted small">Pre firmy, ktoré nie sú platiteľmi DPH: Výsledky → Výsledok firmy a nástenka sledujú obrat a upozornia pri 80 %
+      hranice. Obdobie „kalendárny rok“: nad hranicou platiteľ od 1. 1. ďalšieho roka, nad okamžitou hranicou odo dňa dodania.
+      Pri zmene zákona pridajte nový riadok s dátumom „platí od“ a starému dajte „platí do“.</p>
+    <?= $err('vat_registration') ?>
+    <div class="scroll-x"><table class="grid compact">
+      <thead><tr><th>Krajina</th><th>Obdobie</th><th class="num">Hranica €</th><th class="num">Okamžitá hranica €</th><th>Platí od</th><th>Platí do</th><th>Poznámka</th></tr></thead>
+      <tbody>
+      <?php foreach (array_merge(array_values($vatReg), [['country' => 'SK', 'period' => 'year', 'threshold' => '', 'threshold_immediate' => '', 'valid_from' => '', 'valid_to' => '', 'note' => '']]) as $i => $r): ?>
+        <tr>
+          <td><input name="reg[<?= $i ?>][country]" value="<?= $e($r['country']) ?>" size="3" maxlength="2"></td>
+          <td><select name="reg[<?= $i ?>][period]"><?php foreach (\Panel\Reports\VatTurnover::PERIODS as $k => $label): ?><option value="<?= $e($k) ?>"<?= $r['period'] === $k ? ' selected' : '' ?>><?= $e($label) ?></option><?php endforeach ?></select></td>
+          <td><input name="reg[<?= $i ?>][threshold]" value="<?= $e($r['threshold'] === '' ? '' : (string)(float)$r['threshold']) ?>" size="9" class="num"></td>
+          <td><input name="reg[<?= $i ?>][threshold_immediate]" value="<?= $e($r['threshold_immediate'] === null || $r['threshold_immediate'] === '' ? '' : (string)(float)$r['threshold_immediate']) ?>" size="9" class="num"></td>
+          <td><input type="date" name="reg[<?= $i ?>][valid_from]" value="<?= $e($r['valid_from']) ?>"></td>
+          <td><input type="date" name="reg[<?= $i ?>][valid_to]" value="<?= $e((string)$r['valid_to']) ?>"></td>
+          <td><input name="reg[<?= $i ?>][note]" value="<?= $e($r['note']) ?>" size="40"></td>
+        </tr>
+      <?php endforeach ?>
+      </tbody>
+    </table></div>
+    <p class="muted small">Riadok s prázdnou hranicou a dátumom sa neuloží (tak sa pravidlo odstráni).</p>
+    <p><button class="primary">Uložiť hranice</button></p>
+  </section>
 </form>

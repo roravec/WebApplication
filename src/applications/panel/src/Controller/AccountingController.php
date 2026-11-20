@@ -48,6 +48,7 @@ class AccountingController
             'companies' => $companies, 'cid' => $cid, 'period' => $period, 'periods' => $periods,
             'settings' => $this->ctx->companies()->exportSettings($cid)['accountant'],
             'preview' => ['docs' => count($c['docs']), 'omega' => count($c['omega']), 'payments' => count($c['payments']),
+                          'expenses' => count($c['expenses']),
                           'package' => $c['package']],
             'history' => $acc->history($cid), 'configured' => $this->ctx->mailer()->configured(),
         ], 'Pre účtovníka', 'invoices');
@@ -66,6 +67,7 @@ class AccountingController
             Session::flash('error', 'Zvoľte firmu a mesiac.');
             return $back;
         }
+        $this->ctx->expenses()->generateRecurring();   // recurring costs of the month belong into the package
         $r = $this->ctx->accounting()->send($cid, $period, $this->ctx->mailer(), $this->ctx->user(), 'manual', (bool)$req->post('again'));
         Session::flash($r['ok'] ? 'msg' : 'error', $r['message']);
         return $back;
@@ -98,6 +100,9 @@ class AccountingController
         }
         $out = [];
         foreach ($this->ctx->accounting()->sendDue($this->ctx->mailer()) as $r) {
+            $out[] = ($r['ok'] ? 'OK ' : 'CHYBA ') . $r['message'];
+        }
+        foreach ((new \Panel\Reports\MonthlySummary($this->ctx))->sendDue($this->ctx->mailer()) as $r) {
             $out[] = ($r['ok'] ? 'OK ' : 'CHYBA ') . $r['message'];
         }
         return Response::text($out ? implode("\n", $out) : 'Nič na odoslanie.');
