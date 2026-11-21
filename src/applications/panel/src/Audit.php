@@ -15,7 +15,7 @@ class Audit
         'paid' => 'označil ako uhradený', 'unpaid' => 'zrušil úhradu', 'cancel' => 'stornoval', 'file' => 'priložil súbor', 'save' => 'uložil', 'summary' => 'poslal mesačný súhrn',
         'unissue' => 'vrátil do konceptu (omylom vystavený)', 'lines' => 'upravil položky objednávky v e-shope',
         'comment' => 'pridal komentár', 'file_delete' => 'zmazal súbor', 'share' => 'vytvoril zdieľací odkaz', 'unshare' => 'zrušil zdieľací odkaz',
-        'api_key' => 'vytvoril API kľúč', 'api_key_revoke' => 'zrušil API kľúč', 'link' => 'prepojil so záznamom', 'unlink' => 'zrušil prepojenie so záznamom',
+        'api_key' => 'vytvoril API kľúč', 'commit' => 'commit', 'api_key_revoke' => 'zrušil API kľúč', 'link' => 'prepojil so záznamom', 'unlink' => 'zrušil prepojenie so záznamom',
     ];
 
     /**

@@ -158,6 +158,27 @@ form.search input { width: 100%; max-width: 32rem; box-sizing: border-box; }
 .cal a { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cal .k-over { color: var(--red); }
 @media (max-width: 700px) { .cal td { height: auto; } }
+/* tasks: kanban, priorities, checklist (views/tasks) */
+.board { display: flex; gap: .7rem; overflow-x: auto; align-items: flex-start; padding-bottom: .5rem; }
+.board-col { flex: 0 0 16rem; background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: .5rem; }
+.board-col h2 { font-size: .95rem; margin: 0 0 .4rem; }
+.board-col.done { opacity: .85; }
+.board-col.drop { outline: 2px dashed var(--link); }
+.board-cards { display: flex; flex-direction: column; gap: .4rem; min-height: 3rem; }
+.board-card { display: block; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 6px;
+  padding: .4rem .5rem; color: inherit; text-decoration: none; font-size: .9rem; }
+.board-card:hover { border-color: var(--link); }
+.board-card.dragging { opacity: .4; }
+.board-card.prio-3 { border-left-color: #d4a017; }
+.board-card.prio-4 { border-left-color: var(--red); }
+.board-meta { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .25rem; font-size: .75rem; }
+.prio-1 { color: var(--muted); }
+.prio-3 { color: #d4a017; font-weight: 600; }
+.prio-4 { color: var(--red); font-weight: 600; }
+.check-row { display: flex; align-items: center; gap: .4rem; margin: .1rem 0; }
+.check-row button.link { font-size: 1.05rem; text-decoration: none; }
+tr.day-row th { background: var(--soft); text-align: left; }
+@media (max-width: 700px) { .board-col { flex-basis: 80vw; } }
 .grid.compact th, .grid.compact td { padding: .3rem .45rem; }
 .grid td input, .grid td select { width: 100%; padding: .3rem .4rem; }
 .grid td input.w-name { min-width: 16rem; }

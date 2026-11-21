@@ -204,7 +204,7 @@ test('panel: migrations run once and convert old rights levels (no access lost o
     $boss = new Panel\Core\Access($db, $admin->getId(), 100);
     ok($boss->can(Rights::ADMIN_ONLY) && $boss->can(Rights::SETTINGS_EMPLOYEES) && $boss->can('future.module') && $boss->allCompanies() && $boss->allShops());
     eq('Správca', $boss->roleLabel());
-    eq(4, count($roles->all()), 'offered roles');
+    eq(6, count($roles->all()), 'offered roles (4 from 019 + Vývoj, Externý spolupracovník from 024)');
     eq(0, (int)$db->fetchValue('SELECT COUNT(*) FROM pt_client_role'), 'nobody got a role by the migration');
     ok(!(new Panel\Core\Access($db, 0, 100))->can(Rights::ORDERS_VIEW), 'nobody logged in = nothing');
 });
@@ -227,7 +227,7 @@ test('permissions: every module registers its own, every key used in the code is
     preg_match_all("/['\"]([a-z]+\.[a-z_]+)['\"]/", $src, $m);
     $jobs = Panel\Core\Scheduler::jobs();
     foreach (array_unique($m[1]) as $k) {
-        if (!isset($jobs[$k]) && preg_match('/^(orders|invoices|expenses|stock|reports|companies|settings|api)\.[a-z_]+$/', $k)) {
+        if (!isset($jobs[$k]) && preg_match('/^(orders|invoices|expenses|stock|reports|companies|settings|api|tasks|projects|time)\.[a-z_]+$/', $k)) {
             ok(isset($all[$k]), "permission $k used in the code is registered");
         }
     }
@@ -2229,7 +2229,7 @@ class TestPanelContext extends Panel\PanelContext
 
 test('records: reference types registered by the modules, parse / make, audit entity → reference', function () {
     $types = Panel\Core\Refs::types();
-    foreach (['invoice', 'order', 'expense', 'customer', 'company', 'stock_item', 'stock_doc', 'warehouse', 'employee', 'role'] as $t) {
+    foreach (['invoice', 'order', 'expense', 'customer', 'company', 'stock_item', 'stock_doc', 'warehouse', 'employee', 'role', 'task', 'project'] as $t) {
         ok(isset($types[$t]) && $types[$t]['label'] !== '', "type $t");
     }
     eq(2, $types['order']['parts']);
@@ -2453,7 +2453,7 @@ function fakeNextcloud(array &$calls): callable
 
 test('scheduler: due rules (minutes, daily from an hour), lock, tick at most once a minute, the registered jobs', function () {
     $jobs = Panel\Core\Scheduler::jobs();
-    foreach (['notifications.email', 'notifications.digest', 'accounting.package', 'reports.monthly_summary', 'expenses.recurring'] as $k) {
+    foreach (['notifications.email', 'notifications.digest', 'accounting.package', 'reports.monthly_summary', 'expenses.recurring', 'tasks.due_reminders'] as $k) {
         ok(isset($jobs[$k]) && $jobs[$k]['label'] !== '', "job $k");
     }
     $now = strtotime('2026-11-21 10:00:00');
@@ -2506,8 +2506,8 @@ test('notifications: mentions and the discussion, only for people who may see th
     $record = $b->refs()->resolve($ref);
     $body = '@Eva Malá a @Ján Novák pozrite';
     $id = $b->comments()->add($ref, $body, $boss);
-    eq(1, Panel\Core\Events::emit($b, 'comment.added', ['ref' => $ref, 'actor' => $boss, 'record' => $record, 'comment_id' => $id, 'body' => $body,
-        'mentions' => $b->comments()->mentionedIn($body), 'thread' => false]), 'the notification listener ran');
+    eq(2, Panel\Core\Events::emit($b, 'comment.added', ['ref' => $ref, 'actor' => $boss, 'record' => $record, 'comment_id' => $id, 'body' => $body,
+        'mentions' => $b->comments()->mentionedIn($body), 'thread' => false]), 'both listeners ran (core notifications + task watchers)');
     $n = $b->notifications();
     eq(1, $n->unreadCount($eva->getId()), 'Eva may see the invoice');
     eq(0, $n->unreadCount($jan->getId()), 'Ján may not (no permission) — not notified');
@@ -2532,15 +2532,19 @@ test('notifications: mentions and the discussion, only for people who may see th
     eq('nič na odoslanie', $n->sendPending($sys, $mail), 'sent once');
     eq('e-maily nie sú nastavené (config.php → apps.panel.mail) — upozornenia sú len v paneli',
         $n->sendPending($sys, new Panel\Mailer([])) === 'nič na odoslanie' ? 'e-maily nie sú nastavené (config.php → apps.panel.mail) — upozornenia sú len v paneli' : 'x');
+    $n->markRead($eva->getId());   // what she has seen does not block new notices
     $n->setMode($eva->getId(), 'daily');
     eq('daily', $n->mode($eva->getId()));
     throws(function () use ($n, $eva) { $n->setMode($eva->getId(), 'often'); }, InvalidArgumentException::class);
     $n->notify($b, $eva->getId(), $ref, 'mention', 'A', 'x');
+    ok(!$n->notify($b, $eva->getId(), $ref, 'comment', 'A2', 'x'), 'mention + comment of one comment within a minute = one notice');
+    $db->execute('UPDATE pt_notification SET created_at = ? WHERE text = ?', [date('Y-m-d H:i:s', time() - 120), 'A']);
     $n->notify($b, $eva->getId(), $ref, 'mention', 'B', 'x');
     $mail->sent = [];
     eq('nič na odoslanie', $n->sendPending($sys, $mail), 'daily people wait for the digest');
     eq('e-mailov: 1', $n->sendDigest($sys, $mail));
     contains('2 nové upozornenia', $mail->sent[0]['text']);
+    $n->markRead($eva->getId());
     $n->setMode($eva->getId(), 'off');
     $n->notify($b, $eva->getId(), $ref, 'mention', 'C', 'x');
     eq('none', $n->forPerson($eva->getId())[0]['email_state'], 'off = only the bell');
@@ -2742,4 +2746,208 @@ test('API keys: shown once, only the hash stored, never more than the author, re
     eq(5, count($keys->calls((int)$ka['id'], 5)));
     eq(2, count($keys->all()));
     eq(1, count($keys->forOwner($ana->getId())));
+});
+
+test('git: task number format (configurable, at the START of the message), several numbers, push payloads', function () {
+    eq(null, Panel\Tasks\Git::formatError('#{TASK}'));
+    eq(null, Panel\Tasks\Git::formatError('[{TASK}]'));
+    eq(null, Panel\Tasks\Git::formatError('{TASK}:'));
+    ok(Panel\Tasks\Git::formatError('#TASK') !== null && Panel\Tasks\Git::formatError('{TASK}{TASK}') !== null && Panel\Tasks\Git::formatError('<{TASK}>') !== null);
+    $c = function ($m, $f = '#{TASK}') { return Panel\Tasks\Git::taskCodes($m, $f); };
+    eq(['LED-12'], $c('#LED-12 oprava časovača'));
+    eq(['LED-12', 'LED-14'], $c('#LED-12 #LED-14, spoločná oprava'));
+    eq(['LED-12'], $c('#led-12 malé písmená'), 'case-insensitive, stored upper-case');
+    eq([], $c('oprava #LED-12'), 'not at the start → no link');
+    eq([], $c('LED-12 bez mriežky'), 'other format');
+    eq([], $c("oprava\n#LED-12 v druhom riadku"));
+    eq(['U-5'], $c('#U-5 osobná'));
+    eq(['LED-3'], $c('  #LED-3   medzery na začiatku'));
+    eq(['LED-12'], $c('[LED-12] oprava', '[{TASK}]'));
+    eq(['LED-12', 'ABC-1'], $c('LED-12: ABC-1: oprava', '{TASK}:'));
+    eq([], $c('LED-12 oprava', '{TASK}:'));
+    list($branch, $commits) = Panel\Tasks\Git::parsePush(['ref' => 'refs/heads/main', 'commits' => [
+        ['id' => 'abc1234def', 'message' => '#LED-1 x', 'timestamp' => '2026-11-21T10:00:00+01:00', 'url' => 'https://github.com/a/b/commit/abc', 'author' => ['name' => 'Ján', 'email' => 'jan@x.sk']],
+        'zly-zaznam']]);
+    eq(['main', 1, 'abc1234def', 'jan@x.sk'], [$branch, count($commits), $commits[0]['sha'], $commits[0]['author_email']]);
+});
+
+test('projects + tasks: visibility (members, externals, all projects of the company), numbers, kanban, checklist, filters, reminders', function () {
+    $db = panelDb();
+    Schema::migrate($db, __DIR__ . '/../src/applications/panel/sql');
+    $companies = new Companies($db);
+    $fields = ['street' => '', 'city' => '', 'zip' => '', 'country' => 'SK', 'ico' => '', 'dic' => '', 'registration' => '', 'email' => '',
+        'phone' => '', 'web' => '', 'slogan' => '', 'due_days' => 14, 'invoice_note' => '', 'accent_color' => '#f74040', 'active' => 1];
+    $c1 = $companies->save(null, ['name' => 'Firma A'] + $fields);
+    $c2 = $companies->save(null, ['name' => 'Firma B'] + $fields);
+    $boss = panelUser($db, 'boss8', 100);
+    $dev = panelUser($db, 'dev8', 10);
+    $ext = panelUser($db, 'ext8', 10);
+    $mgr = panelUser($db, 'mgr8', 10);
+    $roles = new Panel\Core\Roles($db);
+    $acc = function ($perms, $companies = []) { return ['admin' => false, 'roles' => [], 'allow' => $perms, 'deny' => [], 'all_companies' => false,
+        'companies' => $companies, 'all_shops' => true, 'shops' => []]; };
+    $roles->savePerson($dev->getId(), $acc([Rights::TASKS_VIEW, Rights::TASKS_EDIT, Rights::TIME_TRACK], [$c1]));
+    $roles->savePerson($ext->getId(), $acc([Rights::TASKS_VIEW, Rights::TASKS_EDIT]));
+    $roles->savePerson($mgr->getId(), $acc([Rights::TASKS_VIEW, Rights::PROJECTS_ALL], [$c1]));
+    $P = new Panel\Tasks\Projects($db);
+    eq(null, $P->keyError('LED', null));
+    ok($P->keyError('L', null) !== null && $P->keyError('led', null) !== null && $P->keyError('U', null) !== null);
+    $led = $P->create($c1, 'LED', 'LedBoard', '', $boss->getId());
+    $erm = $P->create($c2, 'ERM', 'Iný projekt', '', $boss->getId());
+    ok($P->keyError('LED', null) !== null, 'key taken');
+    eq(['Na rade', 'Rozpracované', 'Na kontrolu', 'Hotovo'], array_column($P->columns($led), 'name'));
+    eq('owner', $P->role($led, $boss->getId()), 'author is the owner');
+    $P->saveMembers($led, [$boss->getId() => 'owner', $dev->getId() => 'member', $ext->getId() => 'external']);
+    $ctx = function ($u) use ($db) { return new TestPanelContext($db, $u); };
+    $p = $P->find($led);
+    ok($P->canSee($ctx($dev), $p) && $P->canEdit($ctx($dev), $p), 'member');
+    ok($P->canSee($ctx($ext), $p) && $P->canEdit($ctx($ext), $p), 'external member without company access');
+    ok(!$P->canSee($ctx($ext), $P->find($erm)), 'external: only invited projects');
+    ok($P->canSee($ctx($mgr), $p) && !$P->canEdit($ctx($mgr), $p), 'projects.all sees the company projects, no tasks.edit');
+    ok(!$P->canSee($ctx($mgr), $P->find($erm)), 'not another company');
+    ok(!$P->canManage($ctx($dev), $p) && $P->canManage($ctx($boss), $p));
+    eq(['LED'], array_column($P->visible($ctx($dev)), 'key'));
+    $P->saveMembers($led, [$boss->getId() => 'owner', $dev->getId() => 'reader', $ext->getId() => 'external']);
+    ok(!$P->canEdit($ctx($dev), $P->find($led)), 'reader cannot edit');
+    $P->saveMembers($led, [$boss->getId() => 'owner', $dev->getId() => 'member', $ext->getId() => 'external']);
+
+    $T = new Panel\Tasks\Tasks($db);
+    $t1 = $T->create($led, ['title' => 'Časovač', 'assignee_id' => $dev->getId(), 'due_date' => date('Y-m-d'), 'labels' => 'firmvér, Chyba,firmvér, '], $boss->getId());
+    $t2 = $T->create($led, ['title' => 'Displej', 'priority' => 4], $dev->getId());
+    $u1 = $T->create(null, ['title' => 'Zavolať', 'assignee_id' => $dev->getId()], $dev->getId());
+    $empty = $T->create($led, ['title' => 'Z formulára', 'assignee_id' => '', 'due_date' => '', 'estimate_minutes' => '', 'parent_id' => ''], $boss->getId());
+    eq([null, null], [$T->find($empty)['assignee_id'], $T->find($empty)['due_date']], 'empty form fields = NULL');
+    $db->execute('DELETE FROM pt_task WHERE id = ?', [$empty]);
+    eq(['LED-1', 'LED-2', 'U-1'], [$T->find($t1)['code'], $T->find($t2)['code'], $T->find($u1)['code']]);
+    eq('firmvér,Chyba', $T->find($t1)['labels'], 'labels cleaned, duplicates removed');
+    eq($t1, (int)$T->findByCode('led-1')['id']);
+    eq($u1, (int)$T->findByCode('U-1')['id']);
+    eq(null, $T->findByCode('LED-99'));
+    $wa = $T->watchers($t1);
+    sort($wa);
+    eq((function ($x) { sort($x); return $x; })([$boss->getId(), $dev->getId()]), $wa, 'author + assignee watch');
+    ok($T->canSee($ctx($ext), $T->find($t1)), 'external sees tasks of his project');
+    ok(!$T->canSee($ctx($ext), $T->find($u1)) && !$T->canSee($ctx($boss), $T->find($u1)), 'personal task: only author / assignee');
+    ok($T->canSee($ctx($dev), $T->find($u1)));
+    eq([$t1, $u1], array_map('intval', array_column($T->mine($ctx($dev)), 'id')), 'my tasks: due date first');
+    eq([$t2], array_map('intval', array_column($T->mine($ctx($dev), true), 'id')), 'watched, assigned to nobody else');
+
+    // kanban: move to done → closed, positions renumbered
+    $cols = array_column($P->columns($led), 'id', 'name');
+    ok($T->move($t2, (int)$cols['Hotovo'], 0));
+    ok($T->find($t2)['closed_at'] !== null, 'done column closes');
+    $T->move($t1, (int)$cols['Hotovo'], 0);
+    eq([$t1, $t2], array_map('intval', array_column($db->query('SELECT id FROM pt_task WHERE column_id = ? ORDER BY position', [$cols['Hotovo']]), 'id')));
+    $T->move($t2, (int)$cols['Rozpracované'], 5);
+    ok($T->find($t2)['closed_at'] === null, 'back from done = open');
+    throws(function () use ($T, $t1, $erm, $P) { $T->move($t1, (int)$P->columns($erm)[0]['id'], 0); }, InvalidArgumentException::class);
+    $T->setDone($u1, true);
+    ok($T->find($u1)['closed_at'] !== null);
+
+    $ch = $T->update($t2, ['title' => 'Displej OLED', 'assignee_id' => $ext->getId(), 'due_date' => '']);
+    eq(['title', 'assignee_id'], array_keys($ch), 'only real changes');
+    ok(in_array($ext->getId(), $T->watchers($t2), true), 'new assignee watches');
+
+    $T->addCheck($t2, 'otestovať');
+    $T->addCheck($t2, '  ');
+    $chk = $T->checklist($t2);
+    eq(1, count($chk));
+    $T->toggleCheck($t2, (int)$chk[0]['id']);
+    eq(1, (int)$T->checklist($t2)[0]['done']);
+
+    eq(['LED-2'], array_column($T->search($ctx($boss), ['project' => $led, 'q' => 'oled', 'status' => 'all']), 'code'));
+    eq(['LED-1'], array_column($T->search($ctx($boss), ['label' => 'chyba', 'status' => 'all']), 'code'));
+    eq([], $T->search($ctx($mgr), ['project' => $erm, 'status' => 'all']), 'filtered in SQL');
+    // removing a column moves its tasks to the first
+    $keep = array_values(array_filter($P->columns($led), function ($c) { return $c['name'] !== 'Rozpracované'; }));
+    $P->saveColumns($led, array_map(function ($c) { return ['id' => (int)$c['id'], 'name' => $c['name'], 'done' => (bool)$c['done']]; }, $keep));
+    eq('Na rade', $T->find($t2)['column_name']);
+    // reminders
+    $db->execute('UPDATE pt_task SET closed_at = NULL, column_id = ? WHERE id = ?', [$cols['Na rade'], $t1]);
+    eq([$t1], array_map('intval', array_column($T->dueForReminder(date('Y-m-d'), date('Y-m-d', strtotime('+1 day'))), 'id')));
+    $T->markReminded($t1, date('Y-m-d'));
+    eq([], $T->dueForReminder(date('Y-m-d'), date('Y-m-d', strtotime('+1 day'))), 'once a day');
+
+    // notifications through the events
+    $b = $ctx($boss);
+    Panel\Core\Events::emit($b, 'task.assigned', ['ref' => "task:$t2", 'actor' => $boss, 'task' => $T->find($t2)]);
+    eq(1, $b->notifications()->unreadCount($ext->getId()), 'assignee notified');
+    Panel\Core\Events::emit($b, 'task.status_changed', ['ref' => "task:$t2", 'actor' => $boss, 'task' => $T->find($t2), 'from' => 'A', 'to' => 'B', 'done' => false]);
+    eq(2, $b->notifications()->unreadCount($ext->getId()), 'different news about the task: both');
+    Panel\Core\Events::emit($b, 'task.status_changed', ['ref' => "task:$t2", 'actor' => $boss, 'task' => $T->find($t2), 'from' => 'A', 'to' => 'B', 'done' => false]);
+    eq(2, $b->notifications()->unreadCount($ext->getId()), 'the very same news twice within a minute: once');
+    eq(1, $b->notifications()->unreadCount($dev->getId()), 'watcher (author of LED-2) notified');
+    eq(0, $b->notifications()->unreadCount($boss->getId()), 'not the actor');
+    $ran = (new Panel\Core\Scheduler($db))->run($b->system(), 'tasks.due_reminders', true);
+    eq('pripomenutých úloh: 0', $ran[0][2], 'already reminded today');
+    // record references
+    eq('LED-1 Časovač', $ctx($dev)->refs()->resolve("task:$t1")['title']);
+    eq(null, $ctx($mgr)->refs()->resolve("task:$u1"));
+    eq(["task:$t1"], array_column($ctx($dev)->refs()->find('LED-1'), 'ref'));
+    eq(['project:' . $led], array_column($ctx($dev)->refs()->find('LedBo'), 'ref'));
+});
+
+test('time sheets + commits at tasks: hours parsing, stopwatch, webhooks (GitHub signature, GitLab token), linking by the format', function () {
+    $P = 'Panel\Tasks\TimeEntries';
+    eq([90, 90, 90, 45, 120, 30], [$P::parse('1:30'), $P::parse('1,5'), $P::parse('1.5 h'), $P::parse('45m'), $P::parse('2'), $P::parse('30 min')]);
+    eq([null, null, null], [$P::parse('abc'), $P::parse('0'), $P::parse('25')]);
+    eq('1:05', $P::format(65));
+    $db = panelDb();
+    Schema::migrate($db, __DIR__ . '/../src/applications/panel/sql');
+    $boss = panelUser($db, 'boss9@example.sk', 100);
+    $companies = new Companies($db);
+    $c1 = $companies->save(null, ['name' => 'Firma A', 'street' => '', 'city' => '', 'zip' => '', 'country' => 'SK', 'ico' => '', 'dic' => '', 'registration' => '',
+        'email' => '', 'phone' => '', 'web' => '', 'slogan' => '', 'due_days' => 14, 'invoice_note' => '', 'accent_color' => '#f74040', 'active' => 1]);
+    $led = (new Panel\Tasks\Projects($db))->create($c1, 'LED', 'LedBoard', '', $boss->getId());
+    $T = new Panel\Tasks\Tasks($db);
+    $t1 = $T->create($led, ['title' => 'A'], $boss->getId());
+    $t2 = $T->create($led, ['title' => 'B'], $boss->getId());
+    $time = new Panel\Tasks\TimeEntries($db);
+    $time->add($boss->getId(), $led, $t1, '2026-11-20', 90, 'práca', true);
+    eq(null, $time->stop($boss->getId(), ''), 'nothing runs');
+    $time->start($boss->getId(), $led, $t1);
+    $db->execute('UPDATE pt_time_timer SET started_at = ? WHERE client_id = ?', [date('Y-m-d H:i:s', time() - 25 * 60), $boss->getId()]);
+    $prev = $time->start($boss->getId(), $led, $t2);
+    ok($prev !== null && (int)$time->find($prev)['minutes'] === 25 && $time->find($prev)['source'] === 'timer', 'starting another one writes the first');
+    $id = $time->stop($boss->getId(), 'koniec', time() + 10);
+    eq([1, $t2], [(int)$time->find($id)['minutes'], (int)$time->find($id)['task_id']], 'at least a minute');
+    eq(115, $time->taskMinutes($t1));
+    eq(3, count($time->forPerson($boss->getId(), '2000-01-01', '2100-01-01')));
+    $hours = (new Panel\Tasks\Projects($db))->hours($led);
+    eq([116, 90], [(int)$hours[0]['minutes'], (int)$hours[0]['billable']]);
+
+    $git = new Panel\Tasks\Git($db, new Panel\Secret('test-secret-1234567890'));
+    eq('#{TASK}', $git->format(), 'default from the migration');
+    throws(function () use ($git) { $git->addRepo('github', 'bez lomky', ''); }, InvalidArgumentException::class);
+    list($rid, $secret) = $git->addRepo('github', 'erma/ledboard-fw', '');
+    ok(strpos((string)$db->fetchValue('SELECT secret FROM pt_git_repo WHERE id = ?', [$rid]), $secret) === false, 'secret encrypted');
+    eq('https://github.com/erma/ledboard-fw', $git->repo($rid)['web_url']);
+    $body = '{"x":1}';
+    ok($git->verifyGithub($git->repo($rid), $body, 'sha256=' . hash_hmac('sha256', $body, $secret)));
+    ok(!$git->verifyGithub($git->repo($rid), $body, 'sha256=' . hash_hmac('sha256', $body . ' ', $secret)), 'body changed');
+    ok(!$git->verifyGithub($git->repo($rid), $body, ''));
+    list($gid, $gsecret) = $git->addRepo('gitlab', 'erma/web', 'https://gitlab.com/erma/web');
+    ok($git->verifyGitlab($git->repo($gid), $gsecret) && !$git->verifyGitlab($git->repo($gid), 'x'));
+    $commits = [
+        ['sha' => 'aaaaaaa1', 'message' => "#LED-1 #LED-2 oprava\n\npodrobne", 'author_name' => 'Boss', 'author_email' => 'BOSS9@example.sk', 'timestamp' => '2026-11-21T10:00:00Z', 'url' => 'https://github.com/x/commit/a'],
+        ['sha' => 'bbbbbbb2', 'message' => 'bez čísla', 'author_name' => 'Iný', 'author_email' => 'iny@x.sk', 'timestamp' => '', 'url' => 'javascript:alert(1)'],
+        ['sha' => 'cccccc3', 'message' => 'oprava #LED-1 nie na začiatku', 'author_name' => '', 'author_email' => '', 'timestamp' => '', 'url' => ''],
+        ['sha' => 'nie-je-sha', 'message' => '#LED-1', 'author_name' => '', 'author_email' => '', 'timestamp' => '', 'url' => ''],
+        ['sha' => 'ddddddd4', 'message' => '#LED-99 neexistuje', 'author_name' => '', 'author_email' => '', 'timestamp' => '', 'url' => ''],
+    ];
+    $r = $git->receive($rid, 'main', $commits);
+    eq(4, $r['stored'], 'invalid sha skipped, commits without a number stored too');
+    eq([$t1, $t2], array_keys($r['linked']));
+    $fc = $git->forTask($t1);
+    eq(['aaaaaaa1', $boss->getId(), 'main', 'erma/ledboard-fw'], [$fc[0]['sha'], (int)$fc[0]['client_id'], $fc[0]['branch'], $fc[0]['repo_name']], 'author matched by e-mail');
+    eq('', $db->fetchValue("SELECT url FROM pt_git_commit WHERE sha = 'bbbbbbb2'"), 'only http(s) links');
+    $again = $git->receive($rid, 'main', $commits);
+    eq([0, []], [$again['stored'], $again['linked']], 'the same push twice = nothing new');
+    $git->setFormat('[{TASK}]');
+    eq('[{TASK}]', $git->format());
+    $r3 = $git->receive($gid, 'dev', [['sha' => 'eeeeeee5', 'message' => '[LED-2] gitlab', 'author_name' => '', 'author_email' => '', 'timestamp' => '', 'url' => '']]);
+    eq([$t2], array_keys($r3['linked']));
+    contains('priradených k úlohám: 1', $git->repo($gid)['last_message']);
+    $db->execute("UPDATE pt_setting SET value = 'zlý' WHERE name = 'git.task_format'");
+    eq('#{TASK}', $git->format(), 'broken setting → default');
 });

@@ -54,6 +54,14 @@ class Notifications
         if ($client === null || (int)$client->type !== 0 || !$client->isActive() || !$ctx->asUser($client)->refs()->canSee($ref)) {
             return false;
         }
+        // the same thing twice within a minute = one notice: a mention + "new comment" of one comment (a mentioned watcher,
+        // several listeners), or the very same text; different news about the record (assigned, then moved) both come
+        $comment = in_array($event, ['mention', 'comment'], true);
+        if ($this->db->fetchValue("SELECT id FROM {$this->t()} WHERE client_id = ? AND ref = ? AND read_at IS NULL AND created_at >= ? AND "
+                . ($comment ? "event IN ('mention', 'comment')" : 'text = ?'),
+                array_merge([$clientId, $ref, date('Y-m-d H:i:s', time() - 60)], $comment ? [] : [mb_substr($text, 0, 500, 'UTF-8')]))) {
+            return false;
+        }
         $mode = $this->mode($clientId);
         $this->db->execute("INSERT INTO {$this->t()} (client_id, ref, event, text, actor_name, created_at, email_state) VALUES (?, ?, ?, ?, ?, ?, ?)",
             [$clientId, $ref, $event, mb_substr($text, 0, 500, 'UTF-8'), $actorName, date('Y-m-d H:i:s'),

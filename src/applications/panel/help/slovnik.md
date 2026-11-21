@@ -22,6 +22,9 @@
 | **Výnimka (práva)** | Jedno právo navyše alebo zakázané konkrétnemu človeku, popri jeho rolách. |
 | **Prepojenie** | Väzba medzi dvoma záznamami (napr. objednávka ↔ doklad za dopravu) — [Komentáre, prepojenia](help:komentare-a-prepojenia). |
 | **Krátky odkaz / kód záznamu** | Napr. `invoice:15` — otvorí záznam (aj z QR štítku); v komentári sa z neho stane odkaz. |
+| **Kanban** | Tabuľa so stĺpcami (stavmi) a kartičkami úloh, ktoré sa presúvajú myšou — [Projekty](help:projekty). |
+| **Číslo úlohy** | Kľúč projektu + poradové číslo, napr. `LED-12`; osobné úlohy `U-5`. Píše sa aj na začiatok commitov. |
+| **Commit** | Uložená zmena v gite (kód, firmvér). Panel ho ukáže pri úlohe, ak správa začína číslom úlohy. |
 | **Prijatý doklad (náklad)** | Faktúra alebo blok od dodávateľa — zadáva sa do Nákladov. |
 | **Storno** | Zrušenie prijatého dokladu s dôvodom (nemaže sa, ostáva v histórii). |
 | **Šarža / dávka** | Časť zásoby prijatá naraz za jednu cenu; vydáva sa od najstaršej (FIFO). |

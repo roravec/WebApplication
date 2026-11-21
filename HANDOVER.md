@@ -628,6 +628,44 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
      run by themselves; 1a–1f can go together). **Owner after deploy:** (1) cron on the hosting → URL from Nastavenia →
      Systém; (2) Nextcloud user `erma-panel` + app password → Nastavenia → Systém → Integrácie; (3) give `api.keys`
      only to people who need keys.
+   - **LIVE since 2026-11-21** (owner uploaded framework + panel). Checked from outside: login 200, migrations ran (API
+     answers 401 JSON, needs table api_key), `/panel/r/invoice:1` stays in the panel (parse_url fix), the Authorization
+     header and X-Api-Key reach PHP through the hosting's nginx + Apache, cron URL with a wrong token 404.
+     **Cron on the hosting set by the owner: every minute** (scheduler confirmed running in Nastavenia → Systém).
+     **Nextcloud connected**: user `erma-panel` (created by the owner), app password created by Claude through
+     `/ocs/v2.php/core/getapppassword` and entered by the owner in Integrácie — status "funguje". Passwords are not
+     kept anywhere outside the panel / the owner.
+
+42. **Phase 2 — tasks and projects DONE** (2026-11-21, docs/panel-architektura.md 6.1 + 6.11 "Stav"):
+   - Owner's decisions: git on **GitHub, later GitLab**; a commit without a task number passes without a link; the task
+     number is at the **start** of the commit message in a **configurable** format (setting `git.task_format`,
+     `{TASK}` = LED-123, default `#{TASK}`; several numbers in a row allowed).
+   - Code: `src/Tasks/Projects.php` (visibility: members incl. externals without company access, or `projects.all` +
+     company; reader can't edit; owner / projects.manage manages; columns with "done"), `Tasks.php` (numbers per project
+     with row lock, personal `U-n`, move + renumber, closed_at follows the done column, watchers, checklist, subtasks,
+     search filtered in SQL, my tasks, reminders), `TimeEntries.php` (parse "1:30" / "1,5" / "45m", stopwatch),
+     `Git.php` (format + `taskCodes()`, repos with encrypted webhook secret, GitHub HMAC / GitLab token, `receive()`
+     dedupes commits, links by the format, author → employee by e-mail). Controllers `TasksController`,
+     `TimeController`, `GitController`; `TasksModule` (routes, menu Práca: Moje úlohy · Projekty · Výkazy práce ·
+     Kalendár, settings tab Projekty, permissions tasks.view / tasks.edit / projects.all / projects.manage /
+     time.track / time.all, record types task + project, listeners task.assigned / task.status_changed /
+     comment.added on tasks, job tasks.due_reminders 7:00, calendar). Kanban drag & drop in `js/panel.js` (POST
+     /tasks/{id}/move, CSRF from data-csrf). `dev/git-hook-post-receive` (+ .gitattributes eol=lf).
+   - `Notifications::notify` dedupe: mention + comment of one comment, or the very same text, within a minute = one notice.
+   - Migration `024_tasks.sql` (project, project_member, project_column, task, task_check, task_watcher, time_entry,
+     time_timer, git_repo, git_commit, task_commit; setting git.task_format; roles Vývoj, Externý spolupracovník).
+   - Guides: `moje-ulohy`, `projekty`, `uloha`, `vykazy-prace`, `commity` (group Práca), nastavenia, slovnik.
+   - Verified on dev (PHP 8.5): tests 86/86; e2e over HTTP 36/36 (project + duplicate key; task with assignee →
+     notification; Moje úlohy; 404 for a foreign project / settings for a member; kanban AJAX move → closed + history
+     + watcher notified; state select; checklist; comment → watcher notified; stopwatch + manual time; time to an
+     invisible task refused; project hours; GitHub repo + ping + wrong signature 403 + signed push → commit at the
+     task + history; GitLab wrong token 403 + push with the author matched; API repo + **real `git push` into a bare
+     repo on the dev server through the post-receive hook** — first push, push to an existing branch, new branch);
+     smoke 25 pages × 2 users without PHP warnings. Found + fixed during e2e: empty form fields on create (500), the
+     hook skipped commits of a new branch (`--not --all`), dedupe swallowed a different notice. Dev data removed.
+   - **Deploy: upload the whole `applications/panel/` folder** (migration 024 runs by itself). **Owner after deploy:**
+     Nastavenia → Projekty → add the GitHub repositories (the panel shows the webhook URL + secret step by step);
+     give people the roles *Vývoj* / projects permissions; employees' git e-mail = their panel login for author matching.
 
 ### Dev environment (home server)
 - **Without the home server** (owner away, 2026-11-21): a temporary setup on the owner's PC in the Claude session's
@@ -652,7 +690,6 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
 - Sync after local edits: `cd C:\Users\orras\git\WebApplication && tar --exclude=.git -czf - . | ssh … 'cd ~/webapplication-dev && tar -xzf - && <strip CR from php/yml/sh/css/.htaccess>'`.
 
 ### Waiting for the owner
-- After deploying phase 1: cron URL on the hosting, Nextcloud user `erma-panel` + app password (item 41).
 - Commit of everything after `dce2116` (owner commits himself).
 - Final path of the employee section (now `/panel`); whether invoices are e-mailed to customers.
 - NOT waiting (owner 2026-11-19): OR registration, first invoice number and series format are settings — the owner fills
@@ -731,10 +768,10 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
    **TODO later: off-site copy of the Nextcloud data** (owner: not now, "keď sa rozrastieme" — RAID only until then).
    Open questions:
    chapter 8 of the plan (each only for its phase). Phase 0 done (item 38), **phase 1 step a (permissions) done
-   (item 39), step 1b (item 40), **steps 1c–1f done (item 41) — phase 1 complete. Next: phase 2** (tasks and projects:
-   list, kanban, Moje úlohy, comments, attachments, links, notifications; time sheets; commits at tasks via webhook /
-   post-receive — needs owner's answer to open question 9 "where are the git repos") — the order of phases 2–14 is
-   open question 5.
+   (item 39), step 1b (item 40), steps 1c–1f (item 41) — phase 1 complete; **phase 2 done (item 42). Next by the plan:
+   phase 3** (timeline + dependencies, calendar with holidays / vacations, recurring tasks, project templates, register
+   of obligations, project budget) — the order of phases 3–14 is open question 5 (owner may prefer e.g. simple
+   complaints or quotes first).
    Older notes (2026-11-19): **Task management in the panel** ("like Asana / Trello").
    Design notes so earlier work does not block it: projects (board) → columns/states → tasks (title, description,
    assignee(s), due date, priority, labels, checklist, comments, attachments, watchers); views list + kanban (drag &

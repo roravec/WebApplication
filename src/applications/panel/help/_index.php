@@ -14,11 +14,15 @@ return [
             'eshopy-produkt', 'odberatelia'],
         'Financie' => ['faktury', 'faktura-formular', 'faktura-detail', 'uhrady', 'pre-uctovnika', 'export-omega', 'naklady', 'vysledky'],
         'Sklad' => ['sklad'],
+        'Práca' => ['moje-ulohy', 'projekty', 'uloha', 'vykazy-prace', 'commity'],
         'Nastavenia' => ['nastavenia', 'nastavenia-firmy', 'ciselne-rady', 'nastavenia-eshopy', 'stavy-objednavok', 'naklady-objednavok',
             'legislativa', 'zamestnanci', 'roly-a-prava', 'nastavenia-system', 'api-kluce',
             'moj-ucet'],
     ],
     'pages' => [
+        'tasks/projects' => 'projekty', 'tasks/project-form' => 'projekty', 'tasks/board' => 'projekty', 'tasks/list' => 'projekty',
+        'tasks/all' => 'moje-ulohy', 'tasks/my' => 'moje-ulohy', 'tasks/task' => 'uloha', 'tasks/task-form' => 'uloha', 'time/week' => 'vykazy-prace',
+        'settings/projects' => 'commity',
         'dashboard' => 'prehlad', 'core/activity' => 'co-sa-deje', 'core/notifications' => 'upozornenia', 'core/search' => 'hladanie',
         'core/calendar' => 'kalendar', 'settings/system' => 'nastavenia-system', 'settings/integrations' => 'nastavenia-system',
         'settings/integration-form' => 'nastavenia-system', 'settings/api-keys' => 'api-kluce', 'core/api-key-new' => 'api-kluce',
@@ -45,6 +49,6 @@ return [
     'sections' => [
         'dashboard' => 'prehlad', 'orders' => 'objednavky', 'eshops' => 'eshopy', 'customers' => 'odberatelia', 'invoices' => 'faktury',
         'expenses' => 'naklady', 'reports' => 'vysledky', 'stock' => 'sklad', 'settings' => 'nastavenia', 'account' => 'moj-ucet', 'activity' => 'co-sa-deje',
-        'notifications' => 'upozornenia', 'search' => 'hladanie', 'calendar' => 'kalendar',
+        'notifications' => 'upozornenia', 'tasks' => 'moje-ulohy', 'projects' => 'projekty', 'time' => 'vykazy-prace', 'search' => 'hladanie', 'calendar' => 'kalendar',
     ],
 ];

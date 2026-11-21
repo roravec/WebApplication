@@ -29,6 +29,12 @@ class Rights
     const SETTINGS_EMPLOYEES = 'settings.employees';
     const SETTINGS_SYSTEM = 'settings.system';
     const API_KEYS = 'api.keys';
+    const TASKS_VIEW = 'tasks.view';
+    const TASKS_EDIT = 'tasks.edit';
+    const PROJECTS_ALL = 'projects.all';
+    const PROJECTS_MANAGE = 'projects.manage';
+    const TIME_TRACK = 'time.track';
+    const TIME_ALL = 'time.all';
 
     /** Pseudo-permission: Správca only (things no role may give). */
     const ADMIN_ONLY = 'admin';

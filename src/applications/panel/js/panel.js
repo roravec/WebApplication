@@ -122,6 +122,62 @@
     }, 60000);
   })();
 
+  // ---------------------------------------------------------------- kanban: drag a card to another column / position
+  (function () {
+    var board = document.querySelector('.board[data-editable]');
+    if (!board || !window.fetch) return;
+    var dragged = null;
+    board.addEventListener('dragstart', function (ev) {
+      var card = ev.target.closest && ev.target.closest('.board-card');
+      if (!card) return;
+      dragged = card;
+      card.classList.add('dragging');
+      ev.dataTransfer.effectAllowed = 'move';
+      ev.dataTransfer.setData('text/plain', card.getAttribute('data-task'));
+    });
+    board.addEventListener('dragend', function () {
+      if (dragged) dragged.classList.remove('dragging');
+      board.querySelectorAll('.board-col.drop').forEach(function (c) { c.classList.remove('drop'); });
+    });
+    function cardAfter(list, y) {   // the card the dragged one goes before
+      var cards = Array.prototype.filter.call(list.querySelectorAll('.board-card'), function (c) { return c !== dragged; });
+      for (var i = 0; i < cards.length; i++) {
+        var r = cards[i].getBoundingClientRect();
+        if (y < r.top + r.height / 2) return cards[i];
+      }
+      return null;
+    }
+    board.addEventListener('dragover', function (ev) {
+      var col = ev.target.closest && ev.target.closest('.board-col');
+      if (!col || !dragged) return;
+      ev.preventDefault();
+      board.querySelectorAll('.board-col.drop').forEach(function (c) { if (c !== col) c.classList.remove('drop'); });
+      col.classList.add('drop');
+    });
+    board.addEventListener('drop', function (ev) {
+      var col = ev.target.closest && ev.target.closest('.board-col');
+      if (!col || !dragged) return;
+      ev.preventDefault();
+      var list = col.querySelector('.board-cards');
+      var before = cardAfter(list, ev.clientY);
+      var from = dragged.parentNode;
+      list.insertBefore(dragged, before);
+      var position = Array.prototype.indexOf.call(list.querySelectorAll('.board-card'), dragged);
+      var body = new URLSearchParams({ column_id: col.getAttribute('data-column'), position: String(position), _csrf: board.getAttribute('data-csrf') });
+      fetch(board.getAttribute('data-move-url') + dragged.getAttribute('data-task') + '/move', { method: 'POST', credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (r) {
+          if (!r.ok) { from.appendChild(dragged); alert(r.d.error || 'Úlohu sa nepodarilo presunúť.'); return; }
+          board.querySelectorAll('.board-col').forEach(function (c) {   // counts in the headings
+            var n = c.querySelectorAll('.board-card').length, s = c.querySelector('h2 .muted');
+            if (s) s.textContent = '(' + n + ')';
+          });
+        })
+        .catch(function () { from.appendChild(dragged); alert('Úlohu sa nepodarilo presunúť — skúste znova.'); });
+    });
+  })();
+
   // ---------------------------------------------------------------- record box: files from Nextcloud loaded after the page
   document.querySelectorAll('[data-files]').forEach(function (box) {
     if (!window.fetch) return;

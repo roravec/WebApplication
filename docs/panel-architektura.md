@@ -160,8 +160,8 @@ je na stránkach objednávky, faktúry, dokladu, skladovej karty a dokladu, odbe
   `Panel/<firma>/<druh>/<typ-id>` zafixovaný v `record_folder`, nahratie, stiahnutie cez panel, zmazanie, odkazy na
   stiahnutie / **na nahratie pre zákazníka** s platnosťou a heslom, zrušenie; všetko v histórii záznamu). Časť
   **Súbory** v bloku záznamu sa načíta dodatočne (pomalý Nextcloud nebrzdí stránku; vypnutý = „dočasne nedostupné“).
-  Overené proti skutočnému Nextcloudu 31 v dočasnom kontajneri. **Treba od majiteľa:** v jeho Nextcloude vytvoriť
-  používateľa `erma-panel` + heslo aplikácie a zadať ich v paneli (návod v Pomocníkovi „Nastavenia → Systém“).
+  Overené proti skutočnému Nextcloudu 31 v dočasnom kontajneri. **Na produkcii od 21. 11. 2026:** používateľ
+  `erma-panel` v `home.ermagroup.net`, heslo aplikácie zadané v paneli, pripojenie „funguje“; cron hostingu každú minútu.
 - **1e** `Core\Documents` (číselné rady pre doklady ďalších modulov cez `ProvidesDocumentTypes` + `allocate()`;
   spoločná PDF šablóna v štýle firmy `views/pdf/document.php` — `Documents::pdf()`), `Core\Calendar` (moduly cez
   `ProvidesCalendar`; dnes splatnosti faktúr a prijatých dokladov, opakované náklady; menu **Práca → Kalendár**),
@@ -290,6 +290,14 @@ Pri každom: čo je jeho **domov**, čo z jadra / kmeňových dát používa, na
     upozornenia pri 80 % / 100 % kategórie aj celku, prehľad rozpočtov všetkých projektov firmy (portfólio).
 - **Číslo úlohy** = kľúč projektu + poradové číslo: `LED-123` (osobné úlohy `U-45`). Používa sa všade: v komentároch,
   dokumentoch, **v správach commitov** (6.11), na štítkoch.
+- **Stav — fáza 2 HOTOVÁ 21. 11. 2026:** projekty (firma, kľúč, členovia s rolou vlastník / člen / len čítanie /
+  externý, vlastné stĺpce kanbanu s príznakom „hotovo“, archív), úlohy (riešiteľ, sledujúci, priorita, začiatok,
+  termín, odhad, štítky, kontrolný zoznam, podúlohy, osobné úlohy `U-…`), **kanban s presúvaním myšou**, zoznam
+  s filtrami, **Moje úlohy** (podľa termínu + sledované), upozornenia (pridelenie, zmena stavu, komentár, ranná
+  pripomienka termínu), kalendár, hľadanie podľa čísla, **výkazy práce** (týždeň, ručne aj **stopky**,
+  fakturovateľné, hodiny projektu po ľuďoch), **commity pri úlohách** (6.11). Roly navyše: *Vývoj*, *Externý
+  spolupracovník*. Kód `src/Tasks/`, `TasksModule`, migrácia `024_tasks.sql`. Ostáva pre fázu 3: timeline /
+  závislosti, opakované úlohy, šablóny projektov, financie projektu.
 
 ### 6.2 Dokumenty (zápisník) — PRÁCA
 - Formátovaný text, tabuľky, obrázky, odkazy na záznamy (`@LED-REQ-12`, `#objednávka`), priečinky, patrí projektu
@@ -407,6 +415,13 @@ Majiteľ 21. 11. 2026: „keď spravím commit, nech sa ten commit ukáže v rá
     (a ponúkne zoznam mojich otvorených úloh). Hlavná väzba ide cez push (server), nie cez počítač vývojára.
 - Panel kód neklonuje ani neukladá — drží len zoznam commitov (hash, správa, autor, čas, vetva, odkaz) pri záznamoch.
   Autor commitu sa spáruje s človekom v paneli podľa e-mailu.
+- **Rozhodnuté (majiteľ 21. 11. 2026):** repozitáre sú na **GitHube, do budúcna GitLab**; **commit bez čísla úlohy
+  prejde bez väzby**; číslo úlohy je **vždy na začiatku správy** a jeho tvar je **nastaviteľný** (Nastavenia →
+  Projekty, `{TASK}` = LED-123; predvolené `#{TASK}` ako v práci majiteľa, aj viac čísel za sebou).
+- **Stav — HOTOVÉ vo fáze 2 (21. 11. 2026):** webhook GitHub (`/git/github/{id}`, podpis HMAC SHA-256), GitLab
+  (`/git/gitlab/{id}`, secret token), vlastný server (`dev/git-hook-post-receive` → `POST /api/v1/git/push` s API
+  kľúčom). Commit pri úlohe (sekcia Commity) + záznam v histórii. Vetvy / PR a príkazy v commitoch (`fixes`, `#time`)
+  prídu vo fáze 5.
 
 ### 6.12 Zákazková výroba (3D tlač, gravírovanie …) — jeden kontajner na zákazku — PREDAJ / VÝROBA
 Majiteľ 21. 11. 2026: „robíme aj 3D printing a do budúcna gravírovanie; keď prijímame objednávku, dostaneme podklady
@@ -523,7 +538,7 @@ sa dá meniť podľa toho, čo firma potrebuje skôr.
 |---|---|---|---|
 | **0** ✅ | **HOTOVÉ 21. 11. 2026** — Preusporiadanie: nové menu, Nastavenia so záložkami, E-shopy samostatne, stavy objednávok do Nastavenia → E-shopy; rozhranie `Module`, presun dnešných častí — **bez zmeny funkcií**; **Pomocník** (tlačidlo ?, návody) + návody ku všetkému, čo panel už vie; **príručka frameworku pre vývojárov** | M | — |
 | **1** | Jadro, po krokoch: **1a ✅ práva** (roly, výnimky, firmy, e-shopy, `Access` — 21. 11. 2026, kap. 5) → **1b ✅ Ref + QR odkazy, prepojenia, aktivita, komentáre** (21. 11. 2026, kap. 4) → **1c ✅ udalosti, notifikácie, plánovač** → **1d ✅ súbory (Nextcloud, 4.1), integrácie** → **1e ✅ číslovanie + PDF šablóny, kalendár, vyhľadávanie** → **1f ✅ API kľúče** — fáza 1 hotová 21. 11. 2026 | L | 0 |
-| **2** | Úlohy a projekty: zoznam, kanban, Moje úlohy, komentáre, prílohy, prepojenia, notifikácie; výkazy práce; **commity pri úlohách** (webhook / post-receive, čísla `LED-123`) | L | 1 |
+| **2** ✅ | **HOTOVÉ 21. 11. 2026** — Úlohy a projekty: zoznam, kanban, Moje úlohy, komentáre, prílohy, prepojenia, notifikácie; výkazy práce; **commity pri úlohách** (webhook / post-receive, čísla `LED-123`) | L | 1 |
 | **3** | Timeline + závislosti, kalendár (dovolenky, sviatky), opakované úlohy, šablóny projektov; **register povinností a termínov** (stavia len na kalendári a plánovači); **financie projektu — správa rozpočtu (zostavenie, schválenie, zmeny s dôvodom, viazané prostriedky, kontrola výdavkov) a skutočnosť** (hodiny, priradené náklady) | M | 2 |
 | **4** | Dokumenty (jeden píše, ostatní vidia; verzie, komentáre) | M | 1 |
 | **5** | V-model: položky, trasovateľnosť (až po commity), matica, **testovacie behy + API**, vydania; vetvy / PR a príkazy v commitoch | L | 2, 4 |
@@ -572,7 +587,8 @@ na dev → nasadenie → technická dokumentácia tu a v HANDOVER. Nové zákonn
 7. **Distribútori súčiastok**: od koho nakupujete (TME, Mouser, DigiKey, LCSC …)? (fáza 8)
 8. **Prenájom**: čo by sa prenajímalo (zariadenia, technika na podujatia …) a komu — firmám, ľuďom? (fáza 12)
 9. **Git**: kde sú repozitáre — GitHub, GitLab, vlastné na domácom serveri, len lokálne? Pracujete s vetvami a pull
-   requestmi? Má commit bez čísla úlohy prejsť, alebo ho odmietnuť? (fáza 2)
+   requestmi? Má commit bez čísla úlohy prejsť, alebo ho odmietnuť? (fáza 2) — *odpovedané 21. 11. 2026: GitHub,
+   neskôr GitLab; bez čísla prejde; číslo na začiatku v nastaviteľnom tvare (6.11). Vetvy / PR — ešte otvorené (fáza 5).*
 10. **3D tlač a gravírovanie**: aké tlačiarne a laser (výrobca / typ, softvér — PrusaSlicer, Bambu Studio, LightBurn …)?
     Ako dnes prichádzajú objednávky a podklady — e-shop (s nahratím súboru?), e-mail, osobne? Aké veľké súbory? (fáza 6)
 11. **Pomocník**: stačia návody v paneli, alebo treba aj tlačenú / PDF príručku? Kto ich bude čítať (zamestnanci,

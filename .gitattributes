@@ -1,3 +1,5 @@
 # Files used inside Linux containers must keep LF line endings
 Dockerfile text eol=lf
 *.sh text eol=lf
+# git hook installed on a Linux server (no extension)
+dev/git-hook-post-receive text eol=lf

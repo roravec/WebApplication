@@ -1,0 +1,38 @@
+#!/bin/sh
+# post-receive hook for an own (bare) git repository → commits at tasks in the ERMA panel
+# (docs/panel-architektura.md 6.11; help: Pomocník → "Commity pri úlohách").
+#
+# Install: copy to <repo>.git/hooks/post-receive, chmod +x, fill in the three values below.
+# The repository must be added in the panel: Nastavenia → Projekty → Git repozitáre, "Iný (API …)", with the same REPO name.
+# The API key belongs to a person with the permission "Úlohy — zakladanie a úpravy" (Môj účet → API kľúče).
+PANEL_URL="https://erma.sk/panel"        # without a trailing slash
+REPO="erma/ledboard-fw"                  # the name given in the panel
+API_KEY="pk_xxxxxxxx_xxxxxxxxxxxxxxxx"   # keep this file readable only by the git user
+
+json_escape() { python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'; }
+
+while read old new ref; do
+  case "$ref" in refs/heads/*) branch="${ref#refs/heads/}" ;; *) continue ;; esac
+  [ "$new" = "0000000000000000000000000000000000000000" ] && continue      # branch deleted
+  if [ "$old" = "0000000000000000000000000000000000000000" ]; then
+    # new branch: its commits that no OTHER branch has (in post-receive the new ref already exists, so not "--not --all")
+    others=$(git for-each-ref --format='%(refname)' refs/heads | grep -vx "$ref")
+    shas=$(git rev-list --max-count=200 "$new" --not $others 2>/dev/null)
+  else
+    shas=$(git rev-list --max-count=200 "$old..$new" 2>/dev/null)
+  fi
+  commits=""
+  for sha in $shas; do
+    msg=$(git log -1 --format=%B "$sha" | json_escape)
+    name=$(git log -1 --format=%an "$sha" | json_escape)
+    mail=$(git log -1 --format=%ae "$sha" | json_escape)
+    when=$(git log -1 --format=%cI "$sha")
+    commits="$commits{\"sha\":\"$sha\",\"message\":$msg,\"author_name\":$name,\"author_email\":$mail,\"timestamp\":\"$when\",\"url\":\"\"},"
+  done
+  [ -z "$commits" ] && continue
+  body="{\"repo\":\"$REPO\",\"branch\":\"$branch\",\"commits\":[${commits%,}]}"
+  # never block the push: a failure is only printed
+  curl -s -m 15 -X POST -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" --data-binary "$body" "$PANEL_URL/api/v1/git/push" \
+    || echo "panel: commity sa nepodarilo poslať (skúste znova ďalším pushom)"
+  echo
+done
