@@ -24,6 +24,8 @@ class Invoices
         'buyer_zip', 'buyer_country', 'buyer_ico', 'buyer_dic', 'buyer_icdph', 'buyer_email', 'buyer_phone',
         'correction_reason', 'note', 'internal_note', 'issued_by_name'];
     const LINE_FIELDS = ['name', 'sku', 'quantity', 'unit', 'unit_price', 'vat_rate', 'vat_category'];
+    /** note of the payment added automatically when a document paid by card / in cash is issued */
+    const AUTO_PAYMENT_NOTE = 'uhradené pri vystavení';
 
     /** @var Database */ private $db;
     /** @var Companies */ private $companies;
@@ -383,6 +385,92 @@ class Invoices
         });
     }
 
+    /**
+     * Why an issued document can NOT go back to a draft (empty = it can). Only for a document issued by mistake that never
+     * left the company (owner 2026-11-21: a test invoice FA2026/000001 got a number the shop had already used): it is the
+     * last one issued in its number series (no gap in the series), was never sent by e-mail, is not in a package for the
+     * accountant nor in an Omega export, has no credit note and no payment except the automatic one (card / cash).
+     */
+    public function unissueErrors(array $inv): array
+    {
+        if ($inv['status'] !== 'issued') {
+            return ['Doklad nie je vystavený.'];
+        }
+        $id = (int)$inv['id'];
+        $err = [];
+        $later = $this->db->fetchValue("SELECT number FROM {$this->t('invoice')} WHERE company_id = ? AND series_id = ? AND status = 'issued'
+            AND id <> ? AND (issued_at > ? OR (issued_at = ? AND id > ?)) ORDER BY issued_at DESC, id DESC LIMIT 1",
+            [(int)$inv['company_id'], (int)$inv['series_id'], $id, $inv['issued_at'], $inv['issued_at'], $id]);
+        if ($later !== null) {
+            $err[] = 'Po ňom bol vystavený doklad ' . $later . ' z toho istého číselného radu (v rade by chýbalo číslo) — opravte ho dobropisom.';
+        }
+        $sent = (int)$this->db->fetchValue("SELECT COUNT(*) FROM {$this->t('invoice_email')} WHERE invoice_id = ? AND status = 'sent'", [$id]);
+        if ($sent) {
+            $err[] = 'Bol poslaný e-mailom — odberateľ ho má, opravte ho dobropisom.';
+        }
+        if (!empty($inv['accounting_package_id'])) {
+            $err[] = 'Je v balíku pre účtovníka.';
+        }
+        if (!empty($inv['omega_exported_at'])) {
+            $err[] = 'Bol exportovaný do Omegy.';
+        }
+        if ($this->creditNotesOf($id)) {
+            $err[] = 'Má dobropis.';
+        }
+        foreach ($this->payments($id) as $p) {
+            if ($p['note'] !== self::AUTO_PAYMENT_NOTE) {
+                $err[] = 'Má zapísanú úhradu — najprv ju zmažte.';
+                break;
+            }
+        }
+        return $err;
+    }
+
+    /**
+     * Returns a document issued by mistake to a draft (administrators; conditions: unissueErrors): the number is released
+     * (the series counter goes back when this was its last number), the archived PDF and the automatic payment are removed,
+     * the frozen supplier / legal texts / template are cleared (set again at the next issue). The audit log keeps the
+     * number, the reason and the SHA-256 of the removed PDF. @return string the released number
+     */
+    public function unissue(int $id, string $reason, Client $user): string
+    {
+        $reason = trim($reason);
+        if ($reason === '') {
+            throw new \InvalidArgumentException('Zadajte dôvod.');
+        }
+        return $this->db->transaction(function () use ($id, $reason, $user) {
+            $status = $this->db->fetchValue("SELECT status FROM {$this->t('invoice')} WHERE id = ? FOR UPDATE", [$id]);
+            if ($status !== 'issued') {
+                throw new \RuntimeException('Doklad nie je vystavený.');
+            }
+            $inv = $this->find($id);
+            $err = $this->unissueErrors($inv);
+            if ($err) {
+                throw new \RuntimeException(implode(' ', $err));
+            }
+            $back = null;
+            $series = $inv['series_id'] ? $this->companies->oneSeries((int)$inv['series_id']) : null;
+            if ($series) {
+                $year = Numbering::counterYear($series, $inv['issue_date']);
+                $next = (int)$this->db->fetchValue("SELECT next_number FROM {$this->t('series_counter')} WHERE series_id = ? AND year = ? FOR UPDATE",
+                    [(int)$series['id'], $year]);
+                if ($next > 1 && Numbering::format((string)$series['format'], $next - 1, $inv['issue_date']) === $inv['number']) {
+                    Numbering::setNext($this->db, $series, $year, $next - 1);
+                    $back = $next - 1;
+                }
+            }
+            $sha = $this->db->fetchValue("SELECT sha256 FROM {$this->t('invoice_pdf')} WHERE invoice_id = ?", [$id]);
+            $this->db->execute("DELETE FROM {$this->t('invoice_pdf')} WHERE invoice_id = ?", [$id]);
+            $this->db->execute("DELETE FROM {$this->t('invoice_payment')} WHERE invoice_id = ? AND note = ?", [$id, self::AUTO_PAYMENT_NOTE]);
+            $this->db->execute("UPDATE {$this->t('invoice')} SET status = 'draft', number = NULL, variable_symbol = '', supplier_json = NULL,
+                bank_account_name = '', iban = '', bic = '', legal_json = NULL, template = '', issued_by = NULL, issued_at = NULL, updated_at = ?
+                WHERE id = ?", [date('Y-m-d H:i:s'), $id]);
+            Audit::log($this->db, $user, 'invoice', $id, 'unissue', $inv['number'] . ' — ' . mb_substr($reason, 0, 300, 'UTF-8')
+                . ($sha ? ' (zmazané PDF, SHA-256 ' . $sha . ')' : '') . ($back !== null ? '; číselný rad späť na ' . $back : ''));
+            return (string)$inv['number'];
+        });
+    }
+
     /** Problems that prevent issuing (empty = can be issued). */
     public function issueErrors(array $inv): array
     {
@@ -488,7 +576,7 @@ class Invoices
             Audit::log($this->db, $user, 'invoice', $id, 'issue', $num['number']);
             // paid by card / in cash = paid when issued
             if (in_array($inv['payment_method'], ['card', 'cash'], true) && (float)$calc['total'] != 0) {
-                $this->addPayment($id, $inv['issue_date'], (float)$calc['total'], $inv['payment_method'], 'uhradené pri vystavení', $user);
+                $this->addPayment($id, $inv['issue_date'], (float)$calc['total'], $inv['payment_method'], self::AUTO_PAYMENT_NOTE, $user);
             }
             return $num;
         });

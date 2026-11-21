@@ -29,9 +29,9 @@ $sent = !empty($posted);
     <label class="wide">Dôvod (na dobropise) <input name="reason" value="<?= $e($p('reason', 'Vrátenie tovaru')) ?>"></label>
     <label>Zmeniť stav objednávky
       <select name="state"<?= $hasApi ? '' : ' disabled' ?>><option value="0">— nemeniť —</option>
-        <?php foreach ($states as $s): ?><option value="<?= (int)$s['id_order_state'] ?>"<?= (int)$p('state', 0) === (int)$s['id_order_state'] ? ' selected' : '' ?>><?= $e($s['name']) ?></option><?php endforeach ?>
+        <?php foreach ($states as $s): ?><option value="<?= (int)$s['id_order_state'] ?>"<?= (int)$p('state', 0) === (int)$s['id_order_state'] ? ' selected' : '' ?>><?= $e($s['name'] . (isset($s['send_email']) && !(int)$s['send_email'] ? ' (bez e-mailu)' : '')) ?></option><?php endforeach ?>
       </select></label>
-    <label class="check"><input type="checkbox" name="sendemail" value="1"<?= $p('sendemail') ? ' checked' : '' ?>> poslať zákazníkovi e-mail o stave</label>
+    <label class="check"><input type="checkbox" name="sendemail" value="1"<?= $p('sendemail') ? ' checked' : '' ?>> poslať zákazníkovi e-mail o stave (ak ho stav posiela)</label>
     <label class="wide">Poznámka <input name="note" value="<?= $e($p('note')) ?>" placeholder="napr. vrátené poštou, tovar v poriadku"></label>
     <p class="wide muted small">Peniaze zákazníkovi: platbu kartou cez GoPay vráťte v administrácii GoPay, prevodom z internetbankingu —
       panel to zatiaľ nerobí sám. Úhradu dobropisu zapíšete pri dobropise (alebo ju spáruje import výpisu).</p>

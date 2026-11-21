@@ -109,6 +109,12 @@ $lineRow = function (array $l) use ($e, $showVat, $num) { ?>
     <?php if ($showVat && $rates): ?><small class="muted">Platné sadzby DPH k dátumu dodania: <?= $e(implode(' %, ', array_map(function ($r) use ($num) { return $num($r, 2); }, $rates))) ?> % (Nastavenia → Legislatíva).</small><?php endif ?>
     <p><button type="button" data-add-row="line-rows">+ Položka</button>
       <?php if ($h['doc_type'] === 'credit_note'): ?><small class="muted">Dobropis: množstvá sú záporné (vrátené / opravené položky).</small><?php endif ?></p>
+    <?php if ($h['doc_type'] !== 'credit_note'): ?>
+    <p class="filters">Zľava <input id="disc-value" size="6" inputmode="decimal" placeholder="10" aria-label="Výška zľavy">
+      <select id="disc-mode" aria-label="Druh zľavy"><option value="pct">% z položiek</option><option value="eur">€<?= $showVat ? ' bez DPH' : '' ?></option></select>
+      <button type="button" data-add-discount>Pridať zľavu</button>
+      <small class="muted">pridá riadok so zápornou sumou<?= $showVat ? ' — pri viacerých sadzbách DPH zvlášť pre každú' : '' ?>; dá sa upraviť alebo odstrániť ako každá položka</small></p>
+    <?php endif ?>
   </section>
 
   <section class="card form-grid">

@@ -413,8 +413,8 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
    returns (restock via Webservice, partial credit note draft, state); Objednávky → Expedícia (bulk PDFs, tracking
    numbers, states); products: price, active, combination price impact, sales (specific_prices). Verified on dev1
    (1.7.6.7) through the panel and on dev4 (9.2.1) with a Webservice probe; **every call carries id_shop** (PS 9) —
-   also fixed `ShopOrdersApi::find` for PS 9. NOT done: editing order lines (Webservice can't recalculate — owner to
-   decide: shop admin vs. own module), Packeta shipments (after the official Packeta module). docs/sklad-specifikacia.md.
+   also fixed `ShopOrdersApi::find` for PS 9. Order lines: item 32. NOT done: Packeta shipments (after the official
+   Packeta module). docs/sklad-specifikacia.md.
    Live Webservice key needs the new permissions (list in the connection form). Migration 017.
 30. **Invoice look** (owner 2026-11-21: all data like the old shop invoices + closer to ermavzor): template
    `invoice-2026-2` (docs/legislativa.md), bank name per account (migration 018), legal texts delivery_note / thanks_shop.
@@ -422,11 +422,90 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
 31. **PHP 8.5 only** (owner 2026-11-21: "už nemusíš testovať nič na 7.3"): dev default + web :8090 on PHP 8.5, tests
    64/64 on 8.5, `curl_close` (deprecated in 8.5) removed; hbkpravotice / bnhl / erma crawled on 8.5 without errors.
    Legal PDFs for order e-mails regenerated with Open Sans (Web_store, diacritics looked like another font).
+32. **Order lines + carrier editable in the panel** (owner 2026-11-21: "v paneli sa stále nedajú upravovať objednávky";
+   asked: own PS module vs. Webservice only → **Webservice only**). Order detail → "Upraviť položky a dopravu"
+   (`/orders/…/lines`, `orders.edit`): quantity (0 = remove), unit price with VAT, add product (datalist from
+   ShopStock::rows; empty price = shop price via the Webservice `price[...]` fields for the delivery country), carrier +
+   shipping price, optional stock by the difference (`stock.edit`). `Shop\ShopOrderLines` mirrors PS 1.7.6
+   AdminOrdersController edit: order_details PUT/POST (copy of an existing line)/DELETE, orders PUT totals by the
+   difference (discounts / paid stay), order_carriers PUT (carrier, price, weight); refuses when the shop's order differs
+   from the form; checks every answer; note + audit. Limits: order_detail_tax not recalculated (only PS invoices use
+   it), % discounts not recalculated, reserved stock recomputed by PS at the next state change. Key needs
+   **order_details GET+POST+PUT+DELETE** (form + `Web_store/devserver/ws-key.php` updated). PUT nulls fields missing
+   from the XML → hidden `tax_rate`/`tax_name` are sent back from the SQL source.
+   **Bug fixed on the way:** SQL source (`ShopOrders::find`) used `order_detail.tax_rate` as the VAT rate of invoice
+   lines — PS 1.7+ never fills it (always 0) → a VAT payer's invoice from an order would have had 0 % VAT; now the rate
+   comes from the prices when the stored one is 0 (same as ShopOrdersApi).
+   **NOT verified yet:** written 2026-11-21 while the dev server was unreachable (ping OK, ssh / :8090 / :8081 timed
+   out). **Tests 65/65 OK on 2026-11-21** (temporary local setup, see "Dev environment"). TODO: e2e on **PrestaShop 9 only** (production runs
+   9.2.0 since 2026-11-20, item 26; owner 2026-11-21: 1.7.6.7 and 8.2.9 no longer matter) — dev4 (9.2.1) or a copy of
+   production: qty / price / remove / add / carrier, check the order in the shop admin (totals, lines), PS 9 accepts
+   order_details PUT/POST/DELETE and the orders totals PUT; re-run ws-key.php there.
+33. **Invoice numbers continue the shop's + mistakes** (owner 2026-11-21: a test invoice on production got FA2026/000001
+   — the series had no "next number" set; PrestaShop issued FA2026/000001–000215 in 2026, the 20. 11. backup's last =
+   215 of 19. 11.). Owner sets Firmy → ERMA Group → Číselné rady → Faktúra → Ďalšie číslo = last shop number + 1 (check
+   the shop admin for invoices after 19. 11.). New admin-only **"Vrátiť do konceptu"** on an issued document
+   (`Invoices::unissue`, conditions in `unissueErrors`, docs/legislativa.md): FA2026/000001 was not sent → use it once
+   deployed. Omega export got **"Len na skúšku"** (doesn't set omega_exported_at — otherwise a test export would keep
+   the documents out of the monthly package's Omega file and block the revert). Invoice preview (browser) = A4 sheet
+   with the footer at the bottom like the PDF (screen CSS only, both templates). Test "issued by mistake" passes
+   (2026-11-21, temporary local setup).
+   **DEPLOYED 2026-11-21 by the owner** (uploaded the changed panel files via FTP himself) and **used on production:
+   FA2026/000001 went back to a draft with the button — works.** Owner's next step: Ďalšie číslo = last shop number + 1
+   (216 unless the shop issued more after 19. 11.), then issue the draft again. Series must have Nulovanie = „každý
+   rok“ (default) → FA2027/000001 starts by itself (counter per year, by issue date).
+   **Careful:** App.php registers the routes of item 32 too (`callable` type → the panel would not start with a missing
+   method), so the order-lines code ("Upraviť položky a dopravu") is most likely on the hosting as well — it is
+   UNTESTED; don't use it on live orders until verified on PS 9 (item 32 TODO). The live key has no order_details
+   write rights yet, so line changes would fail with "kľúč nemá oprávnenie" — but a carrier / shipping-price-only
+   change would go through (order_carriers + orders PUT are allowed).
+34. **"V objednávke nemôžem meniť nič"** (owner 2026-11-21, production): every change goes through the shop's Webservice
+   → needs Sklad → E-shopy connection with key, Aktívne + "Toto je e-shop, ktorého tabuľky sú v databáze panela"
+   (= `localConnection()`); without it the panel hid the buttons silently. Live Webservice is ON (howieshockey.sk/store/api/
+   → 401 asking for the key, checked 2026-11-21; plain curl gets HTTP 466 from the hosting's proxy — use a browser UA).
+   Now the order detail says why changes are not possible (`OrdersController::show` → `editBlocked`). Waiting: owner
+   creates the connection (key in PS admin → Rozšírené parametre → Webservice, permissions = list in the form).
+   **Discount on an order** (owner 2026-11-21 "urob aj tú zľavu"): in "Upraviť položky, dopravu a zľavu" — the order's
+   total discount in € with VAT or % of the products (after the line changes), replaces the current one;
+   `ShopOrderLines::planDiscount` + `totals()` (paid = products + shipping − discount; without VAT in the products'
+   ratio). Webservice has no order_cart_rules → only the totals change (no named voucher in the shop admin); the
+   panel's invoice from the order takes total_discounts_*. Test in "order lines…"; UNTESTED like the rest of item 32.
+35. **Fio download → HTTP 500** (owner 2026-11-21, production, "token je určite dobrý"). Official doc (API Bankovnictví
+   16. 10. 2025, ch. 8): **500 = token does not exist or is not active** — usable only 5 min after its strong
+   authorization (all signers on a multi-signature account), validity max. 180 days unless auto-extended at each login,
+   one token = one account; 422 = data older than 90 days without unlocking the history (Nastavenia → API → lock, 10 min);
+   413 = more than 50 000 movements. `Fio::movements` now says exactly that; Firmy → bank account accepts only a
+   64-character alphanumeric token (whitespace from pasting removed). Files to upload: src/Invoicing/Fio.php,
+   src/Controller/CompaniesController.php. Waiting: owner checks the token state in Fio internet banking.
+36. **State change sent no e-mail** (owner 2026-11-21, "Zaplatená a odoslaná"): PrestaShop sends the e-mail of a state
+   only when the STATE has send_email = 1 — backup 20. 11.: state 4 "Zaplatená a odoslaná" has template `shipped` but
+   send_email = 0 (also 1 "Odoslané na dobierku"; 36 "Odoslané na dobierku (notify)" sends `in_transit`). Fix = in the
+   shop admin (Objednávky → Stavy → tick "Poslať e-mail zákazníkovi") or in the panel once state editing exists. The
+   panel now reads send_email and marks such states "(bez e-mailu)" in every state picker; checkbox label "ak ho stav
+   posiela". **Order states editable in the panel — built 2026-11-21** (owner "urob tú úpravu stavov"): Objednávky →
+   "Stavy objednávok" (administrators; `/orders/states?src=`), `Shop\ShopOrderStates` + `OrderStatesController`, views
+   orders/states.php + state-form.php: list (marks "šablóna nastavená, ale vypnutá"), edit / new: Slovak name + e-mail
+   template (other languages stay; a new state gets them in all), colour, send_email, paid, shipped, delivery,
+   pdf_delivery, logable, hidden; invoice / pdf_invoice / module_name / unremovable never touched, no delete. Key needs
+   **order_states GET + PUT + POST** (form + ws-key.php). Test "order states in the shop…"; 66/66 locally. Not tried
+   against a real PS 9 yet (Webservice blank schema for a new state = assumption).
+37. **Discount on an invoice** (owner 2026-11-21 "pri vystavovaní faktúry neviem dať zľavu"): it always worked as a line
+   with a negative price (like the invoice from an order), but the form didn't say so → invoice form now has "Zľava
+   [value] [% z položiek | € (bez DPH)] Pridať zľavu" (js/panel.js `addDiscount`): negative line(s), one per VAT rate /
+   category of the positive lines (% of each rate's base; a fixed amount split by the bases, rounding on the last),
+   editable like any line. Not for credit notes. Panel CSS / JS now carry `?v=filemtime` (views/layout.php, login.php)
+   so a browser loads changed files right after an FTP upload. JS not machine-checked (no node locally) — read through.
 
 ### Dev environment (home server)
+- **Without the home server** (owner away, 2026-11-21): a temporary setup on the owner's PC in the Claude session's
+  scratchpad (not installed, nothing in PATH, gone with the session): official PHP 8.5.13 NTS x64 zip (windows.php.net,
+  SHA-256 checked) + MariaDB 11.4.14 winx64 zip (127.0.0.1:3307, utf8mb4_general_ci, db/user/pass webapp) →
+  `DB_HOST="127.0.0.1;port=3307" DB_NAME=webapp DB_USER=webapp DB_PASS=webapp php tests/run.php` = **65 passed,
+  1 skipped** (PDF — no composer vendor locally). Recreate the same way when needed; the home server stays the reference.
 - **PHP 8.5** everywhere (= hosting): `cd ~/webapplication-dev/dev && COMPOSE_PROJECT_NAME=webapplication docker compose run --rm test`.
-  Shop copies for Webservice tests: dev1 (1.7.6.7, :8081, = the panel's "local" connection) and dev4 (9.2.1, :8084);
-  key permissions set by `Web_store/devserver/ws-key.php` (keeps the existing key).
+  Shop copies for Webservice tests: **dev4 (9.2.1, :8084) — closest to production 9.2.0, test here**; dev1 (1.7.6.7,
+  :8081) = the old pre-upgrade state, still the panel's dev "local" connection (switch it to a PS 9 copy when
+  convenient); key permissions set by `Web_store/devserver/ws-key.php` (keeps the existing key).
 - `~/webapplication-dev` (copy via `tar | ssh`, not a git clone), `dev/compose.yml`, web **http://192.168.0.11:8090/**:
   `/` = erma, `/panel` = employee section, `/demo` = framework demo. Dev login everywhere: **admin / admin**.
 - Dev DB contains the shop tables `ps_*` imported by `dev/import-shop.sh` from `~/webstore/backups/database-*.sql.gz`
@@ -445,27 +524,27 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
 - NOT waiting (owner 2026-11-19): OR registration, first invoice number and series format are settings — the owner fills
   them in himself later; don't ask again. Invoice from an order is created **manually** (button) + fully manual
   invoices — both exist.
-- Live Webservice key: add the new permissions (connection form lists them) — otherwise tracking / address / sales fail
-  with a clear "kľúč nemá oprávnenie" message.
+- Live Webservice key: add the new permissions (connection form lists them; now also order_details POST + PUT + DELETE
+  for item 32) — otherwise tracking / address / sales / order lines fail with a clear "kľúč nemá oprávnenie" message.
 - Firmy → bankový účet → Banka (e.g. "Fio banka, a.s.") — printed on invoices.
-- Decide: editing order lines — in the shop admin, or an own small module (Webservice can't do it safely).
 
 ### Next tasks
-0. **Deploy + maintenance plan: docs/nasadenie-a-udrzba.md** (2026-11-20): phase A framework + panel + erma +
-   hbkpravotice + bnhl (switch = rename root index.php, rollback the same), B shop legal fixes (optional), C shop 8.2.9
-   (needs A first: add_faktura goes), D clean-up + DB password change; maintenance rules and calendar. To build for A:
-   deploy package from the dev server (with vendor, without demo/config.php), production config.php with empty
-   passwords + generated jwtSecret, post-switch checklist.
+0. **Deploy + maintenance: docs/nasadenie-a-udrzba.md.** State 2026-11-21: phase A (framework + panel + erma +
+   hbkpravotice + bnhl) LIVE since 2026-11-20; **phase C + A2 (+ legal fixes B) LIVE since 2026-11-20 evening: the
+   shops run PrestaShop 9.2.0 on PHP 8.5 in `ermaskretail`** (item 26; 8.2.9 was only a step, switched and rolled
+   back). **PrestaShop 1.7.6.7 and 8.2.9 no longer matter (owner 2026-11-21)** — build and test shop features for
+   PrestaShop 9 only. Left: phase D clean-up (old core, `/store_old/` + erma-deploy.php if still there, `molesk`
+   password change), maintenance rules and calendar.
 1. **Invoicing — next:** sending e-invoices through a Peppol access point (provider per company, API differs per
    provider — when the owner chooses one; receiving e-invoices too); ISDOC, CSV; PAY by square logo per the SBA logo
    manual (now a text caption — the manual's links on sbaonline.sk returned 404 on 2026-11-19).
 2. **Shops — next:** Omega stock export (T02/T03) for native warehouses; maybe later: more order actions in the shop
-   (tracking number, messages). **PrestaShop 8.2.9 checked 2026-11-19** (shop rehearsal dev3, Web_store
+   (tracking number, messages). [History — production is 9.2.0 now:] **PrestaShop 8.2.9 checked 2026-11-19** (shop rehearsal dev3, Web_store
    docs/upgrade-plan.md): the SQL reader (ShopOrders) and all Webservice parts (stock, product settings with the safe
    PUT, orders via Webservice incl. multistore, order state change) work unchanged; PS 8 dropped
    `ps_orders.shipping_number` (not used by the panel). **PrestaShop 9.2.1 checked 2026-11-19** (dev4, "Rehearsal 3"):
    the same works after one fix — PS 9's Webservice marks the product field `new` read-only, so `ShopProducts` now
-   takes the read-only fields from the shop's schema (verified on 9.2.1 and 1.7.6.7). Facts from the dev copy of the shop DB: PrestaShop 1.7.6.7, simple stock management (no advanced
+   takes the read-only fields from the shop's schema (verified on 9.2.1 and 1.7.6.7). Facts from the dev copy of the shop DB (made on 1.7.6.7, the data came over to 9.2.0): simple stock management (no advanced
    stock / warehouses), stock per SHOP GROUP (`ps_stock_available` id_shop = 0): group 1 = AmerickeSPZ.sk + CarPlates
    (shared stock), group 2 = Howies Hockey, group 3 = ERMA; 221 combinations. The old `sklad/` app on the hosting is a
    former ModaUSA.sk consignment stock (own `stock_*` tables) — unrelated. Writing stock into PrestaShop would lift the

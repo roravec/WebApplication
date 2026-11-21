@@ -179,7 +179,15 @@ class CompaniesController
             if (strtoupper(str_replace(' ', '', (string)$iban)) === '' && (int)($bankIds[$i] ?? 0) === 0) {
                 continue;   // the same rows that were skipped above
             }
-            $tokens[] = trim((string)($bankTokens[$i] ?? ''));
+            $t = trim((string)($bankTokens[$i] ?? ''));
+            if ($t !== '' && $t !== 'zmazať') {
+                $t = preg_replace('/\s+/', '', $t);   // pasted with a line break / spaces
+                if (!preg_match('/^[A-Za-z0-9]{64}$/', $t)) {
+                    $errors['banks'] = 'Fio token má presne 64 znakov (písmená a číslice) — tento má ' . strlen($t)
+                        . '. Skopírujte ho celý z internetbankingu (Nastavenia → API).';
+                }
+            }
+            $tokens[] = $t;
         }
         $secret = null;
         if (array_filter($tokens, function ($t) { return $t !== '' && $t !== 'zmazať'; })) {

@@ -149,6 +149,25 @@ $num = function ($v) { $s = number_format((float)$v, 3, ',', ' '); return rtrim(
 </div>
 <?php endif ?>
 
+<?php if (($unissueErrors ?? null) !== null): ?>
+<details class="card" style="margin: 1rem 0">
+  <summary><b>Omylom vystavený doklad?</b> <span class="muted small">(len správca)</span></summary>
+  <?php if ($unissueErrors): ?>
+    <p class="muted">Vrátiť do konceptu sa nedá: <?= $e(implode(' ', $unissueErrors)) ?></p>
+  <?php else: ?>
+    <p class="muted">Len pre doklad, ktorý nikto mimo firmy nedostal (napr. skúšobný alebo so zlým číslom): stane sa znova
+      konceptom, číslo <b><?= $e($inv['number']) ?></b> sa uvoľní (ak je posledné v číselnom rade, rad sa vráti o jedno späť),
+      archivované PDF a automatická úhrada sa zmažú. V histórii ostane záznam s dôvodom.</p>
+    <form method="post" action="<?= $e($ctx->url('/invoices/' . $inv['id'] . '/unissue')) ?>" class="form-grid narrow">
+      <?= Csrf::field() ?>
+      <label class="wide">Dôvod <input name="reason" required maxlength="300" placeholder="napr. skúšobná faktúra, číslo sa zhoduje s faktúrou e-shopu"></label>
+      <label class="check wide"><input type="checkbox" name="confirm" value="1" required> Doklad nikto mimo firmy nedostal (ani PDF, ani e-faktúru)</label>
+      <p class="wide"><button class="danger" data-confirm="Vrátiť doklad <?= $e($inv['number']) ?> do konceptu?">Vrátiť do konceptu</button></p>
+    </form>
+  <?php endif ?>
+</details>
+<?php endif ?>
+
 <h2>História</h2>
 <table class="grid compact">
   <tbody>

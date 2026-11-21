@@ -53,12 +53,15 @@ VS Code workspace with all related repos: `C:\Users\orras\git\ERMA.code-workspac
 - Shared hosting, **FTP only**, nginx proxy in front of Apache. FTP root = web root shared by all domains.
   Local snapshot of the FTP (structure reliable, contents old): `C:\Users\orras\git\ftp` — **never delete it**.
 - Root `.htaccess` is shared with the shop (`/store/`) and must not be overwritten; `/fw` and `/api/device_sync.php`
-  must stay plain HTTP (ESP32 devices). The live server currently runs BOTH the old core (`core/`, `WebApp_*` folders,
-  root `index.php`) and an older copy of this framework (`core_new/`, `applications/`, `config/`).
+  must stay plain HTTP (ESP32 devices). Since 2026-11-20 the root `index.php` is this framework (phase A); the old core
+  (`core/`, `WebApp_*`, `index_oldcore.php`) stays on the server until the phase D clean-up.
+- **Shop = PrestaShop 9.2.0** (live since 2026-11-20 evening, PHP 8.5, database `ermaskretail`). 1.7.6.7 and 8.2.9 no
+  longer matter (owner 2026-11-21) — build and test shop features for PrestaShop 9 only (dev4 = 9.2.1).
 - **Databases (owner 2026-11-20): `ermaskretail` = production** for everything in full operation; **`molesk` = test**.
   Deploy first on `molesk` (as today: shop `ps_*`, `hbkpravotice_*`, old tools `admin/`, `sklad/`, `beta/` …), then
   flip over to `ermaskretail` (framework apps: phase A2 = copy `panel_*` + `hbkpravotice_*`, switch config.php; the
   upgraded shop goes into `ermaskretail` directly in phase C). `molesk` stays as the test database afterwards.
+  **Done 2026-11-20:** shop, panel and hbkpravotice/bnhl all run in `ermaskretail`.
   Plan: docs/nasadenie-a-udrzba.md "Databázy".
   **`ermaskretail` is already used by other live services** (found in the 2026-11-20 backup): `aqua_*` (aqua.erma.sk,
   repo `Web_AquaErma`), `lcs_*` (mobileservice.erma.sk, repo `DB2020_revival`), `branchmanager_*` (owner's old school project, unused — may be dropped in phase D) → only ADD

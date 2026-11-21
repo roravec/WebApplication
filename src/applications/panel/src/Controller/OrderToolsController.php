@@ -9,6 +9,7 @@ use Panel\Shop\OrderLog;
 use Panel\Shop\OrderSource;
 use Panel\Shop\PrestaShopApi;
 use Panel\Shop\ShopOrderEdit;
+use Panel\Shop\ShopOrderLines;
 use Panel\Shop\ShopOrdersApi;
 use Panel\Shop\ShopOrderState;
 use Panel\Shop\ShopStock;
@@ -422,6 +423,149 @@ class OrderToolsController
         }
         if ($creditId && $this->ctx->can(Rights::INVOICES_VIEW)) {
             return Response::redirect($this->ctx->url('/invoices/' . $creditId));
+        }
+        return $this->back($src, $o);
+    }
+
+    // ------------------------------------------------------------------ order lines (products, quantities, prices, carrier)
+
+    /** GET /orders/[{src}/]{id}/lines — edit the products / quantities / prices / carrier of the order IN THE SHOP. */
+    public function linesForm(Request $req, array $params, array $errors = [], array $posted = [])
+    {
+        $l = $this->load($params);
+        if ($l instanceof Response) {
+            return $l;
+        }
+        list($src, , $o) = $l;
+        $api = $this->hasApi($src) ? $this->ctx->orderWriteApi($src) : null;
+        $carriers = $products = [];
+        $loadError = null;
+        if ($api === null) {
+            $loadError = 'Nie je pripojený e-shop tejto databázy (Sklad → E-shopy) — položky sa nedajú meniť.';
+        } else {
+            try {
+                $carriers = (new ShopOrderLines($api))->carriers((int)$o['id_shop']);
+            } catch (\Throwable $e) {
+                $loadError = 'Dopravcov sa nepodarilo načítať: ' . $e->getMessage();
+            }
+            try {   // product picker: products and combinations exactly as the shop has them
+                $stock = new ShopStock($api);
+                $shop = $stock->shop((int)$o['id_shop']);
+                $products = $shop ? $stock->rows($shop) : [];
+            } catch (\Throwable $e) {
+                $errors[] = 'Zoznam produktov sa nenačítal (' . $e->getMessage() . ') — produkt pridáte zadaním „[ID produktu:ID kombinácie]“.';
+            }
+        }
+        return $this->ctx->page('orders/lines', ['o' => $o, 'src' => $src, 'carriers' => $carriers, 'products' => $products,
+            'errors' => $errors, 'posted' => $posted, 'loadError' => $loadError,
+            'invoice' => $this->ctx->invoices()->findByOrder($src, (int)$o['id_order']),
+            'canStock' => $this->ctx->can(Rights::STOCK_EDIT)],
+            'Upraviť položky — ' . $o['reference'], 'orders');
+    }
+
+    /** POST /orders/[{src}/]{id}/lines */
+    public function linesSave(Request $req, array $params)
+    {
+        $l = $this->loadPost($req, $params);
+        if ($l instanceof Response) {
+            return $l;
+        }
+        list($src, $source, $o) = $l;
+        $num = function ($v) {
+            $v = str_replace([' ', ','], ['', '.'], trim((string)$v));
+            return $v === '' ? null : (is_numeric($v) ? (float)$v : false);
+        };
+        $errors = [];
+        $qty = (array)$req->post('qty', []);
+        $price = (array)$req->post('price', []);
+        $lines = $expect = $keep = [];
+        foreach ($o['lines'] as $line) {
+            $id = (int)$line['id_order_detail'];
+            $q = trim((string)($qty[$id] ?? ''));
+            $p = $num($price[$id] ?? '');
+            if (!preg_match('/^\d{1,5}$/', $q) || $p === false || ($p !== null && $p < 0)) {
+                $errors[] = $line['product_name'] . ': zadajte počet kusov (0 = odstrániť) a cenu za kus.';
+                continue;
+            }
+            $lines[$id] = ['qty' => (int)$q, 'price' => $p];
+            $keep[$id] = isset($line['tax_rate_db']) ? ['tax_rate' => $line['tax_rate_db'], 'tax_name' => (string)($line['tax_name'] ?? '')] : [];
+        }
+        foreach ((array)$req->post('orig_qty', []) as $id => $q) {
+            $expect['lines'][(int)$id] = ['qty' => (int)$q, 'price' => (float)(((array)$req->post('orig_price', []))[$id] ?? -1)];
+        }
+        $expect += ['lines' => [], 'total' => (float)$req->post('orig_total', -1), 'carrier' => (int)$req->post('orig_carrier', -1),
+            'shipping' => (float)$req->post('orig_shipping', -1), 'discount' => (float)$req->post('orig_discount', -1)];
+        $add = [];
+        $addQty = (array)$req->post('add_qty', []);
+        $addPrice = (array)$req->post('add_price', []);
+        foreach ((array)$req->post('add_product', []) as $i => $text) {
+            $text = trim((string)$text);
+            if ($text === '') {
+                continue;
+            }
+            $q = trim((string)($addQty[$i] ?? ''));
+            $p = $num($addPrice[$i] ?? '');
+            if (!preg_match('/\[(\d+):(\d+)\]\s*$/', $text, $m)) {
+                $errors[] = 'Produkt „' . $text . '“: vyberte ho zo zoznamu (končí sa [ID produktu:ID kombinácie]).';
+            } elseif (!preg_match('/^[1-9]\d{0,4}$/', $q) || $p === false || ($p !== null && $p < 0)) {
+                $errors[] = 'Produkt „' . $text . '“: zadajte počet kusov (aspoň 1) a cenu za kus alebo ju nechajte prázdnu (= cena v e-shope).';
+            } else {
+                $add[] = ['product_id' => (int)$m[1], 'attribute_id' => (int)$m[2], 'qty' => (int)$q, 'price' => $p];
+            }
+        }
+        $shipPrice = $num($req->post('shipping_price', ''));
+        if ($shipPrice === false || $shipPrice === null || $shipPrice < 0) {
+            $errors[] = 'Zadajte cenu dopravy (0 = zadarmo).';
+        }
+        $discMode = $req->post('discount_mode') === 'percent' ? 'percent' : 'amount';
+        $discValue = $num($req->post('discount_value', ''));
+        if ($discValue === false || $discValue === null || $discValue < 0 || ($discMode === 'percent' && $discValue > 100)) {
+            $errors[] = 'Zľava: zadajte sumu s DPH alebo percento 0–100 (0 = bez zľavy).';
+        }
+        $api = $this->hasApi($src) ? $this->ctx->orderWriteApi($src) : null;
+        if ($api === null) {
+            $errors[] = 'Nie je pripojený e-shop tejto databázy (Sklad → E-shopy).';
+        }
+        if ($errors) {
+            return Response::html($this->linesForm($req, $params, $errors, $req->post()), 422);
+        }
+        $withStock = (bool)$req->post('stock') && $this->ctx->can(Rights::STOCK_EDIT);
+        try {
+            $r = (new ShopOrderLines($api))->apply((int)$o['id_order'], (int)$o['id_shop'], (string)$o['reference'],
+                ['lines' => $lines, 'add' => $add, 'shipping' => ['carrier_id' => (int)$req->post('carrier', 0), 'price' => $shipPrice],
+                 'discount' => ['mode' => $discMode, 'value' => $discValue]],
+                $expect, $keep, $withStock ? new ShopStock($api) : null);
+        } catch (\InvalidArgumentException $e) {
+            return Response::html($this->linesForm($req, $params, [$e->getMessage()], $req->post()), 422);
+        } catch (\Throwable $e) {
+            return Response::html($this->linesForm($req, $params, ['Nič sa nezmenilo: ' . $e->getMessage()], $req->post()), 502);
+        }
+        if (!$r['done'] && !$r['problems']) {
+            Session::flash('msg', 'Bez zmeny — položky, doprava aj zľava sú rovnaké.');
+            return $this->back($src, $o);
+        }
+        $this->forget($source);
+        $summary = implode('; ', $r['done']);
+        $this->audit($src, $source, $o, 'lines', $summary . ($r['problems'] ? ' | PROBLÉMY: ' . implode(' ', $r['problems']) : ''));
+        $this->log()->addNote($src, (int)$o['id_order'], 'Úprava objednávky v e-shope: ' . ($summary !== '' ? $summary : '—')
+            . ($r['total'] !== null ? '. Nový súčet ' . number_format($r['total'], 2, ',', ' ') . ' ' . ($o['currency'] ?: '€') : '')
+            . ($r['problems'] ? '. Problémy: ' . implode(' ', $r['problems']) : ''), $this->ctx->user());
+        $notes = [];
+        $paid = array_sum(array_map(function ($p) { return (float)$p['amount']; }, $o['payments']));
+        if ($r['total'] !== null && $o['payments'] && abs($paid - $r['total']) >= 0.005) {
+            $notes[] = 'Zaplatené ' . number_format($paid, 2, ',', ' ') . ' — nový súčet ' . number_format($r['total'], 2, ',', ' ')
+                . ($paid > $r['total'] ? ': zákazníkovi treba vrátiť rozdiel.' : ': zákazník má doplatiť rozdiel.');
+        }
+        $inv = $this->ctx->invoices()->findByOrder($src, (int)$o['id_order']);
+        if ($inv) {
+            $notes[] = $inv['status'] === 'issued' ? 'Vystavená faktúra má pôvodné položky — opravte ju dobropisom a novou faktúrou.'
+                : 'Koncept faktúry má pôvodné položky — upravte ho.';
+        }
+        if ($r['problems']) {
+            Session::flash('error', 'Niečo sa neuložilo: ' . implode(' ', $r['problems']) . ($r['done'] ? ' Uložené: ' . $summary . '.' : ''));
+        }
+        if ($r['done']) {
+            Session::flash('msg', 'Zmenené v e-shope: ' . $summary . '.' . ($notes ? ' ' . implode(' ', $notes) : ''));
         }
         return $this->back($src, $o);
     }

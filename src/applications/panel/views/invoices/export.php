@@ -20,6 +20,8 @@ $err = function ($k) use ($errors, $e) {
   <label>Vystavené od <input type="date" name="from" value="<?= $e($values['from']) ?>" required><?= $err('from') ?></label>
   <label>do <input type="date" name="to" value="<?= $e($values['to']) ?>" required><?= $err('to') ?></label>
   <label class="check"><input type="checkbox" name="only_new" value="1"<?= $values['only_new'] ? ' checked' : '' ?>> Len doklady, ktoré ešte neboli exportované</label>
+  <label class="check"><input type="checkbox" name="trial" value="1"<?= !empty($values['trial']) ? ' checked' : '' ?>> Len na skúšku — doklady sa neoznačia ako exportované
+    (pôjdu aj do ďalšieho exportu a do balíka pre účtovníka). Účtovníčka nech skúšobný súbor importuje do <b>skúšobnej firmy</b> v Omege.</label>
   <?php if (isset($errors['docs'])): ?><div class="flash err"><b>Tieto doklady sa nedajú exportovať:</b><?= $err('docs') ?></div><?php endif ?>
   <button class="primary">Stiahnuť súbor pre Omegu</button>
 </form>

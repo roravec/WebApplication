@@ -68,7 +68,7 @@ class ShopOrders implements OrderSource
     public function states(): array
     {
         return $this->db->query(
-            "SELECT os.id_order_state, osl.name, os.color, os.paid, os.shipped, os.delivery
+            "SELECT os.id_order_state, osl.name, os.color, os.paid, os.shipped, os.delivery, os.send_email
              FROM `{$this->p}order_state` os
              LEFT JOIN `{$this->p}order_state_lang` osl ON osl.id_order_state = os.id_order_state AND osl.id_lang = ?
              WHERE os.deleted = 0 ORDER BY osl.name",
@@ -194,10 +194,22 @@ class ShopOrders implements OrderSource
         $o['payments_unavailable'] = false;
         $o['lines'] = $this->db->query(
             "SELECT id_order_detail, product_id, product_attribute_id, product_name, product_reference, product_quantity, unit_price_tax_excl,
-                    unit_price_tax_incl, total_price_tax_excl, total_price_tax_incl, tax_rate, product_weight
+                    unit_price_tax_incl, total_price_tax_excl, total_price_tax_incl, tax_rate, tax_name, product_weight,
+                    product_quantity_reinjected
              FROM `{$this->p}order_detail` WHERE id_order = ? ORDER BY id_order_detail",
             [$id]
         );
+        // order_detail.tax_rate is deprecated — PrestaShop 1.7+ leaves it 0 → the rate from the prices (like ShopOrdersApi);
+        // the stored values stay in tax_rate_db / tax_name (an order line PUT must send them back, ShopOrderLines)
+        foreach ($o['lines'] as &$l) {
+            $l['tax_rate_db'] = $l['tax_rate'];
+            if ((float)$l['tax_rate'] <= 0) {
+                $l['tax_rate'] = (float)$l['unit_price_tax_excl'] > 0
+                    ? ShopOrdersApi::rate((float)$l['unit_price_tax_incl'], (float)$l['unit_price_tax_excl'])
+                    : ShopOrdersApi::rate((float)$l['total_price_tax_incl'], (float)$l['total_price_tax_excl']);
+            }
+        }
+        unset($l);
         $o['address_invoice'] = $this->address((int)$o['id_address_invoice']);
         $o['address_delivery'] = $this->address((int)$o['id_address_delivery']);
         $o['pickup_point'] = $this->pickupPoint((int)$o['id_cart']);

@@ -107,8 +107,9 @@ $font = function (string $file) use ($fontBase, $e) { return $e(rtrim($fontBase,
     body { background: #e9ecef; }
     .tools { display: block; text-align: center; margin: 4mm; font-family: system-ui, sans-serif; }
     .tools a, .tools button { font: inherit; font-size: 10pt; padding: 1.5mm 4mm; margin: 0 1mm; cursor: pointer; }
-    .sheet { width: 186mm; min-height: 268mm; margin: 0 auto 8mm; background: #fff; padding: 10mm 12mm 6mm; position: relative; box-shadow: 0 2px 12px rgba(0,0,0,.15); }
-    .foot { position: static; margin-top: 8mm; height: auto; }
+    /* an A4 sheet with the PDF's margins; the footer at its bottom like in the PDF (6 mm from the edge) */
+    .sheet { box-sizing: border-box; width: 210mm; min-height: 297mm; margin: 0 auto 8mm; background: #fff; padding: 10mm 12mm 22mm; position: relative; box-shadow: 0 2px 12px rgba(0,0,0,.15); }
+    .foot { position: absolute; left: 12mm; right: 12mm; bottom: 6mm; height: auto; }
     .draft { position: absolute; }
   }
 </style>

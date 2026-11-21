@@ -416,9 +416,10 @@ class ShopOrdersApi implements OrderSource
         return $this->cached('states', self::LISTS_TTL, function () {
             $lang = $this->langId();
             $out = [];
-            foreach (self::each($this->api->get('order_states', ['display' => '[id,name,color,paid,shipped,delivery,deleted]'])->order_states, 'order_state') as $s) {
+            foreach (self::each($this->api->get('order_states', ['display' => '[id,name,color,paid,shipped,delivery,deleted,send_email]'])->order_states, 'order_state') as $s) {
                 $out[] = ['id_order_state' => (int)$s->id, 'name' => PrestaShopApi::text($s->name, $lang), 'color' => (string)$s->color,
-                    'paid' => (int)$s->paid, 'shipped' => (int)$s->shipped, 'delivery' => (int)$s->delivery, 'deleted' => (int)$s->deleted];
+                    'paid' => (int)$s->paid, 'shipped' => (int)$s->shipped, 'delivery' => (int)$s->delivery, 'deleted' => (int)$s->deleted,
+                    'send_email' => (int)$s->send_email];
             }
             usort($out, function ($a, $b) { return strcmp(ShopStock::sortKey($a['name']), ShopStock::sortKey($b['name'])); });
             return $out;

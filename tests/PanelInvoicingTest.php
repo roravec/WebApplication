@@ -270,6 +270,68 @@ test('panel: issue invoices — numbers in sequence, issued is immutable, credit
     ok(count(Panel\Audit::forEntity($db, 'invoice', $id1)) >= 3, 'audit: create, issue, credit note');
 });
 
+test('panel: an invoice issued by mistake goes back to a draft (number released, conditions)', function () {
+    $db = panelDb();
+    $user = panelUser($db, 'admin', 100);
+    Schema::migrate($db, __DIR__ . '/../src/applications/panel/sql');
+    $companies = new Companies($db);
+    $cid = $companies->save(null, ['name' => 'ERMA Group s.r.o.', 'street' => 'Pravotice 178', 'city' => 'Pravotice', 'zip' => '956 35',
+        'country' => 'SK', 'ico' => '53036875', 'dic' => '2121232916', 'registration' => '', 'email' => '', 'phone' => '', 'web' => '',
+        'slogan' => '', 'due_days' => 14, 'invoice_note' => '', 'accent_color' => '#f74040', 'active' => 1]);
+    $companies->saveBanks($cid, [['id' => 0, 'account_name' => 'ERMA', 'iban' => 'SK1783300000002501809819', 'bic' => '', 'is_default' => true, 'active' => true]]);
+    $sid = $companies->saveSeries(null, $cid, ['doc_type' => 'invoice', 'name' => 'FA', 'format' => 'FA{RRRR}/{NNNNNN}', 'vs_format' => '',
+        'reset_yearly' => 1, 'is_default' => 1, 'active' => 1]);
+    $series = $companies->oneSeries($sid);
+    $inv = new Invoices($db);
+    $h = array_merge($inv->defaults($cid, 'invoice', $user), ['issue_date' => '2026-11-21', 'delivery_date' => '2026-11-21',
+        'due_date' => '2026-11-21', 'payment_method' => 'card', 'buyer_type' => 'b2c', 'buyer_name' => 'Ján Novák', 'buyer_street' => 'Hlavná 1',
+        'buyer_city' => 'Pravotice', 'buyer_zip' => '956 35']);
+    $lines = [['name' => 'Puk', 'quantity' => 2, 'unit' => 'ks', 'unit_price' => 5, 'vat_rate' => 23, 'vat_category' => 'S']];
+
+    // the owner's case: series not set yet → FA2026/000001 (a number the shop already used), paid by card, PDF archived
+    $id1 = $inv->saveDraft(null, $h, $lines, $user);
+    eq(['Doklad nie je vystavený.'], $inv->unissueErrors($inv->find($id1)));
+    eq('FA2026/000001', $inv->issue($id1, $user)['number']);
+    eq(1, count($inv->payments($id1)), 'automatic card payment');
+    $db->execute('INSERT INTO ' . $db->table('invoice_pdf') . ' (invoice_id, pdf, sha256, size, created_at) VALUES (?, ?, ?, ?, ?)',
+        [$id1, '%PDF', str_repeat('a', 64), 4, '2026-11-21 10:00:00']);
+    eq([], $inv->unissueErrors($inv->find($id1)));
+    throws(function () use ($inv, $id1, $user) { $inv->unissue($id1, '  ', $user); }, InvalidArgumentException::class);
+    eq('FA2026/000001', $inv->unissue($id1, 'skúšobná faktúra', $user));
+    $d = $inv->find($id1);
+    eq(['draft', null, '', null, null, null], [$d['status'], $d['number'], $d['variable_symbol'], $d['supplier'], $d['issued_at'], $d['legal']]);
+    eq(1, count($d['lines']), 'lines stay');
+    eq([], $inv->payments($id1), 'automatic payment removed');
+    eq(null, $db->fetchValue('SELECT sha256 FROM ' . $db->table('invoice_pdf') . ' WHERE invoice_id = ?', [$id1]), 'archived PDF removed');
+    eq(1, Numbering::peek($db, $series, '2026-11-21'), 'number 1 released');
+    $log = array_values(array_filter(Panel\Audit::forEntity($db, 'invoice', $id1), function ($a) { return $a['action'] === 'unissue'; }));
+    contains('FA2026/000001 — skúšobná faktúra (zmazané PDF, SHA-256 ' . str_repeat('a', 64) . '); číselný rad späť na 1', $log[0]['details']);
+    throws(function () use ($inv, $id1, $user) { $inv->unissue($id1, 'znova', $user); }, RuntimeException::class);
+
+    // continue the shop's numbers, issue again
+    Numbering::setNext($db, $series, 2026, 216);
+    eq('FA2026/000216', $inv->issue($id1, $user)['number']);
+    $id2 = $inv->saveDraft(null, array_merge($h, ['payment_method' => 'transfer']), $lines, $user);
+    eq('FA2026/000217', $inv->issue($id2, $user)['number']);
+    contains('FA2026/000217', implode(' ', $inv->unissueErrors($inv->find($id1))), 'not the last one in the series');
+    $inv->logEmail($id2, ['jan@example.sk'], 'Faktúra', 'failed', 'SMTP', $user);
+    eq([], $inv->unissueErrors($inv->find($id2)), 'a failed e-mail did not deliver it');
+    $pid = $inv->addPayment($id2, '2026-11-22', 10, 'transfer', 'výpis', $user);
+    contains('úhradu', implode(' ', $inv->unissueErrors($inv->find($id2))));
+    $inv->deletePayment($id2, $pid, $user);
+    $inv->logEmail($id2, ['jan@example.sk'], 'Faktúra', 'sent', '', $user);
+    contains('e-mailom', implode(' ', $inv->unissueErrors($inv->find($id2))));
+    throws(function () use ($inv, $id2, $user) { $inv->unissue($id2, 'omyl', $user); }, RuntimeException::class);
+    eq('FA2026/000217', $inv->find($id2)['number'], 'still issued');
+
+    // counter already moved by the owner → it is not moved back
+    $id3 = $inv->saveDraft(null, array_merge($h, ['payment_method' => 'transfer']), $lines, $user);
+    eq('FA2026/000218', $inv->issue($id3, $user)['number']);
+    Numbering::setNext($db, $series, 2026, 300);
+    $inv->unissue($id3, 'zlé číslo', $user);
+    eq(300, Numbering::peek($db, $series, '2026-11-21'));
+});
+
 test('panel: number allocation needs a transaction and refuses an existing number', function () {
     $db = panelDb();
     $user = panelUser($db, 'admin', 100);
@@ -1665,6 +1727,188 @@ test('order tools: tracking + address through the Webservice (shop context, refe
     $sp->deleteSpecificPrice(['id' => 3], 12, 4);
     eq([['specific_prices', 12, ['id_shop' => 3]]], $api->deletes);
     throws(function () use ($sp) { $sp->deleteSpecificPrice(['id' => 3], 13, 4); }, RuntimeException::class);
+});
+
+test('order lines: plan (quantity, price, remove, add), shipping, totals; apply through the Webservice with checks', function () {
+    $L = function ($id, $pid, $qty, $incl, $excl) {
+        return ['id' => $id, 'product_id' => $pid, 'attribute_id' => 0, 'name' => 'P' . $pid, 'reference' => 'R' . $pid, 'qty' => $qty, 'reinjected' => 0,
+            'unit_incl' => $incl, 'unit_excl' => $excl, 'total_incl' => round($incl * $qty, 2), 'total_excl' => round($excl * $qty, 2), 'weight' => 0.5];
+    };
+    $lines = [1 => $L(1, 10, 2, 12.0, 10.0), 2 => $L(2, 20, 1, 5.0, 5.0)];
+    $ops = Panel\Shop\ShopOrderLines::plan($lines, ['lines' => [1 => ['qty' => 3, 'price' => 12.0], 2 => ['qty' => 0, 'price' => null]]]);
+    eq(['update', 'delete'], array_column($ops, 'op'));
+    eq([36.0, 30.0, -1], [$ops[0]['line']['total_incl'], $ops[0]['line']['total_excl'], $ops[0]['stock']], 'more pieces: taken from stock');
+    eq([-5.0, 1], [$ops[1]['d_incl'], $ops[1]['stock']], 'removed line: back to stock');
+    $ops = Panel\Shop\ShopOrderLines::plan($lines, ['lines' => [1 => ['qty' => 2, 'price' => 9.6]]]);
+    eq([9.6, 8.0, 19.2, 16.0, 0], [$ops[0]['line']['unit_incl'], $ops[0]['line']['unit_excl'], $ops[0]['line']['total_incl'],
+        $ops[0]['line']['total_excl'], $ops[0]['stock']], 'new price keeps the line VAT rate (20 %)');
+    eq([], Panel\Shop\ShopOrderLines::plan($lines, ['lines' => [1 => ['qty' => 2, 'price' => 12.0], 2 => ['qty' => 1, 'price' => 5.0]]]), 'nothing changed');
+    $prod = ['product_id' => 30, 'attribute_id' => 4, 'name' => 'Nový - Veľkosť : M', 'reference' => 'N30', 'incl' => 24.0, 'excl' => 20.0, 'weight' => 1.0];
+    $ops = Panel\Shop\ShopOrderLines::plan($lines, ['add' => [['product' => $prod, 'qty' => 2, 'price' => null]]]);
+    eq(['add', 48.0, 40.0, -2], [$ops[0]['op'], $ops[0]['d_incl'], $ops[0]['d_excl'], $ops[0]['stock']], 'new line at the shop price');
+    $same = ['product_id' => 10, 'attribute_id' => 0, 'name' => 'x', 'reference' => '', 'incl' => 1.0, 'excl' => 1.0, 'weight' => 0.0];
+    throws(function () use ($lines, $same) { Panel\Shop\ShopOrderLines::plan($lines, ['add' => [['product' => $same, 'qty' => 1, 'price' => null]]]); },
+        InvalidArgumentException::class);
+    eq('add', Panel\Shop\ShopOrderLines::plan($lines, ['lines' => [1 => ['qty' => 0, 'price' => null]],
+        'add' => [['product' => $same, 'qty' => 1, 'price' => null]]])[1]['op'], 'a removed product can be added again');
+
+    $o = ['id_carrier' => 5, 'total_shipping_tax_incl' => 3.6, 'total_shipping_tax_excl' => 3.0, 'carrier_tax_rate' => 20];
+    eq(null, Panel\Shop\ShopOrderLines::planShipping($o, ['carrier_id' => 5, 'price' => 3.6]));
+    $s = Panel\Shop\ShopOrderLines::planShipping($o, ['carrier_id' => 6, 'price' => 4.8]);
+    eq([6, 4.8, 4.0], [$s['carrier_id'], $s['incl'], $s['excl']]);
+    $t = Panel\Shop\ShopOrderLines::totals(['total_products' => 25, 'total_products_wt' => 29, 'total_shipping' => 3.6, 'total_shipping_tax_incl' => 3.6,
+        'total_shipping_tax_excl' => 3.0, 'total_paid' => 32.6, 'total_paid_tax_incl' => 32.6, 'total_paid_tax_excl' => 28.0], 7.0, 5.0, 1.2, 1.0);
+    eq([30.0, 36.0, 4.8, 40.8, 40.8, 34.0], [$t['total_products'], $t['total_products_wt'], $t['total_shipping'], $t['total_paid'],
+        $t['total_paid_tax_incl'], $t['total_paid_tax_excl']]);
+
+    // apply: Webservice of a shop (multistore id_shop 2), order REF7 with 2 lines
+    $detail = function ($id, $pid, $qty, $incl, $excl) {
+        return "<order_detail><id>$id</id><id_order>7</id_order><id_shop>2</id_shop><product_id>$pid</product_id><product_attribute_id>0</product_attribute_id>"
+            . "<product_name>P$pid</product_name><product_reference>R$pid</product_reference><product_quantity>$qty</product_quantity>"
+            . '<product_quantity_reinjected>0</product_quantity_reinjected><product_quantity_refunded>1</product_quantity_refunded><reduction_percent>10</reduction_percent>'
+            . "<product_price>$excl</product_price><unit_price_tax_incl>$incl</unit_price_tax_incl><unit_price_tax_excl>$excl</unit_price_tax_excl>"
+            . '<total_price_tax_incl>' . ($incl * $qty) . '</total_price_tax_incl><total_price_tax_excl>' . ($excl * $qty) . '</total_price_tax_excl>'
+            . '<product_weight>0.5</product_weight><original_wholesale_price>0</original_wholesale_price><associations><taxes><tax><id>1</id></tax></taxes></associations></order_detail>';
+    };
+    $api = new FakePrestaShopApi([
+        'orders/7' => '<order><id>7</id><reference>REF7</reference><id_shop>2</id_shop><id_lang>1</id_lang><id_currency>1</id_currency><id_carrier>5</id_carrier>'
+            . '<id_address_delivery>11</id_address_delivery><total_products>25</total_products><total_products_wt>29</total_products_wt>'
+            . '<total_shipping>3.6</total_shipping><total_shipping_tax_incl>3.6</total_shipping_tax_incl><total_shipping_tax_excl>3</total_shipping_tax_excl>'
+            . '<carrier_tax_rate>20</carrier_tax_rate><total_paid>32.6</total_paid><total_paid_tax_incl>32.6</total_paid_tax_incl>'
+            . '<total_paid_tax_excl>28</total_paid_tax_excl><total_paid_real>32.6</total_paid_real><associations><order_rows/></associations></order>',
+        'order_details' => function ($p) use ($detail) {
+            return isset($p['schema']) ? '<order_detail><id/></order_detail>' : '<order_details>' . $detail(1, 10, 2, 12, 10) . $detail(2, 20, 1, 5, 5) . '</order_details>';
+        },
+        'order_details/1' => $detail(1, 10, 2, 12, 10),
+        'order_carriers' => function ($p) {
+            return isset($p['schema']) ? '<order_carrier><id/></order_carrier>' : '<order_carriers><order_carrier><id>33</id></order_carrier></order_carriers>';
+        },
+        'order_carriers/33' => '<order_carrier><id>33</id><id_order>7</id_order><id_carrier>5</id_carrier><weight>1.5</weight>'
+            . '<shipping_cost_tax_incl>3.6</shipping_cost_tax_incl><shipping_cost_tax_excl>3</shipping_cost_tax_excl></order_carrier>',
+        'addresses/11' => '<address><id>11</id><id_country>37</id_country></address>',
+        'products/30' => '<product><id>30</id><name><language id="1">Nový</language></name><reference>N30</reference><supplier_reference/><ean13/><isbn/><upc/>'
+            . '<weight>1</weight><wholesale_price>8</wholesale_price><price>20</price><id_tax_rules_group>1</id_tax_rules_group>'
+            . '<panel_incl>24.000000</panel_incl><panel_excl>20.000000</panel_excl></product>',
+        'POST order_details' => function ($xml) { return '<order_detail><id>3</id></order_detail>'; },
+    ]);
+    $ed = new Panel\Shop\ShopOrderLines($api);
+    $expect = ['lines' => [1 => ['qty' => 2, 'price' => 12.0], 2 => ['qty' => 1, 'price' => 5.0]], 'total' => 32.6, 'carrier' => 5, 'shipping' => 3.6];
+    $req = ['lines' => [1 => ['qty' => 3, 'price' => 12.0], 2 => ['qty' => 0, 'price' => 5.0]],
+        'add' => [['product_id' => 30, 'attribute_id' => 0, 'qty' => 1, 'price' => null]], 'shipping' => ['carrier_id' => 6, 'price' => 4.8]];
+    throws(function () use ($ed, $req, $expect) { $ed->apply(7, 2, 'REF7', $req, ['total' => 30.0] + $expect); }, RuntimeException::class);
+    throws(function () use ($ed, $req, $expect) { $ed->apply(7, 2, 'REF7', $req, ['lines' => [1 => ['qty' => 2, 'price' => 12.0]]] + $expect); }, RuntimeException::class);
+    throws(function () use ($ed, $req, $expect) { $ed->apply(7, 2, 'OTHER', $req, $expect); }, RuntimeException::class);
+    eq([[], [], []], [$api->putXml, $api->deletes, $api->posts], 'order changed meanwhile / other reference: nothing written');
+
+    $r = $ed->apply(7, 2, 'REF7', $req, $expect, [1 => ['tax_rate' => '20.000', 'tax_name' => 'DPH 20%']]);
+    eq([[], 64.8], [$r['problems'], $r['total']]);
+    contains('pridané: Nový (1 ks × 24,00 €)', implode('; ', $r['done']));
+    eq([['order_details', 2, ['id_shop' => 2]]], $api->deletes);
+    $puts = [];
+    foreach ($api->putXml as $x) {
+        $puts[$x[0]] = $x;
+        eq(['id_shop' => 2], $x[3], 'shop context on ' . $x[0]);
+    }
+    $d = $puts['order_details'][2]->order_detail;
+    eq(['3', '36.000000', '30.000000', '20.000', 'DPH 20%'], [(string)$d->product_quantity, (string)$d->total_price_tax_incl,
+        (string)$d->total_price_tax_excl, (string)$d->tax_rate, (string)$d->tax_name], 'line PUT keeps the hidden VAT fields');
+    ok(!isset($d->associations), 'line PUT without associations');
+    list($res, $xml, $params) = $api->posts[0];
+    $n = simplexml_load_string($xml)->order_detail;
+    eq(['order_details', ['id_shop' => 2]], [$res, $params]);
+    eq(['30', '7', 'Nový', '1', '0', '0', '24.000000', '20.000000', '8.000000'], [(string)$n->product_id, (string)$n->id_order, (string)$n->product_name,
+        (string)$n->product_quantity, (string)$n->product_quantity_refunded, (string)$n->reduction_percent, (string)$n->unit_price_tax_incl,
+        (string)$n->unit_price_tax_excl, (string)$n->original_wholesale_price], 'new line = copy of a line with the product data, refunds / reductions reset');
+    ok(!isset($n->id), 'new line without id');
+    $oc = $puts['order_carriers'][2]->order_carrier;
+    eq(['6', '4.800000', '4.000000', '2.500000'], [(string)$oc->id_carrier, (string)$oc->shipping_cost_tax_incl, (string)$oc->shipping_cost_tax_excl,
+        (string)$oc->weight], 'carrier, shipping price, weight of the products');
+    $ord = $puts['orders'][2]->order;
+    eq(['50.000000', '60.000000', '4.800000', '64.800000', '64.800000', '54.000000', '6', '32.6'], [(string)$ord->total_products,
+        (string)$ord->total_products_wt, (string)$ord->total_shipping, (string)$ord->total_paid, (string)$ord->total_paid_tax_incl,
+        (string)$ord->total_paid_tax_excl, (string)$ord->id_carrier, (string)$ord->total_paid_real], 'order totals by the difference, paid amount stays');
+    ok(!isset($ord->associations), 'order PUT without associations');
+    $priceGet = array_values(array_filter($api->gets, function ($g) { return $g[0] === 'products/30'; }))[0][1];
+    eq([1, 0, 37, 2], [$priceGet['price[panel_incl][use_tax]'], $priceGet['price[panel_excl][use_tax]'], $priceGet['price[panel_incl][country]'],
+        $priceGet['id_shop']], 'shop price with / without VAT for the delivery country');
+
+    // discount of the order: 10 % of the products (29 € with VAT) = 2,90 €; without VAT in the products' ratio (25 / 29)
+    $d = Panel\Shop\ShopOrderLines::planDiscount(['total_discounts_tax_incl' => 0, 'total_discounts_tax_excl' => 0], 29.0, 25.0,
+        ['mode' => 'percent', 'value' => 10]);
+    eq([2.9, 2.5, 2.9], [$d['incl'], $d['excl'], $d['d_incl']]);
+    eq(null, Panel\Shop\ShopOrderLines::planDiscount(['total_discounts_tax_incl' => 2.9], 29.0, 25.0, ['mode' => 'amount', 'value' => 2.9]),
+        'same discount = no change');
+    $t = Panel\Shop\ShopOrderLines::totals(['total_paid_tax_incl' => 32.6, 'total_paid_tax_excl' => 28.0, 'total_discounts_tax_incl' => 1.0],
+        0.0, 0.0, 0.0, 0.0, 1.9, 1.5);
+    eq([2.9, 30.7, 26.5], [$t['total_discounts_tax_incl'], $t['total_paid_tax_incl'], $t['total_paid_tax_excl']], 'a bigger discount lowers the total');
+    $api->putXml = [];
+    $r = $ed->apply(7, 2, 'REF7', ['lines' => [1 => ['qty' => 2, 'price' => 12.0], 2 => ['qty' => 1, 'price' => 5.0]],
+        'shipping' => ['carrier_id' => 5, 'price' => 3.6], 'discount' => ['mode' => 'percent', 'value' => 10]], $expect + ['discount' => 0.0]);
+    eq([[], 29.7], [$r['problems'], $r['total']]);
+    contains('zľava 0,00 € → 2,90 € (10 % z tovaru)', implode('; ', $r['done']));
+    eq(['orders'], array_column($api->putXml, 0), 'only the discount: only the order is written');
+    $ord = $api->putXml[0][2]->order;
+    eq(['2.900000', '2.900000', '2.500000', '29.700000', '29.700000', '25.500000', '29.000000'], [(string)$ord->total_discounts,
+        (string)$ord->total_discounts_tax_incl, (string)$ord->total_discounts_tax_excl, (string)$ord->total_paid, (string)$ord->total_paid_tax_incl,
+        (string)$ord->total_paid_tax_excl, (string)$ord->total_products_wt]);
+    throws(function () use ($ed, $expect) { $ed->apply(7, 2, 'REF7', ['discount' => ['mode' => 'amount', 'value' => 1]], $expect + ['discount' => 5.0]); },
+        RuntimeException::class);
+});
+
+test('order states in the shop: list, turn the e-mail on, new state, form checks', function () {
+    $state = function ($id, $name, $tpl, $send, $deleted = 0) {
+        return "<order_state><id>$id</id><unremovable>1</unremovable><delivery>0</delivery><hidden>0</hidden><send_email>$send</send_email>"
+            . "<module_name></module_name><invoice>1</invoice><color>#108510</color><logable>1</logable><shipped>1</shipped><paid>1</paid>"
+            . "<pdf_delivery>0</pdf_delivery><pdf_invoice>0</pdf_invoice><deleted>$deleted</deleted>"
+            . "<name><language id=\"1\">EN $name</language><language id=\"2\">$name</language></name>"
+            . "<template><language id=\"1\">$tpl</language><language id=\"2\">$tpl</language></template></order_state>";
+    };
+    $api = new FakePrestaShopApi([
+        'order_states' => function ($p) use ($state) {
+            if (($p['schema'] ?? '') === 'blank') {
+                return '<order_state><id/><unremovable/><delivery/><hidden/><send_email/><module_name/><invoice/><color/><logable/><shipped/><paid/>'
+                    . '<pdf_delivery/><pdf_invoice/><deleted/><name><language id="1"/><language id="2"/></name>'
+                    . '<template><language id="1"/><language id="2"/></template></order_state>';
+            }
+            if (isset($p['schema'])) {
+                return '<order_state><id/></order_state>';
+            }
+            return '<order_states>' . $state(4, 'Zaplatená a odoslaná', 'shipped', 0) . $state(2, 'Platba akceptovaná', 'payment', 1)
+                . $state(9, 'Zmazaný', '', 0, 1) . '</order_states>';
+        },
+        'order_states/4' => $state(4, 'Zaplatená a odoslaná', 'shipped', 0),
+        'POST order_states' => function ($xml) {
+            $s = simplexml_load_string($xml)->order_state;
+            return '<order_state><id>40</id><send_email>' . $s->send_email . '</send_email></order_state>';
+        },
+    ]);
+    $st = new Panel\Shop\ShopOrderStates($api);
+    $all = $st->all(2);
+    eq([2, 4], array_keys($all), 'deleted states left out, sorted by name');
+    eq(['Zaplatená a odoslaná', 'shipped', false, true], [$all[4]['name'], $all[4]['template'], $all[4]['send_email'], $all[4]['paid']]);
+    eq(['bankwire', 'cashondelivery', 'cheque'], array_slice(Panel\Shop\ShopOrderStates::templates($all), 0, 3));
+
+    $v = ['name' => 'Zaplatená & odoslaná', 'template' => 'shipped', 'color' => '#108510', 'send_email' => true, 'paid' => true,
+        'shipped' => true, 'delivery' => false, 'pdf_delivery' => false, 'logable' => true, 'hidden' => false];
+    eq([], Panel\Shop\ShopOrderStates::errors($v));
+    eq(4, $st->save(4, $v, 2));
+    list($res, $id, $xml) = $api->putXml[0];
+    $s = $xml->order_state;
+    eq(['order_states', 4, '1', 'Zaplatená & odoslaná', 'EN Zaplatená a odoslaná', '1', '1'], [$res, $id, (string)$s->send_email,
+        (string)$s->name->language[1], (string)$s->name->language[0], (string)$s->unremovable, (string)$s->invoice],
+        'only the Slovak name changes; unremovable / invoice flags stay');
+    contains('&amp; odoslan', $xml->asXML(), '& escaped in the XML');
+
+    $new = array_merge($v, ['name' => 'Odoslané Packetou', 'template' => 'in_transit', 'paid' => false]);
+    eq(40, $st->save(0, $new, 2));
+    $n = simplexml_load_string($api->posts[0][1])->order_state;
+    eq(['Odoslané Packetou', 'Odoslané Packetou', 'in_transit', '0', '0', '0'], [(string)$n->name->language[0], (string)$n->name->language[1],
+        (string)$n->template->language[1], (string)$n->paid, (string)$n->invoice, (string)$n->unremovable], 'a new state: all languages, invoice flags off');
+    ok(!isset($n->id), 'new state without id');
+
+    $bad = Panel\Shop\ShopOrderStates::errors(['name' => '', 'template' => 'zlá šablóna', 'color' => 'red', 'send_email' => true]);
+    eq(['name', 'template', 'color'], array_keys($bad));
+    eq(['template'], array_keys(Panel\Shop\ShopOrderStates::errors(array_merge($v, ['template' => '']))), 'e-mail needs a template');
 });
 
 test('returns: partial credit note (returned goods + shipping), order log, branded mail, invoice template 2026-2', function () {

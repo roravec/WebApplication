@@ -86,12 +86,21 @@ class OrdersController
         $invoice = $this->ctx->invoices()->findByOrder($src, (int)$order['id_order']);
         $companyId = $this->ctx->companies()->companyForShop($src, (int)$order['id_shop']);
         $canChange = $this->ctx->can(Rights::ORDERS_EDIT) && $this->writeConnection($src) !== null;
+        // why the change buttons are hidden — said on the page, not silently (owner 2026-11-21: "nemôžem meniť nič, prečo")
+        $editBlocked = null;
+        if ($this->ctx->can(Rights::ORDERS_EDIT) && !$canChange) {
+            $editBlocked = $src === 0
+                ? 'Objednávku nie je možné meniť: v paneli nie je pripojený e-shop tejto databázy. Sklad → E-shopy → pripojenie'
+                  . ' s kľúčom Webservice, zaškrtnuté „Aktívne“ aj „Toto je e-shop, ktorého tabuľky sú v databáze panela“.'
+                : 'Objednávku nie je možné meniť: pripojenie e-shopu je neaktívne (Sklad → E-shopy).';
+        }
         $states = [];
         if ($canChange) {
             try {
                 $states = $source->states();
             } catch (\Throwable $e) {
                 $canChange = false;
+                $editBlocked = 'Objednávku nie je možné meniť: ' . $e->getMessage();
             }
         }
         // e-mails to the customer: invoices sent from the panel + what the shop itself sent (its mail log; SQL source only)
@@ -102,7 +111,7 @@ class OrdersController
         return $this->ctx->page('orders/detail', ['o' => $order, 'source' => $source, 'invoice' => $invoice, 'invoiceCompany' => $companyId,
             'panelEmails' => $panelEmails, 'shopEmails' => $shopEmails,
             'notes' => $log->notes($src, $orderId), 'messages' => $log->messages($src, $orderId), 'returns' => $log->returns($src, $orderId),
-            'canEdit' => $canChange,
+            'canEdit' => $canChange, 'editBlocked' => $editBlocked, 'canManageShops' => $this->ctx->isAdmin(),
             'canInvoice' => $this->ctx->can(Rights::INVOICES_EDIT) && $companyId && $this->ctx->canCompany($companyId),
             'canSeeInvoice' => $this->ctx->can(Rights::INVOICES_VIEW),
             'canChangeState' => $canChange, 'states' => $states],

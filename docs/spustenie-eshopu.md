@@ -1,5 +1,8 @@
 # Spustenie nového e-shopu (PrestaShop 8.2.9) + presun do `ermaskretail` — postup na ostrý večer
 
+> **Hotové 20. 11. 2026 večer — nasadený bol PrestaShop 9.2.0** (balík z Web_store `devserver/upgrade-run9.sh`, postup
+> rovnaký; 8.2.9 sa prepol a vrátil späť). Návod ostáva ako vzor pre ďalšie veľké aktualizácie.
+
 Fáza C + A2 z `nasadenie-a-udrzba.md`. Nacvičené na simulácii hostingu 20. 11. 2026 (Web_store `docs/upgrade-plan.md`,
 „A′“). Celý večer ≈ 1 h, e-shopy sú počas neho v údržbe. **Do toho večera v e-shope nemeniť moduly, šablónu ani kód**
 (produkty, ceny, objednávky áno).

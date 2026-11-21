@@ -18,6 +18,7 @@ use Panel\Controller\DashboardController;
 use Panel\Controller\EmployeesController;
 use Panel\Controller\InvoicesController;
 use Panel\Controller\LegislationController;
+use Panel\Controller\OrderStatesController;
 use Panel\Controller\OrdersController;
 use Panel\Controller\SetupController;
 use Panel\Controller\ShopsController;
@@ -136,6 +137,11 @@ class PanelApp implements RequestHandler
 
         $r->get('/', $guard('', [$dashboard, 'index']));
         $r->get('/orders', $guard(Rights::ORDERS_VIEW, [$orders, 'index']));
+        // order states of an e-shop, edited in the shop (administrators; ?src = order source)
+        $orderStates = new OrderStatesController($ctx);
+        $r->get('/orders/states', $guard($ADMIN, [$orderStates, 'index']));
+        $r->get('/orders/states/{sid:\d+}', $guard($ADMIN, [$orderStates, 'form']));
+        $r->post('/orders/states/{sid:\d+}', $guard($ADMIN, [$orderStates, 'save']));
         $tools = new \Panel\Controller\OrderToolsController($ctx);
         $r->get('/shipping', $guard(Rights::ORDERS_VIEW, [$tools, 'shipping']));
         $r->post('/shipping', $guard(Rights::ORDERS_VIEW, [$tools, 'shippingAction']));   // writes check orders.edit inside
@@ -152,6 +158,8 @@ class PanelApp implements RequestHandler
             $r->post($o . '/message', $guard(Rights::ORDERS_EDIT, [$tools, 'message']));
             $r->get($o . '/address/{type:[a-z]+}', $guard(Rights::ORDERS_EDIT, [$tools, 'addressForm']));
             $r->post($o . '/address/{type:[a-z]+}', $guard(Rights::ORDERS_EDIT, [$tools, 'address']));
+            $r->get($o . '/lines', $guard(Rights::ORDERS_EDIT, [$tools, 'linesForm']));
+            $r->post($o . '/lines', $guard(Rights::ORDERS_EDIT, [$tools, 'linesSave']));
             $r->get($o . '/return', $guard(Rights::ORDERS_EDIT, [$tools, 'returnForm']));
             $r->post($o . '/return', $guard(Rights::ORDERS_EDIT, [$tools, 'returnSave']));
             $r->get($o . '/delivery-note', $guard(Rights::ORDERS_VIEW, [$tools, 'deliveryNote']));
@@ -170,6 +178,7 @@ class PanelApp implements RequestHandler
         $r->post('/invoices/{id:\d+}', $guard($EDIT, [$invoices, 'save']));
         $r->post('/invoices/{id:\d+}/issue', $guard($EDIT, [$invoices, 'issue']));
         $r->post('/invoices/{id:\d+}/delete', $guard($EDIT, [$invoices, 'delete']));
+        $r->post('/invoices/{id:\d+}/unissue', $guard($ADMIN, [$invoices, 'unissue']));
         $r->post('/invoices/{id:\d+}/credit-note', $guard($EDIT, [$invoices, 'creditNote']));
         $r->get('/invoices/{id:\d+}/print', $guard($VIEW, [$invoices, 'printView']));
         $r->get('/invoices/{id:\d+}/pdf', $guard($VIEW, [$invoices, 'pdf']));

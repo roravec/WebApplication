@@ -43,6 +43,11 @@
       }
       return;
     }
+    if (closest(ev.target, '[data-add-discount]')) {
+      ev.preventDefault();
+      addDiscount();
+      return;
+    }
     var rm = closest(ev.target, '[data-remove-row]');
     if (rm) {
       ev.preventDefault();
@@ -101,6 +106,48 @@
   document.addEventListener('input', function (ev) {
     if (closest(ev.target, '#lines-table')) recalc();
   });
+
+  // invoice discount (owner 2026-11-21): negative line(s) — one per VAT rate / category of the lines, so the VAT base of
+  // each rate is reduced (a % of each rate's lines; a fixed amount split in the ratio of the rates' bases)
+  function addDiscount() {
+    var dv = document.getElementById('disc-value'), dm = document.getElementById('disc-mode');
+    var body = document.getElementById('line-rows'), tpl = document.getElementById('line-rows-tpl');
+    if (!dv || !dm || !body || !tpl) return;
+    var val = num(dv.value), pct = dm.value === 'pct';
+    if (!(val > 0) || (pct && val > 100)) { dv.focus(); return; }
+    var groups = {}, keys = [], total = 0;
+    body.querySelectorAll('tr').forEach(function (tr) {
+      var q = tr.querySelector('[name="line_qty[]"]'), p = tr.querySelector('[name="line_price[]"]');
+      if (!q || !p) return;
+      var lineNet = Math.round(num(q.value) * num(p.value) * 100) / 100;
+      if (lineNet <= 0) return;   // existing discounts / returns are not discounted again
+      var r = tr.querySelector('[name="line_vat[]"]'), c = tr.querySelector('[name="line_cat[]"]');
+      var key = (r ? String(num(r.value)) : '0') + '|' + (c ? c.value : 'S');
+      if (!(key in groups)) { groups[key] = 0; keys.push(key); }
+      groups[key] += lineNet;
+      total += lineNet;
+    });
+    if (total <= 0) { alert('Najprv zadajte položky — zľava sa počíta z nich.'); return; }
+    if (!pct && val > total + 0.005) { alert('Zľava je väčšia ako súčet položiek (' + money(total) + ').'); return; }
+    var left = Math.round(val * 100) / 100;
+    keys.forEach(function (key, i) {
+      var amount = pct ? Math.round(groups[key] * val) / 100
+        : (i === keys.length - 1 ? left : Math.round(val * groups[key] / total * 100) / 100);
+      left = Math.round((left - amount) * 100) / 100;
+      if (amount <= 0) return;
+      body.appendChild(tpl.content.cloneNode(true));
+      var tr = body.lastElementChild, parts = key.split('|');
+      var set = function (name, v) { var el = tr.querySelector('[name="' + name + '"]'); if (el) el.value = v; };
+      set('line_name[]', 'Zľava' + (pct ? ' ' + String(val).replace('.', ',') + ' %' : '') + (keys.length > 1 ? ' (DPH ' + parts[0].replace('.', ',') + ' %)' : ''));
+      set('line_qty[]', '1');
+      set('line_unit[]', 'ks');
+      set('line_price[]', '-' + amount.toFixed(2).replace('.', ','));
+      set('line_vat[]', parts[0].replace('.', ','));
+      set('line_cat[]', parts[1]);
+    });
+    dv.value = '';
+    recalc();
+  }
 
   // ---------------------------------------------------------------- customer lookup in the invoice form
   var timer = null;

@@ -3,8 +3,16 @@
 Čo všetko ide na hosting, v akom poradí, kto čo robí a ako sa to potom udržiava. Podrobnosti k e-shopu sú
 v `C:\Users\orras\git\Web_store\docs\upgrade-plan.md` (časť „Production procedure“).
 
-## Ako je to dnes na hostingu
+> **Stav 21. 11. 2026:** fáza A beží od 20. 11.; **fáza C + A2 (aj právne úpravy B) prebehla 20. 11. večer — e-shopy
+> bežia na PrestaShop 9.2.0, PHP 8.5, databáza `ermaskretail`.** 8.2.9 bol len medzikrok (prvé kolo sa prepnulo a
+> vrátilo späť), potom 9.2.0 z tých istých zmrazených dát (Web_store `devserver/upgrade-run9.sh`; HANDOVER bod 26).
+> PrestaShop 1.7.6.7 ani 8.2.9 už nehrajú rolu (majiteľ 21. 11.). **Ostáva fáza D** (upratanie). Časti nižšie, ktoré
+> opisujú stav pred nasadením a prípravu A–C, sú história a vzor pre ďalšie veľké zmeny.
 
+## Ako bolo na hostingu pred nasadením (do 20. 11. 2026)
+
+- **Dnes:** koreňový `index.php` = tento framework (fáza A), e-shopy v `/store/` = PrestaShop 9.2.0, všetko v
+  `ermaskretail`, PHP 8.5. Staré jadro (`core/`, `WebApp_*`, `index_oldcore.php`) čaká na fázu D.
 - Jeden FTP priečinok = koreň webu pre všetky domény. Koreňový `index.php` je **najstaršie jadro** (`core/`,
   `WebApp_*`): obsluhuje erma.sk, hbkpravotice.sk, bnhl.sk. E-shopy sú v `/store/` (PrestaShop 1.7.6.7).
 - Na hostingu je aj staršia kópia frameworku (`applications/`, `config/`, `interfaces/`, `entities/` z 23. 3. 2026;
@@ -28,10 +36,10 @@ v `C:\Users\orras\git\Web_store\docs\upgrade-plan.md` (časť „Production proc
 
   | Čo | Tabuľky | Nasadenie | Do `ermaskretail` |
   |---|---|---|---|
-  | panel (zamestnanecká sekcia) | `panel_*` | fáza A v `molesk` (tabuľky vzniknú samy) | **fáza A2 — preklopenie** |
-  | hbkpravotice.sk + bnhl.sk | `hbkpravotice_*` (23 tabuliek, ~1,5 MB) | fáza A v `molesk` (dnešné tabuľky, nič sa nekopíruje) | **fáza A2 — preklopenie** |
+  | panel (zamestnanecká sekcia) | `panel_*` | fáza A v `molesk` (tabuľky vzniknú samy) | **fáza A2 — preklopenie** (hotové 20. 11.) |
+  | hbkpravotice.sk + bnhl.sk | `hbkpravotice_*` (23 tabuliek, ~1,5 MB) | fáza A v `molesk` (dnešné tabuľky, nič sa nekopíruje) | **fáza A2 — preklopenie** (hotové 20. 11.) |
   | erma.sk (dočasná stránka) | — | databázu nepoužíva | — |
-  | e-shopy (PrestaShop 8.2.9) | `ps_*` | **fáza C rovno do `ermaskretail`** — nový e-shop je aj tak nová kópia a pred prepnutím sa testuje na `/store_new/` | v rámci C |
+  | e-shopy (PrestaShop 9.2.0) | `ps_*` | **fáza C rovno do `ermaskretail`** — nový e-shop je aj tak nová kópia a pred prepnutím sa testuje na `/store_new/` | v rámci C (hotové 20. 11.) |
 
 - **`ermaskretail` NIE JE prázdna** (zistené zo zálohy 20. 11. 2026, 42 tabuliek): `aqua_*` (zavlažovanie — zapisuje
   sa doň neustále), `lcs_*` (LCS hub `mobileservice.erma.sk` + agent na domácom serveri), `branchmanager_*`
@@ -53,9 +61,9 @@ v `C:\Users\orras\git\Web_store\docs\upgrade-plan.md` (časť „Production proc
 
 | Časť | Kde je hotová | Závisí od |
 |---|---|---|
-| A. Framework + erma.sk (dočasná stránka) + **zamestnanecká sekcia** (objednávky, fakturácia, sklad, balík pre účtovníka) + **hbkpravotice.sk, bnhl.sk** | WebApplication `src/`, overené na dev | nič — môže ísť prvé |
-| B. Právne úpravy e-shopov (texty, odstúpenie, oznámenie o záruke …) | Web_store `legal/`, `shop-modules/erma_legal` | voliteľne hneď na 1.7.6, inak s C |
-| C. **Aktualizácia e-shopu na PrestaShop 8.2.9** (nová databáza, `/store_new/`, prepnutie) | Web_store `devserver/upgrade-run.sh`, skúška dev5 | **A musí bežať skôr** — pri aktualizácii sa odstráni starý modul faktúr (`add_faktura`), faktúry potom vystavuje len panel |
+| A. Framework + erma.sk (dočasná stránka) + **zamestnanecká sekcia** (objednávky, fakturácia, sklad, balík pre účtovníka) + **hbkpravotice.sk, bnhl.sk** | WebApplication `src/`, overené na dev | nič — môže ísť prvé · **hotové 20. 11.** |
+| B. Právne úpravy e-shopov (texty, odstúpenie, oznámenie o záruke …) | Web_store `legal/`, `shop-modules/erma_legal` | voliteľne hneď na 1.7.6, inak s C · **hotové s C 20. 11.** |
+| C. **Aktualizácia e-shopu na PrestaShop 9.2.0** (cez 8.2.9; nová databáza, `/store_new/`, prepnutie) | Web_store `devserver/upgrade-run.sh` + `upgrade-run9.sh` | **A musí bežať skôr** — pri aktualizácii sa odstráni starý modul faktúr (`add_faktura`), faktúry potom vystavuje len panel · **hotové 20. 11. večer** |
 
 ## Fáza A — framework a weby (jeden večer, prepnutie trvá sekundy)
 
@@ -147,10 +155,15 @@ pod týmto odsekom opisujú, čo sa pri tom deje.
 ## Fáza B — právne úpravy e-shopov (voliteľne pred C)
 
 Postup v Web_store `docs/pravne-nalezitosti.md` („Nasadenie“): nahrať modul `erma_legal`, `odstupenie.php`,
-spustiť `legal-apply.php` cez tajnú adresu. Funguje aj na dnešnom 1.7.6. Ak nie teraz, urobí ich automaticky
-aktualizácia (fáza C). Oznámenie o zákonnej záruke je povinné od 27. 9. 2026.
+spustiť `legal-apply.php` cez tajnú adresu. Fungovalo by aj na vtedajšom 1.7.6; **nasadené s aktualizáciou
+(fáza C) 20. 11. 2026**. Oznámenie o zákonnej záruke je povinné od 27. 9. 2026.
 
-## Fáza C — e-shop na PrestaShop 8.2.9 + A2 v ten istý večer (údržba ≈ 1 h)
+## Fáza C — e-shop na PrestaShop 9.2.0 + A2 v ten istý večer — HOTOVÉ 20. 11. 2026
+
+Prebehlo podľa postupu nižšie. Cieľ bol najnovší PrestaShop (majiteľ: „8.2.9 je len krok“): prvé kolo 8.2.9 sa prepnulo
+a vrátilo späť, druhé kolo 9.2.0 z tých istých zmrazených dát (`upgrade-run9.sh`: ps_mbo preč, oficiálny GoPay 1.0.9
+namiesto starého, záplata jeho knižnice). Podrobnosti WebApplication HANDOVER bod 26. Texty nižšie spomínajú 8.2.9 —
+postup bol pre 9.2.0 rovnaký a ostáva vzorom pre ďalšie veľké aktualizácie.
 
 **Rozhodnutie 20. 11. 2026 (majiteľ: „poďme na to už“): C a A2 naraz** — jeden nástroj presunie e-shop aj tabuľky
 panela a hbkpravotice do `ermaskretail`; panel potom číta e-shop vo svojej databáze, žiadne medzikroky cez Webservice.
@@ -189,7 +202,9 @@ opätovného prepnutia; panel, StadiumControl a obrázky produktov po prepnutí 
 Po prepnutí: panel číta e-shop vo svojej databáze sám (overené v simulácii); prvú zásielku Packeta skontrolovať v
 klientskej sekcii Packety, prvú platbu GoPay skontrolovať v GoPay.
 
-## Fáza D — upratanie (2–4 týždne po C, keď je všetko v poriadku)
+## Fáza D — upratanie (2–4 týždne po C, keď je všetko v poriadku) — ešte neurobené (stav 21. 11. 2026)
+
+- Ak ešte sú (krok 9 fázy C): `/store_old/`, `erma-deploy.php` a priečinok `_deploy_…` v koreni.
 
 - Zmazať z hostingu: `index_oldcore.php`, `core/`, `WebApp_*`, `core_new/`, staré `config/*Config*.php` (je v nich
   heslo k databáze), `/store_old/`.
@@ -201,9 +216,8 @@ klientskej sekcii Packety, prvú platbu GoPay skontrolovať v GoPay.
 
 ## Neskôr
 
-- **PHP 8.1 na hostingu** (framework aj hbkpravotice/bnhl sú na to pripravené, overené na 8.4): pred tým oficiálne
-  moduly GoPay a Packeta (starý GoPay na PHP 8 nefunguje), potom sa odinštaluje `erma_compat`.
-- **PrestaShop 9** (nácvik dev4 hotový): až po PHP 8.1.
+- ~~PHP 8.1 na hostingu~~, ~~PrestaShop 9~~ — **hotové 20. 11. 2026** (PHP 8.5, PrestaShop 9.2.0, oficiálny GoPay).
+  Ostáva: oficiálny modul Packeta; `erma_compat` bol len pre starý GoPay — overiť, či je ešte nainštalovaný, a odinštalovať.
 - E-faktúry od 1. 1. 2027 (platitelia DPH): pre ERMA Group dnes len prijímanie — rieši KROS cez účtovníčku.
 
 ## Údržba e-shopov a databáz v paneli (návrh, majiteľ 20. 11. 2026: „čo najjednoduchšie aj do budúcna“)
@@ -226,9 +240,9 @@ Návrh stránky **Údržba** (správca):
    alebo po pár dňoch *Upratať*. Starý e-shop je až do upratania nedotknutý.
 4. **Stav** — verzia PrestaShopu a PHP, posledná dostupná verzia PrestaShopu, údržba zapnutá/vypnutá.
 
-Hranica: veľké zmeny ako dnešný prechod 1.7.6 → 8.2.9 (odstraňovanie starých modulov, úprava témy, nové moduly)
-sa aj naďalej najprv nacvičia na domácom serveri — tam beží celá sada testov. Bežné opravné verzie (8.2.x) a
-neskôr aj 9.x pôjdu cez panel. Nástroje `store-import.php` / `store-switch.php`, ktoré ešte treba urobiť, sa tým
+Hranica: veľké zmeny ako prechod 1.7.6 → 9.2.0 z 20. 11. 2026 (odstraňovanie starých modulov, úprava témy, nové
+moduly) sa aj naďalej najprv nacvičia na domácom serveri — tam beží celá sada testov. Bežné opravné verzie (9.x)
+pôjdu cez panel. Nástroje `store-import.php` / `store-switch.php`, ktoré ešte treba urobiť, sa tým
 stanú funkciami panela namiesto samostatných skriptov — práca navyše teda takmer nie je.
 
 ## Údržba do budúcna
@@ -248,7 +262,7 @@ stanú funkciami panela namiesto samostatných skriptov — práca navyše teda 
 | každý mesiac | záloha: `tools/ps-pack.php` na hostingu (obe databázy + všetky súbory) → stiahnuť na domáci server; **faktúry sú len v databáze a musia sa uchovať 10 rokov** | ty spustíš, Claude skontroluje a uloží |
 | každý mesiac | balík pre účtovníka odíde sám; skontrolovať, že prišiel | automaticky / účtovníčka |
 | každý mesiac | pozrieť logy (`var/log/` frameworku, logy PrestaShopu) | Claude z FTP kópie |
-| pri vydaní opravy PrestaShopu 8.2.x (bezpečnostné) | nácvik na kópii (`upgrade-run.sh`), potom hosting | Claude pripraví, ty nahráš |
+| pri vydaní opravy PrestaShopu 9.x (bezpečnostné) | nácvik na kópii ostrého e-shopu (Update Assistant + testy), potom hosting | Claude pripraví, ty nahráš |
 | raz za štvrťrok | aktualizácie knižníc (dompdf, PHPMailer, QR — `composer audit`), kontrola zmien zákonov (`docs/legislativa.md`, Web_store `docs/pravne-nalezitosti.md`) | Claude |
 | 1. 1. a pri zmene zákona | sadzby DPH a zákonné texty — mení sa v paneli (Legislatíva), nie v kóde | ty / Claude |
 

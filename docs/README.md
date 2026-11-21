@@ -12,7 +12,7 @@ hostingu sa doplní táto stránka.
 | **Zamestnanecká sekcia (panel)**: objednávky všetkých e-shopov, fakturácia, sklad, balík pre účtovníka | erma.sk/panel | `src/applications/panel` | `fakturacia-specifikacia.md`, `sklad-specifikacia.md`, `omega-export.md`, `legislativa.md` | hotová na dev, čaká na nasadenie (A) |
 | Klub HBK Pravotice + StadiumControl (administrácia zápasov, časomiera, JSON API) | hbkpravotice.sk | `StadiumControl\WebServer\apps\hbkpravotice` (+ statické stránky v koreni `WebServer\webapp\*.html`) | jeho `README.md`, `../HANDOVER.md` bod 22 | prenesené, čaká na nasadenie (A) |
 | Bánovecká hokejbalová liga | bnhl.sk | `StadiumControl\WebServer\apps\bnhl` | `../HANDOVER.md` bod 22 | prenesené, čaká na nasadenie (A) |
-| **E-shopy** Howies Hockey, AmerickeSPZ, CarPlates, ERMA (PrestaShop multistore) | howieshockey.sk, americkespz.sk, carplates.shop, erma.sk/store | kód: `~/webstore/shop.git` na domácom serveri (klon `C:\Users\orras\git\shop`); vlastné moduly, nástroje: `C:\Users\orras\git\Web_store` | Web_store `docs/upgrade-plan.md`, `module-replacements.md`, `pravne-nalezitosti.md`, `angartheme.md`, `HANDOVER.md` | beží 1.7.6.7; 8.2.9 nacvičené (C) |
+| **E-shopy** Howies Hockey, AmerickeSPZ, CarPlates, ERMA (PrestaShop multistore) | howieshockey.sk, americkespz.sk, carplates.shop, erma.sk/store | kód: `~/webstore/shop.git` na domácom serveri (klon `C:\Users\orras\git\shop`); vlastné moduly, nástroje: `C:\Users\orras\git\Web_store` | Web_store `docs/upgrade-plan.md`, `module-replacements.md`, `pravne-nalezitosti.md`, `angartheme.md`, `HANDOVER.md` | beží **PrestaShop 9.2.0** (od 20. 11. 2026, PHP 8.5, `ermaskretail`) |
 | Zavlažovanie (web + API pre ESP32 + mobilná appka) | aqua.erma.sk (vlastný priečinok na hostingu, nie v koreni FTP; `aqua12.erma.sk` v `.htaccess` je pozostatok) | `C:\Users\orras\git\Web_AquaErma` (`WaterIrrigationWeb/`, `api/device_sync.php`; `aquaerma_app/`) | jeho README, `WaterIrrigationWeb/DEVICE_COMMUNICATION.md` | beží (tabuľky `aqua_*` v `ermaskretail`), mimo tohto plánu |
 | LCS hub pre staré telefóny (Sony Ericsson) | mobileservice.erma.sk (vlastný priečinok, PHP 8) + agent/messenger na domácom serveri (`~/lcs-*`) | `C:\Users\orras\git\DB2020_revival` | jeho README, CLAUDE.md | beží (tabuľky `lcs_*` v `ermaskretail`), mimo tohto plánu |
 | branchmanager — školský projekt (majiteľ 20. 11. 2026) | — | — | — | **nepoužíva sa**; zostali tabuľky `branchmanager_*` v `ermaskretail` + `branchmanager_users` v `molesk` — dajú sa zmazať pri upratovaní (fáza D), sú v zálohe z 20. 11. |
@@ -48,7 +48,7 @@ rovnako ako predtým — všetko v `applications/`.
 | Čo | Kde |
 |---|---|
 | framework, panel, weby | http://192.168.0.11:8090/ (`/panel`, login admin/admin), hbkpravotice / bnhl: `http://hbkpravotice.sk.192-168-0-11.sslip.io:8090/`, `http://bnhl.sk.192-168-0-11.sslip.io:8090/`; testy `dev/` (PHP 8.5 ako hosting) |
-| e-shopy — kópie | `~/webstore/devN`: dev1 = dnešný ostrý stav (1.7.6, :8081), dev5 = 8.2.9 (:8085), dev4 = 9.2.1 (:8084); dev2, dev3 = staršie skúšky (vypnuté) |
+| e-shopy — kópie | `~/webstore/devN`: dev4 = 9.2.1 (:8084, najbližšie ostrému 9.2.0 — testovať tu); dev1 = stav pred aktualizáciou (1.7.6, :8081), dev5 = 8.2.9 (:8085) — už len história; dev2, dev3 = staršie skúšky (vypnuté) |
 | e-maily z kópií | Mailpit http://192.168.0.11:8025 (nič neodíde von) |
 | zálohy z hostingu | `/mnt/storage/erma/backups/` (zrkadlené disky RAID1 2× 1 TB; `~/webstore/backups` je odkaz naň) |
 

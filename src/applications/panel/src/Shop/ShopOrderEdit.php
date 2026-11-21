@@ -10,7 +10,7 @@ namespace Panel\Shop;
  *   other orders that use it; the PUT changes only that field (+ date_upd), order rows and totals stay.
  * - EVERY call carries the shop context (id_shop): PrestaShop 9 does not find an order / address outside it.
  * - The order is checked against the reference the panel shows (safety: the connection must belong to this database).
- * Order lines (products, quantities, prices) are NOT edited: the Webservice does not recalculate totals, taxes or stock.
+ * Order lines (products, quantities, prices) and the carrier / shipping price: ShopOrderLines (the panel recalculates).
  */
 class ShopOrderEdit
 {
@@ -18,7 +18,7 @@ class ShopOrderEdit
         'address2' => 'Adresa — 2. riadok', 'postcode' => 'PSČ', 'city' => 'Mesto', 'phone' => 'Telefón', 'phone_mobile' => 'Mobil',
         'dni' => 'IČO', 'vat_number' => 'DIČ / IČ DPH', 'other' => 'Poznámka k adrese'];
 
-    /** @var PrestaShopApi */ private $api;
+    /** @var PrestaShopApi */ protected $api;
     /** @var array resource => read-only fields */ private $readOnly = [];
 
     public function __construct(PrestaShopApi $api)
@@ -27,7 +27,7 @@ class ShopOrderEdit
     }
 
     /** The order document, checked against the reference the panel shows. */
-    private function order(int $orderId, int $shopId, string $reference): \SimpleXMLElement
+    protected function order(int $orderId, int $shopId, string $reference): \SimpleXMLElement
     {
         $doc = $this->api->get('orders/' . $orderId, ['id_shop' => $shopId]);
         if ((string)$doc->order->reference !== $reference) {
@@ -85,7 +85,7 @@ class ShopOrderEdit
     }
 
     /** Removes read-only fields (the shop's schema) and the given nodes before a PUT / POST. */
-    private function strip(\SimpleXMLElement $node, string $resource, array $more = []): void
+    protected function strip(\SimpleXMLElement $node, string $resource, array $more = []): void
     {
         if (!isset($this->readOnly[$resource])) {
             $this->readOnly[$resource] = [];

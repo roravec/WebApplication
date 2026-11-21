@@ -57,7 +57,7 @@ zmena stavu objednávky z detailu objednávky (pripojenie s voľbou „toto je e
 kontrola čísla objednávky, voliteľne e-mail zákazníkovi, oprávnenie `orders.edit`).
 
 ## 4. Zistené v e-shopoch (dev kópia databázy, 19. 11. 2026)
-PrestaShop 1.7.6.7, jednoduchá správa skladu (bez pokročilej), sklad sa zdieľa v rámci **skupiny obchodov**:
+PrestaShop 1.7.6.7 (zistené pred aktualizáciou; dáta prešli do 9.2.0 bez zmeny), jednoduchá správa skladu (bez pokročilej), sklad sa zdieľa v rámci **skupiny obchodov**:
 AmerickeSPZ.sk + CarPlates (spoločný), Howies Hockey, ERMA. Priečinok `sklad/` na hostingu je starý sklad ModaUSA.sk
 (vlastné tabuľky `stock_*`) — nesúvisí.
 
@@ -95,16 +95,32 @@ PrestaShop 1.7.6.7 (dev1) aj 9.2.1 (dev4); **každé volanie posiela `id_shop`**
 - *Produkty a ceny* (Sklad → E-shopy → produkt): predajná cena bez DPH (zobrazí aj s DPH podľa daňového pravidla pre SK),
   aktívny áno/nie, príplatok kombinácie; **akcie** (`specific_prices`): % alebo € (s / bez DPH), od–do, kombinácia,
   od počtu kusov — pridať / zrušiť; akcie nastavené v e-shope pre skupinu / zákazníka / krajinu sa len zobrazia.
-- **Úprava položiek objednávky (produkty, množstvá, ceny) cez Webservice nie je** — Webservice neprepočíta sumy, dane
-  ani sklad. Možnosti: robiť ich v administrácii PrestaShopu, alebo malý vlastný modul s bezpečným endpointom (rozhodne
-  majiteľ). Rovnako odovzdanie zásielok do Packety (API + štítky) — po inštalácii oficiálneho modulu Packeta.
+- *Úprava položiek a dopravy* (detail → „Upraviť položky a dopravu“, `/orders/…/lines`, právo `orders.edit`; majiteľ
+  21. 11. 2026: **len Webservice**, žiadny modul v e-shopoch): počet kusov (0 = odstrániť), cena/ks s DPH, pridať produkt
+  (výber zo zoznamu produktov / kombinácií e-shopu; prázdna cena = aktuálna cena e-shopu vrátane akcie pre krajinu
+  doručenia), dopravca a cena dopravy, **zľava objednávky** (€ s DPH alebo % z tovaru, nahrádza súčasnú — mení len
+  súčty objednávky, Webservice nemá `order_cart_rules`, v administrácii e-shopu nebude ako pomenovaný kupón), voliteľne
+  sklad o rozdiel (právo `stock.edit`). Webservice nič neprepočíta,
+  preto panel robí to isté ako administrácia PrestaShopu 1.7.6 pri úprave objednávky (`Shop\ShopOrderLines`):
+  `order_details` PUT / POST (kópia existujúceho riadku s údajmi produktu) / DELETE, súčty objednávky (`orders` PUT)
+  zmenené o rozdiel — zľavy, balenie a zaplatená suma ostávajú, `order_carriers` PUT (dopravca, cena dopravy, hmotnosť).
+  Poistky: objednávka musí mať v e-shope presne tie položky / súčet / dopravu, z ktorých bol formulár (inak sa nič
+  nezapíše), každý zápis sa kontroluje v odpovedi e-shopu, chyby sa hlásia; zmena sa zapíše do interných poznámok.
+  **Obmedzenia (prijaté majiteľom):** riadky DPH (`order_detail_tax` — len pre faktúry / dobropisy PrestaShopu, ktoré
+  e-shopy nevystavujú) sa neprepočítajú a nové riadky ich nemajú; percentuálne zľavy sa neprepočítajú; rezervované
+  množstvo skladu prepočíta PrestaShop pri ďalšej zmene stavu; pri e-shope cez Webservice (nie „táto databáza“) sa
+  zastarané skryté polia `tax_rate` / `tax_name` riadku vynulujú (PrestaShop 1.7+ ich aj tak nevypĺňa).
+- *Stavy objednávok* (Objednávky → Stavy objednávok, len správca; 21. 11. 2026): stavy sa menia priamo v e-shope cez
+  `order_states` — slovenský názov, šablóna e-mailu, **posielanie e-mailu** (bez neho e-shop pri zmene stavu nič nepošle),
+  farba, zaplatená / odoslaná / dodací list / platná / skrytá; nový stav. Nastavenia faktúr PrestaShopu sa nemenia.
+- Odovzdanie zásielok do Packety (API + štítky) — po inštalácii oficiálneho modulu Packeta.
 - Kľúč Webservice potrebuje (formulár pripojenia): GET+PUT products, combinations, stock_availables, orders,
-  order_carriers; GET+POST order_histories, addresses; GET+POST+PUT+DELETE specific_prices; GET product_options,
-  product_option_values, languages, shops, shop_groups, order_details, order_states, order_payments, customers, countries,
+  order_carriers; GET+POST order_histories, addresses; GET+PUT+POST order_states; GET+POST+PUT+DELETE specific_prices, order_details; GET product_options,
+  product_option_values, languages, shops, shop_groups, order_payments, customers, countries,
   currencies, carriers, taxes, tax_rules, tax_rule_groups, categories.
-- Kód: `Shop\ShopOrderEdit`, `Shop\OrderLog`, `Shop\ShopStock::addQuantity`, `Shop\ShopProducts` (ceny, akcie),
+- Kód: `Shop\ShopOrderEdit`, `Shop\ShopOrderLines` (položky + doprava), `Shop\OrderLog`, `Shop\ShopStock::addQuantity`, `Shop\ShopProducts` (ceny, akcie),
   `Controller\OrderToolsController`, `ShopsController::sale*`, `views/orders/*` (message, address, return, shipping,
-  delivery-note, picking-list), migrácia 017; testy „order tools…“, „returns…“.
+  delivery-note, picking-list, lines), migrácia 017; testy „order tools…“, „order lines…“, „returns…“.
 
 ## 5. Otvorené
 - Účtovanie skladu v Omege (export pohybov — formát T02/T03 je v popise KROS ImportExport) — po kroku 1.

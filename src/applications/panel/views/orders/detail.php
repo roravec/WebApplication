@@ -14,6 +14,8 @@ $color = function ($c) { return preg_match('/^#[0-9a-fA-F]{3,6}$/', (string)$c) 
 $cur = (string)$o['currency'];
 ?>
 <p><a href="<?= $e($ctx->url('/orders' . ($src ? '?src=' . $src : ''))) ?>">← Objednávky</a></p>
+<?php if (!empty($editBlocked)): ?><p class="flash warn"><?= $e($editBlocked) ?><?php if (!empty($canManageShops)): ?>
+  <a href="<?= $e($ctx->url('/stock/shops')) ?>">Otvoriť Sklad → E-shopy</a><?php endif ?></p><?php endif ?>
 <div class="cards">
   <section class="card">
     <h2>Objednávka</h2>
@@ -46,7 +48,7 @@ $cur = (string)$o['currency'];
   <a class="button" href="<?= $e($ctx->url('/shipping' . ($src ? '?src=' . $src : ''))) ?>">Expedícia</a>
 </div>
 
-<h2>Položky</h2>
+<h2>Položky<?php if ($canEdit): ?> <a class="button" href="<?= $e($ctx->orderUrl($src, (int)$o['id_order'], '/lines')) ?>">Upraviť položky, dopravu a zľavu</a><?php endif ?></h2>
 <table class="grid">
   <thead><tr><th>Produkt</th><th>Kód</th><th class="num">Množstvo</th><th class="num">Cena/ks s DPH</th><th class="num">Spolu s DPH</th></tr></thead>
   <tbody>
@@ -82,8 +84,8 @@ $cur = (string)$o['currency'];
     <?php if ($canChangeState): ?>
       <form method="post" action="<?= $e($ctx->orderUrl($src, (int)$o['id_order'], '/state')) ?>" class="filters">
         <?= WebApplication\Csrf::field() ?>
-        <select name="state"><?php foreach ($states as $s): ?><option value="<?= (int)$s['id_order_state'] ?>"<?= (int)$s['id_order_state'] === (int)$o['current_state'] ? ' selected' : '' ?>><?= $e($s['name']) ?></option><?php endforeach ?></select>
-        <label class="check"><input type="checkbox" name="sendemail" value="1" checked> poslať zákazníkovi e-mail</label>
+        <select name="state"><?php foreach ($states as $s): ?><option value="<?= (int)$s['id_order_state'] ?>"<?= (int)$s['id_order_state'] === (int)$o['current_state'] ? ' selected' : '' ?>><?= $e($s['name'] . (isset($s['send_email']) && !(int)$s['send_email'] ? ' (bez e-mailu)' : '')) ?></option><?php endforeach ?></select>
+        <label class="check"><input type="checkbox" name="sendemail" value="1" checked> poslať zákazníkovi e-mail (ak ho stav posiela)</label>
         <button class="primary" data-confirm="Zmeniť stav objednávky v e-shope?">Zmeniť stav</button>
       </form>
     <?php endif ?>
@@ -140,31 +142,29 @@ $cur = (string)$o['currency'];
     <?php
       $mails = [];
       foreach ($panelEmails as $m) {
-          $mails[] = ['at' => $m['created_at'], 'who' => 'panel', 'what' => $m['subject'] . ' (' . (($m['kind'] ?? '') === 'reminder' ? 'upomienka' : 'faktúra') . ')',
-              'to' => $m['recipients'], 'ok' => $m['status'] === 'sent'];
+          $mails[] = ['at' => $m['created_at'], 'who' => 'panel', 'what' => $m['subject'], 'full' => $m['subject'],
+              'kind' => ($m['kind'] ?? '') === 'reminder' ? 'upomienka' : 'faktúra', 'to' => $m['recipients'], 'ok' => $m['status'] === 'sent'];
       }
       foreach ($messages as $m) {
-          $mails[] = ['at' => $m['created_at'], 'who' => 'panel (' . $m['client_name'] . ')', 'what' => $m['subject'] . ' (správa)', 'to' => $m['recipients'],
-              'ok' => $m['status'] === 'sent'];
+          $mails[] = ['at' => $m['created_at'], 'who' => 'panel · ' . $m['client_name'], 'what' => $m['subject'], 'full' => $m['subject'],
+              'kind' => 'správa', 'to' => $m['recipients'], 'ok' => $m['status'] === 'sent'];
       }
       foreach ($shopEmails ?: [] as $m) {
-          $mails[] = ['at' => $m['date_add'], 'who' => 'e-shop', 'what' => $m['subject'] . ' (' . $m['template'] . ')', 'to' => $o['customer_email'], 'ok' => true];
+          // the shop puts its long name in front ("Howies Hockey Slovensko - … - Potvrdenie objednávky") → the last part
+          $parts = explode(' - ', (string)$m['subject']);
+          $mails[] = ['at' => $m['date_add'], 'who' => 'e-shop', 'what' => trim((string)end($parts)), 'full' => $m['subject'] . ' (' . $m['template'] . ')',
+              'kind' => '', 'to' => $o['customer_email'], 'ok' => true];
       }
       usort($mails, function ($a, $b) { return strcmp($b['at'], $a['at']); });
     ?>
     <?php if (!$mails): ?>
       <p class="muted">Zatiaľ žiadny<?= $shopEmails === null ? ' z panela (e-maily e-shopu sa pri tomto pripojení nedajú zobraziť)' : '' ?>.</p>
-    <?php else: ?>
-      <table class="grid small">
-        <thead><tr><th>Kedy</th><th>Odkiaľ</th><th>Čo</th><th>Komu</th></tr></thead>
-        <tbody>
-        <?php foreach ($mails as $m): ?>
-          <tr class="<?= $m['ok'] ? '' : 'inactive' ?>"><td><?= $e($f->dateTime($m['at'])) ?></td><td><?= $e($m['who']) ?></td>
-            <td><?= $e($m['what']) ?><?= $m['ok'] ? '' : ' — <b>neodoslané</b>' ?></td><td><?= $e($m['to']) ?></td></tr>
-        <?php endforeach ?>
-        </tbody>
-      </table>
     <?php endif ?>
+    <?php foreach ($mails as $m): ?>
+      <p<?= $m['ok'] ? '' : ' class="inactive"' ?>><small class="muted"><?= $e($f->dateTime($m['at'])) ?> · <?= $e($m['who']) ?><?= $m['kind'] !== '' ? ' · ' . $e($m['kind']) : '' ?></small><br>
+        <span title="<?= $e($m['full']) ?>"><?= $e($m['what']) ?></span><?= $m['ok'] ? '' : ' — <b>neodoslané</b>' ?><br>
+        <small class="muted"><?= $e($m['to']) ?></small></p>
+    <?php endforeach ?>
   </section>
 </div>
 
@@ -172,15 +172,15 @@ $cur = (string)$o['currency'];
   <?php if ($canEdit): ?>
   <section class="card">
     <h2>Expedícia</h2>
-    <form method="post" action="<?= $e($ctx->orderUrl($src, (int)$o['id_order'], '/tracking')) ?>">
+    <form method="post" action="<?= $e($ctx->orderUrl($src, (int)$o['id_order'], '/tracking')) ?>" class="form">
       <?= WebApplication\Csrf::field() ?>
       <label>Číslo zásielky <input name="tracking" value="<?= $e((string)($o['tracking'] ?? '')) ?>" maxlength="64"></label>
       <label>Zároveň zmeniť stav
         <select name="state"><option value="0">— nemeniť —</option>
-          <?php foreach ($states as $s): ?><option value="<?= (int)$s['id_order_state'] ?>"><?= $e($s['name']) ?></option><?php endforeach ?>
+          <?php foreach ($states as $s): ?><option value="<?= (int)$s['id_order_state'] ?>"><?= $e($s['name'] . (isset($s['send_email']) && !(int)$s['send_email'] ? ' (bez e-mailu)' : '')) ?></option><?php endforeach ?>
         </select></label>
-      <label class="check"><input type="checkbox" name="sendemail" value="1" checked> poslať zákazníkovi e-mail o stave (s odkazom na sledovanie)</label>
-      <p><button class="primary">Uložiť do e-shopu</button></p>
+      <label class="check"><input type="checkbox" name="sendemail" value="1" checked> poslať zákazníkovi e-mail o stave, ak ho stav posiela (s odkazom na sledovanie)</label>
+      <p style="margin: 0"><button class="primary">Uložiť do e-shopu</button></p>
     </form>
   </section>
   <?php endif ?>

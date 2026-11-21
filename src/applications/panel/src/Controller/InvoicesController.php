@@ -145,7 +145,36 @@ class InvoicesController
             'creditNotes' => $inv['doc_type'] === 'invoice' ? $repo->creditNotesOf((int)$inv['id']) : [],
             'audit' => Audit::forEntity($this->ctx->db(), 'invoice', (int)$inv['id']),
             'canEdit' => $this->ctx->can(Rights::INVOICES_EDIT),
+            // administrators: an issued document issued by mistake can go back to a draft (null = not shown)
+            'unissueErrors' => $inv['status'] === 'issued' && $this->ctx->isAdmin() ? $repo->unissueErrors($inv) : null,
         ], $this->title($inv), 'invoices');
+    }
+
+    /** POST /invoices/{id}/unissue — administrators: a document issued by mistake back to a draft (Invoices::unissue). */
+    public function unissue(Request $req, array $params)
+    {
+        if (!Csrf::check($req)) {
+            return Response::text('Formulár vypršal, načítajte stránku znova.', 400);
+        }
+        $inv = $this->load((int)$params['id']);
+        if ($inv instanceof Response) {
+            return $inv;
+        }
+        $back = Response::redirect($this->ctx->url('/invoices/' . $inv['id']));
+        if (!$req->post('confirm')) {
+            Session::flash('error', 'Potvrďte, že doklad nikto mimo firmy nedostal.');
+            return $back;
+        }
+        try {
+            $number = $this->ctx->invoices()->unissue((int)$inv['id'], (string)$req->post('reason', ''), $this->ctx->user());
+            Session::flash('msg', 'Doklad ' . $number . ' je znova koncept, číslo je uvoľnené. Pred novým vystavením skontrolujte'
+                . ' „Ďalšie číslo“ číselného radu (Firmy → firma → Číselné rady).');
+        } catch (\RuntimeException $e) {
+            Session::flash('error', 'Doklad ostáva vystavený: ' . $e->getMessage());
+        } catch (\InvalidArgumentException $e) {
+            Session::flash('error', $e->getMessage());
+        }
+        return $back;
     }
 
     public function issue(Request $req, array $params)
@@ -594,7 +623,7 @@ class InvoicesController
             return $this->ctx->page('invoices/no-company', [], 'Export do Omegy', 'invoices');
         }
         $values = $values ?? ['company' => (int)$companies[0]['id'], 'from' => date('Y-m-01', strtotime('first day of last month')),
-            'to' => date('Y-m-t', strtotime('last day of last month')), 'only_new' => 1];
+            'to' => date('Y-m-t', strtotime('last day of last month')), 'only_new' => 1, 'trial' => 0];
         return $this->ctx->page('invoices/export', ['companies' => $companies, 'values' => $values, 'errors' => $errors],
             'Export do Omegy', 'invoices');
     }
@@ -606,7 +635,7 @@ class InvoicesController
             return Response::text('Formulár vypršal, načítajte stránku znova.', 400);
         }
         $v = ['company' => (int)$req->post('company', 0), 'from' => (string)$req->post('from', ''), 'to' => (string)$req->post('to', ''),
-              'only_new' => $req->post('only_new') ? 1 : 0];
+              'only_new' => $req->post('only_new') ? 1 : 0, 'trial' => $req->post('trial') ? 1 : 0];
         $errors = [];
         if (!$this->ctx->canCompany($v['company'])) {
             $errors['company'] = 'Zvoľte firmu.';
@@ -641,10 +670,14 @@ class InvoicesController
         if ($export->errors()) {
             return Response::html($this->exportForm($req, $params, ['docs' => $export->errors()], $v), 422);
         }
-        $repo->markExported(array_map(function ($d) { return (int)$d['id']; }, $docs));
+        // a trial file (e.g. for the accountant to test the import) does not mark the documents as exported — they still
+        // go into the next real export / the monthly accountant package
+        if (!$v['trial']) {
+            $repo->markExported(array_map(function ($d) { return (int)$d['id']; }, $docs));
+        }
         Audit::log($this->ctx->db(), $this->ctx->user(), 'company', $v['company'], 'export',
-            'Omega: ' . count($docs) . ' dokladov ' . $v['from'] . ' – ' . $v['to']);
-        $name = 'omega-' . $v['from'] . '-' . $v['to'] . '.txt';
+            'Omega' . ($v['trial'] ? ' (na skúšku)' : '') . ': ' . count($docs) . ' dokladov ' . $v['from'] . ' – ' . $v['to']);
+        $name = 'omega-' . ($v['trial'] ? 'SKUSKA-' : '') . $v['from'] . '-' . $v['to'] . '.txt';
         return new Response($txt, 200, ['Content-Type' => 'text/plain; charset=windows-1250',
             'Content-Disposition' => 'attachment; filename="' . $name . '"', 'X-Content-Type-Options' => 'nosniff']);
     }
