@@ -34,4 +34,9 @@ class CustomersModule implements Module
     {
         return [];
     }
+
+    public function permissions(): array
+    {
+        return [];   // uses the permissions of other modules
+    }
 }

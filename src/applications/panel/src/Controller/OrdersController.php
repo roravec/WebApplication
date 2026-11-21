@@ -111,7 +111,7 @@ class OrdersController
         return $this->ctx->page('orders/detail', ['o' => $order, 'source' => $source, 'invoice' => $invoice, 'invoiceCompany' => $companyId,
             'panelEmails' => $panelEmails, 'shopEmails' => $shopEmails,
             'notes' => $log->notes($src, $orderId), 'messages' => $log->messages($src, $orderId), 'returns' => $log->returns($src, $orderId),
-            'canEdit' => $canChange, 'editBlocked' => $editBlocked, 'canManageShops' => $this->ctx->isAdmin(),
+            'canEdit' => $canChange, 'editBlocked' => $editBlocked, 'canManageShops' => $this->ctx->can(Rights::SETTINGS_ESHOPS),
             'canInvoice' => $this->ctx->can(Rights::INVOICES_EDIT) && $companyId && $this->ctx->canCompany($companyId),
             'canSeeInvoice' => $this->ctx->can(Rights::INVOICES_VIEW),
             'canChangeState' => $canChange, 'states' => $states],

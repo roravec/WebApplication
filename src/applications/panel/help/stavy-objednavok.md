@@ -1,7 +1,7 @@
 # Stavy objednávok
 
 Stavy objednávok e-shopu (napr. „Platba akceptovaná“, „Zaplatená a odoslaná“). Ukladajú sa **priamo v e-shope**.
-Otvoríte vo **Nastavenia → E-shopy → Stavy objednávok** (len správca).
+Otvoríte vo **Nastavenia → E-shopy → Stavy objednávok** (treba právo *Nastavenia → E-shopy*).
 
 ## Zoznam
 

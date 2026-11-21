@@ -17,6 +17,9 @@
 | **Akcia (zľava)** | Dočasná znížená cena produktu v e-shope. |
 | **Nákupná cena** | Za koľko produkt kupujete — z nej sa počíta marža. |
 | **Marža / príspevok na krytie** | Koľko zarobíte na tovare; príspevok navyše odráta dopravu, poplatky za platby a balné. |
+| **Správca** | Človek, ktorý v paneli smie všetko, vo všetkých firmách a e-shopoch (aj v moduloch, ktoré pribudnú). |
+| **Rola** | Pomenovaná sada práv pre jednu prácu (napr. Expedícia). Zamestnanec môže mať viac rolí — [Roly a práva](help:roly-a-prava). |
+| **Výnimka (práva)** | Jedno právo navyše alebo zakázané konkrétnemu človeku, popri jeho rolách. |
 | **Prijatý doklad (náklad)** | Faktúra alebo blok od dodávateľa — zadáva sa do Nákladov. |
 | **Storno** | Zrušenie prijatého dokladu s dôvodom (nemaže sa, ostáva v histórii). |
 | **Šarža / dávka** | Časť zásoby prijatá naraz za jednu cenu; vydáva sa od najstaršej (FIFO). |

@@ -1,9 +1,9 @@
 <?php /** @var array $companies with vat, series */ ?>
-<?php if ($ctx->isAdmin()): ?>
+<?php if ($ctx->can(\Panel\Rights::COMPANIES_CREATE)): ?>
   <p><a class="button primary" href="<?= $e($ctx->url('/companies/new')) ?>">+ Nová firma</a></p>
 <?php endif ?>
 <?php if (!$companies): ?>
-  <p class="muted">Zatiaľ nie je založená žiadna firma<?= $ctx->isAdmin() ? '' : ', ku ktorej máte prístup' ?>.</p>
+  <p class="muted">Zatiaľ nie je založená žiadna firma<?= $ctx->allCompanies() ? '' : ', ku ktorej máte prístup' ?>.</p>
 <?php else: ?>
 <table class="grid">
   <thead><tr><th>Firma</th><th>IČO</th><th>DPH dnes</th><th>Číselné rady</th><th>Stav</th></tr></thead>

@@ -269,7 +269,7 @@ class CompaniesController
             return $id;
         });
         if ($isNew) {
-            Rights::grantCompany($db, $user->getId(), $id);
+            (new \Panel\Core\Roles($db))->grantCompany($user->getId(), $id);
             // ready-to-use number series; the first number of the new system can be set on the series
             $repo->saveSeries(null, $id, ['doc_type' => 'invoice', 'name' => 'Faktúry', 'format' => 'FA{RRRR}/{NNNNNN}',
                 'vs_format' => '', 'reset_yearly' => 1, 'is_default' => 1, 'active' => 1]);

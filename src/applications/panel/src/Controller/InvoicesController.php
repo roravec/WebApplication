@@ -146,7 +146,7 @@ class InvoicesController
             'audit' => Audit::forEntity($this->ctx->db(), 'invoice', (int)$inv['id']),
             'canEdit' => $this->ctx->can(Rights::INVOICES_EDIT),
             // administrators: an issued document issued by mistake can go back to a draft (null = not shown)
-            'unissueErrors' => $inv['status'] === 'issued' && $this->ctx->isAdmin() ? $repo->unissueErrors($inv) : null,
+            'unissueErrors' => $inv['status'] === 'issued' && $this->ctx->can(\Panel\Rights::INVOICES_UNISSUE) ? $repo->unissueErrors($inv) : null,
         ], $this->title($inv), 'invoices');
     }
 

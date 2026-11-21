@@ -1,9 +1,9 @@
-<?php /** @var array $connections; bool $isAdmin — menu E-shopy: the shops, their products, prices, sales and stock */ ?>
+<?php /** @var array $connections; bool $canSettings — menu E-shopy: the shops, their products, prices, sales and stock */ ?>
 <p class="muted">Produkty, ceny, akcie a sklad e-shopov — panel ich číta a mení priamo v e-shope (produkty a kombinácie
   presne ako v PrestaShope). Sklad e-shopu ostáva v e-shope a predaj v e-shope ho odpisuje sám.
-  <?php if ($isAdmin): ?>Pripojenia e-shopov a stavy objednávok sú v <a href="<?= $e($ctx->url('/settings/eshops')) ?>">Nastaveniach → E-shopy</a>.<?php endif ?></p>
+  <?php if ($canSettings): ?>Pripojenia e-shopov a stavy objednávok sú v <a href="<?= $e($ctx->url('/settings/eshops')) ?>">Nastaveniach → E-shopy</a>.<?php endif ?></p>
 <?php if (!$connections): ?>
-  <p class="muted">Zatiaľ nie je pripojený žiadny e-shop.<?php if ($isAdmin): ?> Pripojíte ho v <a href="<?= $e($ctx->url('/settings/eshops')) ?>">Nastaveniach → E-shopy</a>.<?php endif ?></p>
+  <p class="muted">Zatiaľ nie je pripojený žiadny e-shop.<?php if ($canSettings): ?> Pripojíte ho v <a href="<?= $e($ctx->url('/settings/eshops')) ?>">Nastaveniach → E-shopy</a>.<?php endif ?></p>
 <?php endif ?>
 <div class="cards">
 <?php foreach ($connections as $c): if (!$c['active']) continue; ?>

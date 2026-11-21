@@ -74,6 +74,29 @@
     if (ev.target.matches && ev.target.matches('[data-toggles]')) syncToggles();
   });
 
+  // ---------------------------------------------------------------- employee form: permissions of the ticked roles
+  // + exceptions → the result per permission (the server computes the same when saving — Core\Roles::effective)
+  function syncPerms() {
+    var form = document.getElementById('employee-access');
+    if (!form) return;
+    var given = {};
+    form.querySelectorAll('input[name="roles[]"]').forEach(function (cb) {
+      if (!cb.checked) return;
+      (cb.getAttribute('data-perms') || '').split(',').forEach(function (p) { if (p) given[p] = true; });
+    });
+    form.querySelectorAll('tr[data-perm]').forEach(function (tr) {
+      var p = tr.getAttribute('data-perm'), mode = tr.querySelector('select').value;
+      var on = mode === 'allow' || (mode !== 'deny' && !!given[p]);
+      tr.querySelector('.from-role').textContent = given[p] ? '✓' : '–';
+      var r = tr.querySelector('.result');
+      r.textContent = on ? 'áno' : 'nie';
+      r.className = 'result ' + (on ? 'yes' : 'no');
+    });
+  }
+  document.addEventListener('change', function (ev) {
+    if (ev.target.closest && ev.target.closest('#employee-access')) syncPerms();
+  });
+
   // ---------------------------------------------------------------- invoice lines: live totals
   function num(v) {
     var n = parseFloat(String(v || '').replace(/\s/g, '').replace(',', '.'));

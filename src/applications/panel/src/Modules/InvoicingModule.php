@@ -35,7 +35,7 @@ class InvoicingModule implements Module
         $r->post('/invoices/{id:\d+}', $guard($EDIT, [$invoices, 'save']));
         $r->post('/invoices/{id:\d+}/issue', $guard($EDIT, [$invoices, 'issue']));
         $r->post('/invoices/{id:\d+}/delete', $guard($EDIT, [$invoices, 'delete']));
-        $r->post('/invoices/{id:\d+}/unissue', $guard(Rights::ADMIN_ONLY, [$invoices, 'unissue']));
+        $r->post('/invoices/{id:\d+}/unissue', $guard(Rights::INVOICES_UNISSUE, [$invoices, 'unissue']));
         $r->post('/invoices/{id:\d+}/credit-note', $guard($EDIT, [$invoices, 'creditNote']));
         $r->get('/invoices/{id:\d+}/print', $guard($VIEW, [$invoices, 'printView']));
         $r->get('/invoices/{id:\d+}/pdf', $guard($VIEW, [$invoices, 'pdf']));
@@ -74,5 +74,17 @@ class InvoicingModule implements Module
     public function settingsTabs(): array
     {
         return [];
+    }
+
+    public function permissions(): array
+    {
+        return [
+            ['key' => Rights::INVOICES_VIEW, 'group' => 'Faktúry', 'sensitive' => false,
+                'label' => 'Faktúry — prezeranie, PDF, export pre účtovníka'],
+            ['key' => Rights::INVOICES_EDIT, 'group' => 'Faktúry', 'sensitive' => false,
+                'label' => 'Faktúry — vystavovanie (koncepty, vystavenie, dobropisy, úhrady, odberatelia, e-maily)'],
+            ['key' => Rights::INVOICES_UNISSUE, 'group' => 'Faktúry', 'sensitive' => true,
+                'label' => 'Faktúry — vrátiť omylom vystavenú faktúru do konceptu'],
+        ];
     }
 }

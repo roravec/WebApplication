@@ -1,7 +1,8 @@
 # Ako vrátiť omylom vystavenú faktúru do konceptu
 
 Len pre faktúru, **ktorú nikto mimo firmy nedostal** (skúšobná, so zlým číslom …). Inak sa chyba opravuje
-**dobropisom**. Robí to len **správca**.
+**dobropisom**. Robí to len ten, kto má právo **Faktúry — vrátiť omylom vystavenú faktúru do konceptu** (správca ho
+má vždy; ostatným ho dá správca — [Roly a práva](help:roly-a-prava)).
 
 ## Kedy to ide
 

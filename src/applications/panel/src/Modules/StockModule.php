@@ -41,4 +41,14 @@ class StockModule implements Module
     {
         return [];
     }
+
+    public function permissions(): array
+    {
+        return [
+            ['key' => Rights::STOCK_VIEW, 'group' => 'Sklad', 'sensitive' => false,
+                'label' => 'Sklad — prezeranie stavu, pohybov a skladu e-shopov'],
+            ['key' => Rights::STOCK_EDIT, 'group' => 'Sklad', 'sensitive' => false,
+                'label' => 'Sklad — príjemky, výdajky, prevodky, inventúra, karty a sklady; produkty a sklad v e-shope'],
+        ];
+    }
 }

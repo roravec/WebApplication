@@ -40,7 +40,7 @@ alebo bez niektorého typu textu (ochrana pred omylom vymazaním).
 | QR platba PAY by square | `Invoicing\PayBySquare` (špecifikácia SBA 1.2.0 z 9. 10. 2025, `PayBySquare::SPEC`) | poradie polí, kompresia a kódovanie určuje SBA; od 1.2.0 je **meno príjemcu povinné**; pri novej verzii špecifikácie upraviť túto triedu + test (overiť dekódovaním) |
 | E-faktúra UBL 2.1 / Peppol BIS Billing 3.0 (EN 16931) | `Invoicing\Ubl` (`VERSION`, `CUSTOMIZATION`, `PROFILE`, `SCHEME_SK = 0245`) | nová verzia Peppol BIS = nové konštanty / podtrieda; každú zmenu overiť oficiálnymi pravidlami (validátor peppol.helger.com, len so syntetickými dátami); identifikátor 0245:DIČ overiť v PASR pri výbere poskytovateľa |
 | PrestaShop Webservice | `Shop\PrestaShopApi`, `Shop\ShopStock` | REST/XML PrestaShopu 1.7/8; pri novej verzii PrestaShopu overiť na kópii e-shopu (dev1/dev2) |
-| Fio API (sťahovanie pohybov) | `Invoicing\Fio` | dokumentácia Fio „API Bankovnictví“ 16. 10. 2025 |
+| Fio API (sťahovanie pohybov) | `Invoicing\Fio` | dokumentácia Fio „API Bankovnictví“ 16. 10. 2025; pohyby za obdobie vo formáte **JSON** (`Fio::parseJson`, stĺpce podľa kap. 5.3) — formát SBA XML Fio pri `/periods/` nepodporuje (HTTP 500, kód 6420) |
 | Bankový výpis CAMT.053 (ISO 20022) | `Invoicing\BankStatement` | verzie .001.02–.08; pri zmene formátu bánk upraviť parser + test (`tests/fixtures/camt053-sample.xml`) |
 | Register právnických osôb (RPO) | `Invoicing\Rpo`, `HttpClient` | API ŠÚ SR, licencia CC BY 4.0 (zdroj sa zobrazuje); pri zmene API upraviť `map()` + test |
 | Archív PDF vystavených dokladov | `invoice_pdf` (PDF + SHA-256), `InvoiceRenderer::archive()` | úschova 10 rokov (zákon o účtovníctve § 35); uložené PDF sa nikdy nemení |

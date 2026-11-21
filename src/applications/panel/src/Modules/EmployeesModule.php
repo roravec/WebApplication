@@ -7,18 +7,28 @@ use Panel\PanelContext;
 use Panel\Rights;
 use WebApplication\Http\Router;
 
-/** Nastavenia → Zamestnanci (accounts, permissions, access to companies) + Môj účet. */
+/**
+ * Nastavenia → Zamestnanci a roly: accounts, roles, permissions, companies and e-shops of each person, overview
+ * "who may do what" (docs/panel-architektura.md chapter 5) + Môj účet.
+ */
 class EmployeesModule implements Module
 {
     public function routes(Router $r, callable $guard, PanelContext $ctx): void
     {
         $employees = new EmployeesController($ctx);
-        $ADMIN = Rights::ADMIN_ONLY;
-        $r->get('/employees', $guard($ADMIN, [$employees, 'index']));
-        $r->get('/employees/new', $guard($ADMIN, [$employees, 'form']));
-        $r->get('/employees/{id:\d+}', $guard($ADMIN, [$employees, 'form']));
-        $r->post('/employees', $guard($ADMIN, [$employees, 'save']));
-        $r->post('/employees/{id:\d+}', $guard($ADMIN, [$employees, 'save']));
+        $SETTINGS = Rights::SETTINGS_EMPLOYEES;
+        $r->get('/employees', $guard($SETTINGS, [$employees, 'index']));
+        $r->get('/employees/new', $guard($SETTINGS, [$employees, 'form']));
+        $r->get('/employees/{id:\d+}', $guard($SETTINGS, [$employees, 'form']));
+        $r->post('/employees', $guard($SETTINGS, [$employees, 'save']));
+        $r->post('/employees/{id:\d+}', $guard($SETTINGS, [$employees, 'save']));
+        $r->get('/employees/overview', $guard($SETTINGS, [$employees, 'overview']));
+        $r->get('/employees/roles', $guard($SETTINGS, [$employees, 'roles']));
+        $r->get('/employees/roles/new', $guard($SETTINGS, [$employees, 'roleForm']));
+        $r->get('/employees/roles/{id:\d+}', $guard($SETTINGS, [$employees, 'roleForm']));
+        $r->post('/employees/roles', $guard($SETTINGS, [$employees, 'roleSave']));
+        $r->post('/employees/roles/{id:\d+}', $guard($SETTINGS, [$employees, 'roleSave']));
+        $r->post('/employees/roles/{id:\d+}/delete', $guard($SETTINGS, [$employees, 'roleDelete']));
         $r->get('/account', $guard('', [$employees, 'accountForm']));
         $r->post('/account', $guard('', [$employees, 'accountSave']));
     }
@@ -30,6 +40,14 @@ class EmployeesModule implements Module
 
     public function settingsTabs(): array
     {
-        return [['key' => 'employees', 'path' => '/employees', 'label' => 'Zamestnanci', 'permission' => Rights::ADMIN_ONLY, 'order' => 60]];
+        return [['key' => 'employees', 'path' => '/employees', 'label' => 'Zamestnanci a roly', 'permission' => Rights::SETTINGS_EMPLOYEES, 'order' => 60]];
+    }
+
+    public function permissions(): array
+    {
+        return [
+            ['key' => Rights::SETTINGS_EMPLOYEES, 'group' => 'Nastavenia', 'sensitive' => true,
+                'label' => 'Nastavenia → Zamestnanci a roly — účty, roly, práva (len v rozsahu vlastných práv)'],
+        ];
     }
 }

@@ -1,6 +1,5 @@
 <?php
 /** @var string $title, $section, $content; Client|null $user; string|null $flash, $flashError; Panel\PanelContext $ctx */
-use Panel\Rights;
 use WebApplication\Csrf;
 
 $menu = $ctx->navigation()->menu($ctx);            // groups of the left menu (src/Navigation.php, from the modules)
@@ -35,7 +34,7 @@ $helpUrl = $ctx->url('/help/for') . '?' . http_build_query(['page' => (string)($
     </nav>
     <div class="me">
       <a href="<?= $e($ctx->url('/account')) ?>" class="<?= $section === 'account' ? 'active' : '' ?>"><?= $e($user->getName()) ?></a>
-      <small><?= $e(Rights::roleLabel($user->getRights())) ?></small>
+      <small><?= $e($ctx->access()->roleLabel()) ?></small>
       <a href="<?= $e($ctx->url('/help')) ?>" class="<?= $section === 'help' ? 'active' : '' ?>">? Pomocník — návody</a>
       <button type="button" class="link theme-toggle" data-theme-toggle title="Prepnúť farebný režim"><span class="to-light">☀ Denný režim</span><span class="to-dark">☾ Tmavý režim</span></button>
       <form method="post" action="<?= $e($ctx->url('/logout')) ?>"><?= Csrf::field() ?><button class="link">Odhlásiť</button></form>

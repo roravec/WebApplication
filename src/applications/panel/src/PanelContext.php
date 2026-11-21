@@ -25,7 +25,7 @@ class PanelContext
     /** @var ShopOrders|null */ private $shopOrders = null;
     /** @var array|null */ private $connections = null;
     /** @var OrderSource[]|null */ private $orderSources = null;
-    /** @var Rights|null */ private $rights = null;
+    /** @var \Panel\Core\Access|null */ private $access = null;
     /** @var Navigation|null */ private $navigation = null;
 
     public function __construct(Application $app, Request $request)
@@ -61,36 +61,71 @@ class PanelContext
         return $this->user() !== null;
     }
 
-    /** Permissions of the logged-in employee (nobody logged in = no permissions). */
-    public function rights(): Rights
+    /** What the logged-in person may do (nobody logged in = nothing) — Core\Access, docs/panel-architektura.md ch. 5. */
+    public function access(): \Panel\Core\Access
     {
-        if ($this->rights === null) {
+        if ($this->access === null) {
             $u = $this->user();
-            $this->rights = new Rights($this->app->getDatabase(), $u ? $u->getId() : 0, $u ? $u->getRights() : 0);
+            $this->access = new \Panel\Core\Access($this->app->getDatabase(), $u ? $u->getId() : 0, $u ? $u->getRights() : 0);
         }
-        return $this->rights;
+        return $this->access;
     }
 
     /** @param string $permission Rights::ORDERS_VIEW, … or Rights::ADMIN_ONLY */
     public function can(string $permission): bool
     {
-        return $this->user() !== null && $this->rights()->can($permission);
+        return $this->user() !== null && $this->access()->can($permission);
     }
 
+    /** Správca (everything, also future modules, every company and e-shop). */
     public function isAdmin(): bool
     {
-        return $this->user() !== null && $this->rights()->isAdmin();
+        return $this->user() !== null && $this->access()->isAdmin();
     }
 
     /** @return int[] companies the employee may work with */
     public function companyIds(): array
     {
-        return $this->user() !== null ? $this->rights()->companyIds() : [];
+        return $this->user() !== null ? $this->access()->companyIds() : [];
     }
 
     public function canCompany(int $companyId): bool
     {
-        return $this->user() !== null && $this->rights()->canCompany($companyId);
+        return $this->user() !== null && $this->access()->canCompany($companyId);
+    }
+
+    /** All companies incl. future ones — also sees data without a company (e-shops not assigned to any company). */
+    public function allCompanies(): bool
+    {
+        return $this->user() !== null && $this->access()->allCompanies();
+    }
+
+    /** @param int $source order source (0 = e-shops in this database, N = shop connection N) */
+    public function canShop(int $source, int $shopId): bool
+    {
+        return $this->user() !== null && $this->access()->canShop($source, $shopId);
+    }
+
+    /**
+     * May the person see the money of this e-shop (sales, margin, purchase prices, costs)? Its e-shop scope AND the
+     * company the e-shop belongs to (an e-shop without a company: only people with all companies).
+     */
+    public function shopVisible(int $source, int $shopId): bool
+    {
+        if (!$this->canShop($source, $shopId)) {
+            return false;
+        }
+        $company = $this->companies()->companyForShop($source, $shopId);
+        return $company ? $this->canCompany($company) : $this->allCompanies();
+    }
+
+    /** Order source restricted to the person's e-shops (Access::shopIdsFor); no-one logged in (cron) = unrestricted. */
+    private function scoped(\Panel\Shop\OrderSource $source): \Panel\Shop\OrderSource
+    {
+        if ($this->user() !== null) {
+            $source->restrictShops($this->access()->shopIdsFor($source->id()));
+        }
+        return $source;
     }
 
     public function companies(): Companies
@@ -188,6 +223,7 @@ class PanelContext
             $local = $this->localConnection();
             $this->shopOrders = new ShopOrders($this->app->getDatabase(), (string)($cfg['prefix'] ?? 'ps_'), (string)($cfg['lang'] ?? 'sk'),
                 $local ? (string)$local['name'] : 'E-shopy (databáza)');
+            $this->scoped($this->shopOrders);
         }
         return $this->shopOrders;
     }
@@ -299,8 +335,8 @@ class PanelContext
                     continue;
                 }
                 try {
-                    $this->orderSources[$id] = new ShopOrdersApi($this->shopApi($c), $id, (string)$c['name'],
-                        (string)($this->shopConfig()['lang'] ?? 'sk'), new ShopCache($this->db(), $id));
+                    $this->orderSources[$id] = $this->scoped(new ShopOrdersApi($this->shopApi($c), $id, (string)$c['name'],
+                        (string)($this->shopConfig()['lang'] ?? 'sk'), new ShopCache($this->db(), $id)));
                 } catch (\Throwable $e) {
                     // unreadable key / bad URL — the source is left out; Nastavenia → E-shopy shows the connection
                 }

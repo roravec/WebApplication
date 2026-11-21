@@ -22,7 +22,7 @@ class EshopsModule implements Module
         $states = new OrderStatesController($ctx);
         $SV = Rights::STOCK_VIEW;
         $SE = Rights::STOCK_EDIT;
-        $ADMIN = Rights::ADMIN_ONLY;
+        $SETTINGS = Rights::SETTINGS_ESHOPS;
         $r->get('/eshops', $guard($SV, function (Request $req, array $p) use ($shops) { return $shops->index($req, $p + ['mode' => 'work']); }));
         $r->get('/eshops/{cid:\d+}/{sid:\d+}', $guard($SV, [$shops, 'stock']));
         $r->post('/eshops/{cid:\d+}/{sid:\d+}', $guard($SE, [$shops, 'stockSave']));
@@ -31,15 +31,15 @@ class EshopsModule implements Module
         $r->post('/eshops/{cid:\d+}/{sid:\d+}/product/{pid:\d+}/sale', $guard($SE, [$shops, 'saleAdd']));
         $r->post('/eshops/{cid:\d+}/{sid:\d+}/product/{pid:\d+}/sale/{spid:\d+}/delete', $guard($SE, [$shops, 'saleDelete']));
 
-        $r->get('/settings/eshops', $guard($ADMIN, function (Request $req, array $p) use ($shops) { return $shops->index($req, $p + ['mode' => 'settings']); }));
-        $r->get('/settings/eshops/new', $guard($ADMIN, [$shops, 'form']));
-        $r->post('/settings/eshops', $guard($ADMIN, [$shops, 'save']));
-        $r->get('/settings/eshops/{cid:\d+}/edit', $guard($ADMIN, [$shops, 'form']));
-        $r->post('/settings/eshops/{cid:\d+}/edit', $guard($ADMIN, [$shops, 'save']));
+        $r->get('/settings/eshops', $guard($SETTINGS, function (Request $req, array $p) use ($shops) { return $shops->index($req, $p + ['mode' => 'settings']); }));
+        $r->get('/settings/eshops/new', $guard($SETTINGS, [$shops, 'form']));
+        $r->post('/settings/eshops', $guard($SETTINGS, [$shops, 'save']));
+        $r->get('/settings/eshops/{cid:\d+}/edit', $guard($SETTINGS, [$shops, 'form']));
+        $r->post('/settings/eshops/{cid:\d+}/edit', $guard($SETTINGS, [$shops, 'save']));
         // order states of an installation, edited in the shop (?src = order source)
-        $r->get('/settings/eshops/states', $guard($ADMIN, [$states, 'index']));
-        $r->get('/settings/eshops/states/{sid:\d+}', $guard($ADMIN, [$states, 'form']));
-        $r->post('/settings/eshops/states/{sid:\d+}', $guard($ADMIN, [$states, 'save']));
+        $r->get('/settings/eshops/states', $guard($SETTINGS, [$states, 'index']));
+        $r->get('/settings/eshops/states/{sid:\d+}', $guard($SETTINGS, [$states, 'form']));
+        $r->post('/settings/eshops/states/{sid:\d+}', $guard($SETTINGS, [$states, 'save']));
 
         // old addresses (bookmarks, links in e-mails) — before 2026-11-21 under Nastavenia → E-shopy and Objednávky
         $to = function (string $path) use ($ctx) {
@@ -68,6 +68,14 @@ class EshopsModule implements Module
 
     public function settingsTabs(): array
     {
-        return [['key' => 'eshops', 'path' => '/settings/eshops', 'label' => 'E-shopy', 'permission' => Rights::ADMIN_ONLY, 'order' => 20]];
+        return [['key' => 'eshops', 'path' => '/settings/eshops', 'label' => 'E-shopy', 'permission' => Rights::SETTINGS_ESHOPS, 'order' => 20]];
+    }
+
+    public function permissions(): array
+    {
+        return [
+            ['key' => Rights::SETTINGS_ESHOPS, 'group' => 'Nastavenia', 'sensitive' => true,
+                'label' => 'Nastavenia → E-shopy — pripojenia (kľúče Webservice) a stavy objednávok'],
+        ];
     }
 }

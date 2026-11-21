@@ -33,4 +33,11 @@ interface OrderSource
 
     /** today, week, month, month_total, per_shop [name, orders, total] (last 30 days). */
     public function stats(): array;
+
+    /**
+     * Only these shops from now on (the person's e-shops, Core\Access::shopIdsFor); null = all. shops(), search(),
+     * find() and stats() then never return anything of another shop (find() = null) — set by PanelContext.
+     * @param int[]|null $shopIds
+     */
+    public function restrictShops(?array $shopIds): void;
 }

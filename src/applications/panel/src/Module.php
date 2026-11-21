@@ -26,4 +26,11 @@ interface Module
 
     /** Tabs of Nastavenia: list of ['key', 'path', 'label', 'permission', 'order']; pages use the section "settings:key". */
     public function settingsTabs(): array;
+
+    /**
+     * Permissions of the module (Core\Permissions): list of ['key' ("module.action"), 'label' (what it allows, in Slovak,
+     * shown on the employee and role forms), 'group' (heading on those forms), 'sensitive' (money, settings,
+     * irreversible steps)]. Every guard / check of the module uses only these keys (test "permissions …").
+     */
+    public function permissions(): array;
 }

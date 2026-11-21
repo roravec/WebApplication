@@ -14,7 +14,7 @@ Zoznam objednávok zo všetkých e-shopov. Panel ich číta priamo z e-shopu —
 
 - **Expedícia** — objednávky na vybavenie, hromadné dodacie listy, čísla zásielok, zmena stavu naraz.
   Návod: [Expedícia](help:expedicia)
-- **Stavy objednávok** (len správca) — nastavenie stavov, napr. či stav posiela zákazníkovi e-mail.
+- **Stavy objednávok** (len s právom *Nastavenia → E-shopy*) — nastavenie stavov, napr. či stav posiela zákazníkovi e-mail.
   Návod: [Stavy objednávok](help:stavy-objednavok)
 
 Kliknutím na číslo objednávky sa otvorí jej detail: [Detail objednávky](help:objednavka).

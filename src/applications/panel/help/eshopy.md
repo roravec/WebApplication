@@ -20,4 +20,5 @@ Pri každom pripojenom e-shope sú jeho obchody (napr. Howies Hockey, AmerickeSP
 
 Kliknutím na názov produktu otvoríte jeho nastavenia a akcie: [Produkt e-shopu](help:eshopy-produkt).
 
-> Pripojenia e-shopov a stavy objednávok nastavuje správca v **Nastavenia → E-shopy**.
+> Pripojenia e-shopov a stavy objednávok sa nastavujú v **Nastavenia → E-shopy** (právo *Nastavenia → E-shopy*).
+> Vidíte len e-shopy, ktoré máte povolené ([Roly a práva](help:roly-a-prava)).

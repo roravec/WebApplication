@@ -28,6 +28,7 @@ class ShopOrdersApi implements OrderSource
     /** @var string */ private $langIso;
     /** @var ShopCache|null */ private $cache;
     /** @var array */ private $memo = [];
+    /** @var int[]|null shops the person may see (null = all) */ private $allowed = null;
 
     public function __construct(PrestaShopApi $api, int $connectionId, string $label, string $langIso = 'sk', ?ShopCache $cache = null)
     {
@@ -53,7 +54,28 @@ class ShopOrdersApi implements OrderSource
         return true;   // errors (unreachable shop, missing permission) come as readable exceptions from the calls
     }
 
+    public function restrictShops(?array $shopIds): void
+    {
+        $this->allowed = $shopIds === null ? null : array_values(array_unique(array_map('intval', $shopIds)));
+    }
+
+    /** Shops the person may see (find, search, stats and the shop filter use only these). */
     public function shops(): array
+    {
+        $all = $this->allShops();
+        if ($this->allowed === null) {
+            return $all;
+        }
+        return array_values(array_filter($all, function ($s) { return in_array((int)$s['id_shop'], $this->allowed, true); }));
+    }
+
+    /** Suffix of cache names of lists that depend on the allowed shops. */
+    private function scopeKey(): string
+    {
+        return $this->allowed === null ? '' : ':s' . implode(',', $this->allowed);
+    }
+
+    private function allShops(): array
     {
         return $this->cached('shops', self::LISTS_TTL, function () {
             $out = [];
@@ -93,7 +115,7 @@ class ShopOrdersApi implements OrderSource
             return ['rows' => $this->listRows($orders), 'total' => count($found)];
         };
         // the unfiltered first pages (order list, overview) are cached a minute; cleared after a change from the panel
-        return $plain && $page <= 2 ? $this->cached('orders:' . $page . ':' . $perPage, self::DEFAULT_LIST_TTL, $load) : $load();
+        return $plain && $page <= 2 ? $this->cached('orders:' . $page . ':' . $perPage . $this->scopeKey(), self::DEFAULT_LIST_TTL, $load) : $load();
     }
 
     public function find(int $id): ?array
@@ -188,7 +210,7 @@ class ShopOrdersApi implements OrderSource
 
     public function stats(): array
     {
-        return $this->cached('stats', 300, function () {
+        return $this->cached('stats' . $this->scopeKey(), 300, function () {
             $since30 = date('Y-m-d', strtotime('-30 days'));
             $today = date('Y-m-d');
             $week = date('Y-m-d', strtotime('-7 days'));
@@ -438,7 +460,7 @@ class ShopOrdersApi implements OrderSource
 
     private function shopName(int $id): string
     {
-        foreach ($this->shops() as $s) {
+        foreach ($this->allShops() as $s) {
             if ($s['id_shop'] === $id) {
                 return $s['name'];
             }

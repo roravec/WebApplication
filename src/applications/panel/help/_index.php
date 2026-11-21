@@ -14,7 +14,7 @@ return [
         'Financie' => ['faktury', 'faktura-formular', 'faktura-detail', 'uhrady', 'pre-uctovnika', 'export-omega', 'naklady', 'vysledky'],
         'Sklad' => ['sklad'],
         'Nastavenia' => ['nastavenia', 'nastavenia-firmy', 'ciselne-rady', 'nastavenia-eshopy', 'stavy-objednavok', 'naklady-objednavok',
-            'legislativa', 'zamestnanci', 'moj-ucet'],
+            'legislativa', 'zamestnanci', 'roly-a-prava', 'moj-ucet'],
     ],
     'pages' => [
         'dashboard' => 'prehlad',
@@ -36,6 +36,7 @@ return [
         'companies/list' => 'nastavenia-firmy', 'companies/form' => 'nastavenia-firmy', 'companies/series' => 'ciselne-rady',
         'settings/legislation' => 'legislativa',
         'employees/list' => 'zamestnanci', 'employees/form' => 'zamestnanci', 'employees/account' => 'moj-ucet',
+        'employees/roles' => 'roly-a-prava', 'employees/role-form' => 'roly-a-prava', 'employees/overview' => 'roly-a-prava',
     ],
     'sections' => [
         'dashboard' => 'prehlad', 'orders' => 'objednavky', 'eshops' => 'eshopy', 'customers' => 'odberatelia', 'invoices' => 'faktury',

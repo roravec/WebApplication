@@ -19,7 +19,7 @@
 - **E-maily** — kedy a komu bola faktúra poslaná.
 - **História** — kto čo kedy s dokladom urobil.
 
-## Omylom vystavená faktúra (len správca)
+## Omylom vystavená faktúra (právo „vrátiť omylom vystavenú faktúru“)
 
 Dole je **Omylom vystavený doklad?** — vráti faktúru do konceptu, ak ju nikto mimo firmy nedostal.
 Návod: [Ako vrátiť faktúru do konceptu](help:ako-vratit-fakturu-do-konceptu).

@@ -15,8 +15,8 @@ class CompaniesModule implements Module
         $companies = new CompaniesController($ctx);
         $COMP = Rights::COMPANIES_MANAGE;
         $r->get('/companies', $guard($COMP, [$companies, 'index']));
-        $r->get('/companies/new', $guard(Rights::ADMIN_ONLY, [$companies, 'form']));
-        $r->post('/companies', $guard(Rights::ADMIN_ONLY, [$companies, 'save']));
+        $r->get('/companies/new', $guard(Rights::COMPANIES_CREATE, [$companies, 'form']));
+        $r->post('/companies', $guard(Rights::COMPANIES_CREATE, [$companies, 'save']));
         $r->get('/companies/{id:\d+}', $guard($COMP, [$companies, 'form']));
         $r->post('/companies/{id:\d+}', $guard($COMP, [$companies, 'save']));
         $r->get('/companies/{id:\d+}/{kind:logo|stamp}', $guard('', [$companies, 'image']));
@@ -35,5 +35,15 @@ class CompaniesModule implements Module
     public function settingsTabs(): array
     {
         return [['key' => 'companies', 'path' => '/companies', 'label' => 'Firmy', 'permission' => Rights::COMPANIES_MANAGE, 'order' => 10]];
+    }
+
+    public function permissions(): array
+    {
+        return [
+            ['key' => Rights::COMPANIES_MANAGE, 'group' => 'Firmy', 'sensitive' => true,
+                'label' => 'Firmy — nastavenia, bankové účty, číselné rady, vzhľad faktúry'],
+            ['key' => Rights::COMPANIES_CREATE, 'group' => 'Firmy', 'sensitive' => true,
+                'label' => 'Firmy — zakladanie nových firiem'],
+        ];
     }
 }

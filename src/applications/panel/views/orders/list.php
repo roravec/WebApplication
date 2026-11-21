@@ -28,7 +28,7 @@ $qs = function (array $change) use ($filters) {
   <button class="primary">Hľadať</button>
   <a href="<?= $e($ctx->url('/orders' . ($filters['src'] ? '?src=' . $filters['src'] : ''))) ?>">Zrušiť filter</a>
   <a class="button push" href="<?= $e($ctx->url('/shipping' . ($filters['src'] ? '?src=' . $filters['src'] : ''))) ?>">Expedícia</a>
-  <?php if ($ctx->isAdmin()): ?><a class="button" href="<?= $e($ctx->url('/settings/eshops/states' . ($filters['src'] ? '?src=' . $filters['src'] : ''))) ?>">Stavy objednávok</a><?php endif ?>
+  <?php if ($ctx->can(\Panel\Rights::SETTINGS_ESHOPS)): ?><a class="button" href="<?= $e($ctx->url('/settings/eshops/states' . ($filters['src'] ? '?src=' . $filters['src'] : ''))) ?>">Stavy objednávok</a><?php endif ?>
 </form>
 <?php if ($error !== null): ?><p class="flash err">E-shop neodpovedá: <?= $e($error) ?></p><?php endif ?>
 <p class="muted"><?= (int)$total ?> objednávok<?= $filters['src'] ? ' · číta sa cez Webservice e-shopu' : '' ?></p>

@@ -9,4 +9,4 @@ právo.
 | **E-shopy** | pripojenie e-shopov (kľúč Webservice), **stavy objednávok** | [E-shopy](help:nastavenia-eshopy) |
 | **Náklady objednávok** | koľko vás stojí doprava, platba a balné (pre maržu) | [Náklady objednávok](help:naklady-objednavok) |
 | **Legislatíva** | sadzby DPH, texty na dokladoch, hranica pre DPH | [Legislatíva](help:legislativa) |
-| **Zamestnanci** | účty, oprávnenia, prístup k firmám | [Zamestnanci](help:zamestnanci) |
+| **Zamestnanci a roly** | účty, roly, práva, firmy a e-shopy každého človeka, prehľad „kto čo smie“ | [Zamestnanci a roly](help:zamestnanci), [Roly a práva](help:roly-a-prava) |

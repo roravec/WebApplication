@@ -585,11 +585,9 @@ class ExpensesController
         if (!$this->ctx->shopOrders()->available()) {
             return [];
         }
-        $companies = $this->ctx->companies();
         $out = [];
         foreach ($this->ctx->salesReport()->shops() as $id => $name) {
-            $company = $companies->companyForShop(0, $id);
-            if ($company ? $this->ctx->canCompany($company) : $this->ctx->isAdmin()) {
+            if ($this->ctx->shopVisible(0, (int)$id)) {   // its company + the person's e-shops
                 $out[(int)$id] = $name;
             }
         }

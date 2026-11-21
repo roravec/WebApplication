@@ -2,7 +2,7 @@
 
 Read CLAUDE.md first (standing facts), then this file. Update this file whenever a task is done or a decision is made.
 
-## Last update: 2026-11-19
+## Last update: 2026-11-21
 
 ### Done
 1. **Framework rework** — committed by the owner as `dce2116 Major rework` (branch `rework`, 2026-11-18).
@@ -167,11 +167,10 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
    bank account (Firmy → bankové účty, column "API banky"; empty = unchanged, "zmazať" = remove), stored ENCRYPTED
    (`Panel\Secret`, AES-256-GCM, key from config.php `jwtSecret` — changing jwtSecret makes tokens unreadable → enter
    again). Faktúry → Import výpisu → "Stiahnuť pohyby" (period, from = last download − 3 days) → `Invoicing\Fio`
-   (official doc "API Bankovnictví" 16. 10. 2025: `periods/{token}/{from}/{to}/transactions.sba_xml` = camt.053.001.02,
-   1 request / 30 s, HTTP 409) → the same review + pairing as the file upload. Fio writes symbols as
-   "VS:…SS:…KS:…" (since 2020) — parser handles it. Observed: an invalid token gets NO answer on /periods (timeout) —
-   the message tells the user to check the token. Token never in messages/logs/pages (checked).
-   **Not tried with a real token — owner: enter the Fio read-only token and click "Stiahnuť pohyby".**
+   (official doc "API Bankovnictví" 16. 10. 2025: `periods/{token}/{from}/{to}/transactions.json` → `Fio::parseJson`
+   → the same structure as `BankStatement::parseCamt053`; 1 request / 30 s, HTTP 409) → the same review + pairing as
+   the file upload. ref = Fio "ID pohybu" (column22). **Not `sba_xml`** — see item 35. Token never in
+   messages/logs/pages (checked). Tried with the real ERMA token 2026-11-21 (item 35).
 15. **E-invoice UBL 2.1 / Peppol BIS Billing 3.0** (`Invoicing\Ubl`): "E-faktúra (XML)" on an issued document (or the
    reason why not, `Ubl::check`: both parties need a 10-digit DIČ, address, IČ DPH for AE/K). Invoice 380 / CreditNote
    381 (positive amounts, BillingReference to the original), endpoints `0245:DIČ` (Slovak scheme per providers — verify
@@ -475,8 +474,16 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
    authorization (all signers on a multi-signature account), validity max. 180 days unless auto-extended at each login,
    one token = one account; 422 = data older than 90 days without unlocking the history (Nastavenia → API → lock, 10 min);
    413 = more than 50 000 movements. `Fio::movements` now says exactly that; Firmy → bank account accepts only a
-   64-character alphanumeric token (whitespace from pasting removed). Files to upload: src/Invoicing/Fio.php,
-   src/Controller/CompaniesController.php. Waiting: owner checks the token state in Fio internet banking.
+   64-character alphanumeric token (whitespace from pasting removed).
+   **Real cause (found 2026-11-21 with the owner's token, active in internetbanking since 20. 11.):** the token was
+   fine — `transactions.json` answered 200, but `transactions.sba_xml` on `/periods/` answers **HTTP 500
+   `<errorCode>6420</errorCode> "Chyba aplikace"`** (SBA XML exists only for official statements `/by-id/`). Fix:
+   `Fio::movements` downloads JSON and converts it (`Fio::parseJson`, test "Fio JSON (periods) …"); on an error it
+   now shows Fio's own message + code, so a format error no longer looks like a bad token. Verified on dev (PHP 8.5)
+   with the real token: 23 movements, incoming ones with VS/KS/SS, IBAN, name, message; outgoing ones have VS + IBAN
+   (Fio sends their name/message empty). **Files to upload: src/applications/panel/src/Invoicing/Fio.php,
+   src/applications/panel/src/Controller/BankImportController.php** (+ CompaniesController.php from the earlier step
+   if not uploaded yet).
 36. **State change sent no e-mail** (owner 2026-11-21, "Zaplatená a odoslaná"): PrestaShop sends the e-mail of a state
    only when the STATE has send_email = 1 — backup 20. 11.: state 4 "Zaplatená a odoslaná" has template `shipped` but
    send_email = 0 (also 1 "Odoslané na dobierku"; 36 "Odoslané na dobierku (notify)" sends `in_transit`). Fix = in the
@@ -513,6 +520,38 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
    local PHP server (status 200, no PHP warnings). **Deploy: upload the whole `applications/panel/` folder** (new
    `help/`, `src/Modules/`, `src/Navigation.php`, `src/Module.php`, `src/Markdown.php`, many changed files; it contains
    the untested order-lines code of item 32 too — still don't use it on live orders).
+39. **Phase 1 step a — permissions DONE** (2026-11-21, docs/panel-architektura.md chapter 5 "Stav"; owner decided: roles
+   apply in all companies of the person; e-shops can be limited per person, default all). Phase 1 split into steps
+   1a permissions → 1b Ref + QR, links, activity, comments → 1c events, notifications, scheduler → 1d files (Nextcloud)
+   → 1e numbering + PDF templates, calendar, search → 1f API keys, integrations.
+   - Code: `src/Core/Access.php` (the one check: `can`, companies, e-shops; Správca = rights ≥ 100 = everything),
+     `src/Core/Roles.php` (roles, a person's access array, `effective`, `beyond` = "nobody gives more than he has",
+     `describeChange` for the log), `src/Core/Permissions.php` (register from `Module::permissions()` — new interface
+     method, all 13 modules). `Panel\Rights` = only key constants now (+ new `settings.employees`, `settings.eshops`,
+     `settings.legal`, `companies.create`, `invoices.unissue` replacing every `ADMIN_ONLY` guard / `isAdmin()` check).
+     `PanelContext::access()` (was `rights()`), `allCompanies()`, `canShop()`, `shopVisible()` (e-shop scope + its
+     company; e-shop without company = all-companies people only); `OrderSource::restrictShops()` in `ShopOrders` (SQL
+     condition) and `ShopOrdersApi` (shops / find / search / stats, cache keys per scope), applied by PanelContext to
+     every order source of a logged-in person; `ShopsController` (menu E-shopy) checks the shop of every page.
+   - Migration `019_roles.sql`: `role`, `role_permission`, `client_role`, `client_scope` (all_companies, all_shops),
+     `shop_access`; `permission.allow` (1 extra / 0 denied). Old per-person permissions stay as "allow" exceptions,
+     companies unchanged, e-shops = all → no access lost or gained (test). 4 offered roles, nobody assigned.
+   - UI Nastavenia → **Zamestnanci a roly** (tabs Zamestnanci · Roly · Kto čo smie): employee form (Správca, roles,
+     exceptions table with live result `js/panel.js` syncPerms, companies all/selected, e-shops all/selected, history),
+     role form (permissions grouped, sensitive badge, holders, delete with confirm, history), overview matrix.
+     Read-only + refusal when the target / role has more than the editor; self-protection (own Správca, own
+     settings.employees, deactivation). Every change → `audit` entity `employee` / `role`.
+   - Guides: `help/zamestnanci.md` (rewritten), new `help/roly-a-prava.md`, glossary, first steps, „len správca“ texts
+     replaced by the permission names. Developer guide: new `docs/framework/panel-modules.md` (module step by step,
+     permissions rules, checklist).
+   - Verified on dev (PHP 8.5): tests 72/72; e2e over HTTP on :8090 (29 checks: role + restricted employee sees only
+     Howies Hockey orders, foreign order 404, forbidden pages 403, a non-admin manager can't give invoices.edit / all
+     e-shops / put a permission he lacks into a role, can't touch Správca, can't drop his own settings.employees, his
+     change is in the history, state change 403 after the deny); smoke of 32 pages for Správca + 2 limited users, no PHP
+     warnings. Test accounts removed from the dev DB afterwards.
+   - **Deploy: upload the whole `applications/panel/` folder** (new `src/Core/`, changed modules, controllers, views,
+     `css/panel.css`, `js/panel.js`, help, `sql/019_roles.sql` — runs by itself on the first request). After deploy:
+     open Nastavenia → Zamestnanci a roly, check "Kto čo smie" (everyone must have the same access as before).
 
 ### Dev environment (home server)
 - **Without the home server** (owner away, 2026-11-21): a temporary setup on the owner's PC in the Claude session's
@@ -614,7 +653,9 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
    chunked uploads > 100 MB; plan 4.1). Home upload 150 Mbit/s (can be raised); Office in Nextcloud not required;
    **TODO later: off-site copy of the Nextcloud data** (owner: not now, "keď sa rozrastieme" — RAID only until then).
    Open questions:
-   chapter 8 of the plan (each only for its phase). Next: phase 0 when the owner says go.
+   chapter 8 of the plan (each only for its phase). Phase 0 done (item 38), **phase 1 step a (permissions) done
+   (item 39) → next: step 1b** (record references `Ref` + QR short links `/r/<ref>`, generic links between records,
+   activity per record extending `audit`, comments with @mentions — order notes become comments).
    Older notes (2026-11-19): **Task management in the panel** ("like Asana / Trello").
    Design notes so earlier work does not block it: projects (board) → columns/states → tasks (title, description,
    assignee(s), due date, priority, labels, checklist, comments, attachments, watchers); views list + kanban (drag &

@@ -16,6 +16,7 @@ class ShopOrders implements OrderSource
     /** @var string */ private $langIso;
     /** @var int|null */ private $langId = null;
     /** @var string */ private $label;
+    /** @var int[]|null shops the person may see (null = all) */ private $allowed = null;
 
     public function __construct(Database $db, string $prefix = 'ps_', string $langIso = 'sk', string $label = 'E-shopy (databáza)')
     {
@@ -58,10 +59,24 @@ class ShopOrders implements OrderSource
         return $this->langId;
     }
 
+    public function restrictShops(?array $shopIds): void
+    {
+        $this->allowed = $shopIds === null ? null : array_values(array_unique(array_map('intval', $shopIds)));
+    }
+
+    /** SQL condition limiting the column to the allowed shops ('1 = 1' when unrestricted). */
+    private function shopCondition(string $column): string
+    {
+        if ($this->allowed === null) {
+            return '1 = 1';
+        }
+        return $this->allowed ? $column . ' IN (' . implode(',', $this->allowed) . ')' : '0 = 1';
+    }
+
     /** @return array<int, array{id_shop:int, name:string}> */
     public function shops(): array
     {
-        return $this->db->query("SELECT id_shop, name FROM `{$this->p}shop` WHERE deleted = 0 ORDER BY id_shop");
+        return $this->db->query("SELECT id_shop, name FROM `{$this->p}shop` WHERE deleted = 0 AND {$this->shopCondition('id_shop')} ORDER BY id_shop");
     }
 
     /** @return array order states with name/color in the panel language */
@@ -184,7 +199,7 @@ class ShopOrders implements OrderSource
              LEFT JOIN `{$this->p}order_state_lang` osl ON osl.id_order_state = o.current_state AND osl.id_lang = ?
              LEFT JOIN `{$this->p}customer` c ON c.id_customer = o.id_customer
              LEFT JOIN `{$this->p}carrier` car ON car.id_carrier = o.id_carrier
-             WHERE o.id_order = ?",
+             WHERE o.id_order = ? AND {$this->shopCondition('o.id_shop')}",
             [$this->langId(), $id]
         );
         if ($o === false) {
@@ -236,14 +251,14 @@ class ShopOrders implements OrderSource
         $row = $this->db->fetchOne(
             "SELECT SUM(date_add >= ?) AS today, SUM(date_add >= ?) AS week, COUNT(*) AS month,
                     SUM(total_paid_tax_incl) AS month_total
-             FROM `{$this->p}orders` WHERE date_add >= ?",
+             FROM `{$this->p}orders` WHERE date_add >= ? AND {$this->shopCondition('id_shop')}",
             [date('Y-m-d'), date('Y-m-d', strtotime('-7 days')), $since30]
         );
         $perShop = $this->db->query(
             "SELECT s.name, COUNT(o.id_order) AS orders, COALESCE(SUM(o.total_paid_tax_incl), 0) AS total
              FROM `{$this->p}shop` s
              LEFT JOIN `{$this->p}orders` o ON o.id_shop = s.id_shop AND o.date_add >= ?
-             WHERE s.deleted = 0 GROUP BY s.id_shop, s.name ORDER BY s.id_shop",
+             WHERE s.deleted = 0 AND {$this->shopCondition('s.id_shop')} GROUP BY s.id_shop, s.name ORDER BY s.id_shop",
             [$since30]
         );
         return ['today' => (int)$row['today'], 'week' => (int)$row['week'], 'month' => (int)$row['month'],
@@ -295,7 +310,7 @@ class ShopOrders implements OrderSource
 
     private function filters(array $f): array
     {
-        $w = [];
+        $w = [$this->shopCondition('o.id_shop')];
         $p = [];
         if (!empty($f['shop'])) {
             $w[] = 'o.id_shop = ?';

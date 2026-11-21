@@ -195,6 +195,26 @@ oprávnenia (marže a nákupné ceny, výsledky firmy, mzdy, nastavenia, API kľ
 prehľad „kto čo vidí“. Testy práv pre každý modul. Prechod z dnešných práv automaticky, bez straty / zisku prístupu.
 **Externí** (rozhodnuté) vidia len projekty, kam ich pozvú — nikdy ceny, marže ani iné projekty.
 
+**Stav — krok 1a HOTOVÝ 21. 11. 2026** (rozhodnutia majiteľa v ten deň: roly platia **vo všetkých firmách človeka**,
+nie po firmách; **e-shopy sa dajú človeku obmedziť, predvolene všetky**):
+- `Core\Access` (jedna kontrola pre trasy, obrazovky a zoznamy), `Core\Roles` (roly, prístup človeka), `Core\Permissions`
+  (register — každý modul registruje svoje oprávnenia v `Module::permissions()`, s popisom a príznakom *citlivé*).
+- **Správca** (`client.rights >= 100`) = všetko vrátane budúcich modulov, všetky firmy a e-shopy. Ostatní: práva rolí +
+  výnimky (povoliť navyše / zakázať — zákaz má prednosť), firmy (všetky alebo vybrané), e-shopy (všetky alebo vybrané).
+- Doterajšie „len správca“ sú samostatné oprávnenia: `settings.employees`, `settings.eshops`, `settings.legal`,
+  `companies.create`, `invoices.unissue`. Údaje bez firmy (e-shop bez firmy, globálne náklady objednávok) vidí len
+  ten, kto má všetky firmy (a pri nákladoch aj všetky e-shopy).
+- Obmedzenie e-shopov priamo v zdrojoch objednávok (`OrderSource::restrictShops`, SQL aj Webservice): zoznam, filter,
+  detail (cudzia objednávka = „neexistuje“), štatistiky, Expedícia, menu E-shopy, výsledky a náklady.
+- Nastavenia → **Zamestnanci a roly**: zamestnanci, **Roly** (pripravené: Fakturácia a účtovníctvo, Expedícia, Sklad
+  a nákup, Len čítanie — nikto ich nedostal automaticky), **Kto čo smie** (tabuľka), história zmien práv pri človeku
+  aj role. Pravidlo: kto nie je správca, nedá viac, ako má sám, a nemení ľudí s viac právami; nikto si nevezme vlastné
+  práva správcu / Zamestnanci a roly.
+- Prechod (migrácia `019_roles.sql`): doterajšie práva ľudí = výnimky „povoliť“, firmy ostali, e-shopy = všetky →
+  nikto nestratil ani nezískal prístup (test).
+- Ostáva: vrstva 3 (zdieľanie záznamov) príde s úlohami a dokumentmi; rola v projekte s projektmi (fáza 2); rozsah
+  **sklad** (skladník len svojho skladu) s rozšírením skladu (fáza 8); API kľúče s rozsahom v kroku 1f.
+
 ## 6. Moduly
 
 Pri každom: čo je jeho **domov**, čo z jadra / kmeňových dát používa, na čom stojí.
@@ -465,7 +485,7 @@ sa dá meniť podľa toho, čo firma potrebuje skôr.
 | Fáza | Čo | Veľkosť | Stojí na |
 |---|---|---|---|
 | **0** ✅ | **HOTOVÉ 21. 11. 2026** — Preusporiadanie: nové menu, Nastavenia so záložkami, E-shopy samostatne, stavy objednávok do Nastavenia → E-shopy; rozhranie `Module`, presun dnešných častí — **bez zmeny funkcií**; **Pomocník** (tlačidlo ?, návody) + návody ku všetkému, čo panel už vie; **príručka frameworku pre vývojárov** | M | — |
-| **1** | Jadro: **práva (roly, rozsahy, zdieľanie, `Access`)**, Ref + QR odkazy, prepojenia, udalosti, aktivita, komentáre, notifikácie, súbory, číslovanie + PDF šablóny, kalendár, plánovač, vyhľadávanie, API kľúče, integrácie | L | 0 |
+| **1** | Jadro, po krokoch: **1a ✅ práva** (roly, výnimky, firmy, e-shopy, `Access` — 21. 11. 2026, kap. 5) → 1b Ref + QR odkazy, prepojenia, aktivita, komentáre → 1c udalosti, notifikácie, plánovač → 1d súbory (Nextcloud, 4.1) → 1e číslovanie + PDF šablóny, kalendár, vyhľadávanie → 1f API kľúče, integrácie | L | 0 |
 | **2** | Úlohy a projekty: zoznam, kanban, Moje úlohy, komentáre, prílohy, prepojenia, notifikácie; výkazy práce; **commity pri úlohách** (webhook / post-receive, čísla `LED-123`) | L | 1 |
 | **3** | Timeline + závislosti, kalendár (dovolenky, sviatky), opakované úlohy, šablóny projektov; **register povinností a termínov** (stavia len na kalendári a plánovači); **financie projektu — správa rozpočtu (zostavenie, schválenie, zmeny s dôvodom, viazané prostriedky, kontrola výdavkov) a skutočnosť** (hodiny, priradené náklady) | M | 2 |
 | **4** | Dokumenty (jeden píše, ostatní vidia; verzie, komentáre) | M | 1 |
@@ -506,7 +526,9 @@ na dev → nasadenie → technická dokumentácia tu a v HANDOVER. Nové zákonn
 1. **V-model — aké projekty a úrovne?** Elektronika + firmvér (LedBoard, StadiumControl …)? (fáza 5)
 2. **Výsledky testov odkiaľ** — testovacie prípravky (aký výstup?), CI (GitHub Actions …), ručne? (fázy 5, 9)
 3. **Nextcloud** (4.1): rádovo koľko dát (GB / TB) a aké najväčšie súbory? (fáza 1)
-4. **Roly**: sedí zoznam v kapitole 5? Kto dnes v paneli pracuje a čo má robiť? (fáza 1)
+4. **Roly**: sedí zoznam v kapitole 5? Kto dnes v paneli pracuje a čo má robiť? (fáza 1) — *netreba čakať: roly sú
+   od 21. 11. 2026 upraviteľné v Nastavenia → Zamestnanci a roly → Roly; ostatné (Výroba, Vývoj, Servis …) pribudnú
+   s modulmi.*
 5. **Poradie fáz 2–14**: čo firma potrebuje najskôr — úlohy, ponuky a reklamácie, alebo súčiastky a výroba?
 6. **Výroba**: vyrábate sami, alebo dávate osádzať DPS (napr. JLCPCB)? Aké množstvá? Koľko produktov a revízií? (fázy 8–9)
 7. **Distribútori súčiastok**: od koho nakupujete (TME, Mouser, DigiKey, LCSC …)? (fáza 8)

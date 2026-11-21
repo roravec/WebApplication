@@ -42,4 +42,12 @@ class ReportsModule implements Module
         return [['key' => 'order-costs', 'path' => '/settings/order-costs', 'label' => 'Náklady objednávok',
             'permission' => Rights::REPORTS_VIEW, 'order' => 40]];
     }
+
+    public function permissions(): array
+    {
+        return [
+            ['key' => Rights::REPORTS_VIEW, 'group' => 'Výsledky', 'sensitive' => true,
+                'label' => 'Výsledky — predaje, marža, nákupné ceny, výsledok firmy a peniaze'],
+        ];
+    }
 }

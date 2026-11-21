@@ -183,7 +183,7 @@ test('panel: migrations on an EMPTY database (fresh hosting) create the framewor
     ok(Panel\Controller\SetupController::key('a') !== Panel\Controller\SetupController::key('b'));
 });
 
-test('panel: migrations run once and convert old rights levels', function () {
+test('panel: migrations run once and convert old rights levels (no access lost or gained by the roles migration)', function () {
     $db = panelDb();
     $viewer = panelUser($db, 'viewer', 10);
     $invoicer = panelUser($db, 'invoicer', 50);
@@ -191,13 +191,168 @@ test('panel: migrations run once and convert old rights levels', function () {
     $dir = __DIR__ . '/../src/applications/panel/sql';
     ok(count(Schema::migrate($db, $dir)) >= 1, 'applied');
     eq([], Schema::migrate($db, $dir), 'second run does nothing');
-    eq([Rights::INVOICES_VIEW, Rights::ORDERS_VIEW], (function ($p) { sort($p); return $p; })(Rights::permissionsOf($db, $viewer->getId())));
-    ok(in_array(Rights::INVOICES_EDIT, Rights::permissionsOf($db, $invoicer->getId()), true));
+    $roles = new Panel\Core\Roles($db);
+    $pv = $roles->person($viewer->getId(), 10);
+    eq([Rights::INVOICES_VIEW, Rights::ORDERS_VIEW], (function ($p) { sort($p); return $p; })($pv['allow']), 'old permissions = allowed exceptions');
+    eq([[], [], false, true], [$pv['roles'], $pv['deny'], $pv['all_companies'], $pv['all_shops']], 'no role, own companies, all e-shops (as before)');
+    ok(in_array(Rights::INVOICES_EDIT, $roles->person($invoicer->getId(), 10)['allow'], true));
     eq(10, (int)$db->fetchValue('SELECT rights FROM pt_client WHERE id = ?', [$invoicer->getId()]));
     eq(100, (int)$db->fetchValue('SELECT rights FROM pt_client WHERE id = ?', [$admin->getId()]));
-    $r = new Rights($db, $viewer->getId(), 10);
-    ok($r->can(Rights::ORDERS_VIEW) && !$r->can(Rights::INVOICES_EDIT) && !$r->can(Rights::ADMIN_ONLY));
-    ok((new Rights($db, $admin->getId(), 100))->can(Rights::ADMIN_ONLY));
+    $r = new Panel\Core\Access($db, $viewer->getId(), 10);
+    ok($r->can(Rights::ORDERS_VIEW) && !$r->can(Rights::INVOICES_EDIT) && !$r->can(Rights::ADMIN_ONLY) && !$r->can(Rights::SETTINGS_EMPLOYEES));
+    ok($r->canShop(0, 1) && $r->canShop(5, 9) && $r->shopIdsFor(0) === null, 'all e-shops');
+    $boss = new Panel\Core\Access($db, $admin->getId(), 100);
+    ok($boss->can(Rights::ADMIN_ONLY) && $boss->can(Rights::SETTINGS_EMPLOYEES) && $boss->can('future.module') && $boss->allCompanies() && $boss->allShops());
+    eq('Správca', $boss->roleLabel());
+    eq(4, count($roles->all()), 'offered roles');
+    eq(0, (int)$db->fetchValue('SELECT COUNT(*) FROM pt_client_role'), 'nobody got a role by the migration');
+    ok(!(new Panel\Core\Access($db, 0, 100))->can(Rights::ORDERS_VIEW), 'nobody logged in = nothing');
+});
+
+test('permissions: every module registers its own, every key used in the code is registered, labels and groups', function () {
+    $all = Panel\Core\Permissions::all();
+    $consts = (new ReflectionClass(Rights::class))->getConstants();
+    unset($consts['EMPLOYEE'], $consts['ADMIN'], $consts['ADMIN_ONLY']);
+    eq([], array_values(array_diff($consts, array_keys($all))), 'every Rights:: key is registered by a module');
+    eq([], array_values(array_diff(array_keys($all), $consts)), 'every registered key has a Rights:: constant');
+    foreach ($all as $k => $p) {
+        ok($p['label'] !== '' && $p['group'] !== '', "label + group of $k");
+    }
+    // no route of any module is "Správca only" any more — each has a permission a role can give
+    $src = '';
+    foreach (glob(__DIR__ . '/../src/applications/panel/src/{Modules,Controller}/*.php', GLOB_BRACE) as $f) {
+        $src .= file_get_contents($f);
+    }
+    eq(0, substr_count($src, 'ADMIN_ONLY'), 'no admin-only guard left');
+    preg_match_all("/['\"]([a-z]+\.[a-z_]+)['\"]/", $src, $m);
+    foreach (array_unique($m[1]) as $k) {
+        if (preg_match('/^(orders|invoices|expenses|stock|reports|companies|settings)\.[a-z_]+$/', $k)) {
+            ok(isset($all[$k]), "permission $k used in the code is registered");
+        }
+    }
+    throws(function () {
+        $m = new class implements Panel\Module {
+            public function routes(WebApplication\Http\Router $r, callable $g, Panel\PanelContext $c): void {}
+            public function nav(): array { return []; }
+            public function settingsTabs(): array { return []; }
+            public function permissions(): array { return [['key' => 'orders.view', 'label' => 'x', 'group' => 'x']]; }
+        };
+        Panel\Core\Permissions::fromModules([new Panel\Modules\OrdersModule(), $m]);
+    }, LogicException::class);
+    eq(['orders.view', 'invoices.edit'], Panel\Core\Permissions::clean(['invoices.edit', 'nonsense', 'orders.view', 'orders.view']), 'register order, unknown dropped');
+});
+
+test('permissions: roles + exceptions + companies + e-shops; nobody gives more than he has; changes described', function () {
+    $db = panelDb();
+    Schema::migrate($db, __DIR__ . '/../src/applications/panel/sql');
+    $roles = new Panel\Core\Roles($db);
+    $ana = panelUser($db, 'ana', 10);
+    $boss = panelUser($db, 'boss2', 100);
+    $exp = $roles->save(null, 'Expedícia test', 'balí', [Rights::ORDERS_VIEW, Rights::ORDERS_EDIT, 'nonsense']);
+    eq([Rights::ORDERS_VIEW, Rights::ORDERS_EDIT], $roles->find($exp)['permissions'], 'unknown permission not stored');
+    eq('Rola s týmto názvom už existuje.', $roles->nameError('Expedícia test', null));
+    eq(null, $roles->nameError('Expedícia test', $exp), 'own name is fine');
+    $a = ['admin' => false, 'roles' => [$exp], 'allow' => [Rights::INVOICES_VIEW], 'deny' => [Rights::ORDERS_EDIT],
+          'all_companies' => false, 'companies' => [3, 4], 'all_shops' => false, 'shops' => ['0:1', '2:5']];
+    $roles->savePerson($ana->getId(), $a);
+    $stored = $roles->person($ana->getId(), 10);
+    sort($stored['companies']);
+    sort($stored['shops']);
+    eq($a, $stored, 'stored as given');
+    $acc = new Panel\Core\Access($db, $ana->getId(), 10);
+    ok($acc->can(Rights::ORDERS_VIEW) && $acc->can(Rights::INVOICES_VIEW), 'from the role + allowed exception');
+    ok(!$acc->can(Rights::ORDERS_EDIT), 'denied although the role gives it');
+    ok(!$acc->can(Rights::INVOICES_EDIT) && !$acc->can(Rights::SETTINGS_EMPLOYEES));
+    eq([3, 4], (function ($c) { sort($c); return $c; })($acc->companyIds()));
+    ok($acc->canCompany(3) && !$acc->canCompany(5) && !$acc->allCompanies());
+    ok($acc->canShop(0, 1) && $acc->canShop(2, 5) && !$acc->canShop(0, 2) && !$acc->canShop(2, 1));
+    eq([[1], [5], []], [$acc->shopIdsFor(0), $acc->shopIdsFor(2), $acc->shopIdsFor(7)]);
+    eq('Expedícia test', $acc->roleLabel());
+
+    // the role changes → applies at once to its holders
+    $roles->save($exp, 'Expedícia test', 'balí', [Rights::ORDERS_VIEW, Rights::STOCK_VIEW]);
+    ok((new Panel\Core\Access($db, $ana->getId(), 10))->can(Rights::STOCK_VIEW));
+    eq([$ana->getId()], $roles->holders($exp));
+
+    // beyond: the editor (ana) has less than the boss and can't give what she lacks
+    $anaNow = $roles->person($ana->getId(), 10);
+    $bossA = $roles->person($boss->getId(), 100);
+    eq(['správca'], $roles->beyond($anaNow, $bossA, [3, 4, 5]));
+    eq([], $roles->beyond($bossA, $anaNow, [3, 4, 5]), 'Správca may everything');
+    eq([], $roles->beyond($anaNow, $anaNow, [3, 4, 5]));
+    $more = array_merge($anaNow, ['allow' => [Rights::INVOICES_VIEW, Rights::INVOICES_EDIT], 'companies' => [3, 4, 5], 'shops' => ['0:1', '2:5', '0:2']]);
+    eq(['Faktúry — vystavovanie (koncepty, vystavenie, dobropisy, úhrady, odberatelia, e-maily)', 'firma #5', 'e-shop 0:2'],
+        $roles->beyond($anaNow, $more, [3, 4, 5]));
+    eq([], $roles->beyond($anaNow, array_merge($anaNow, ['companies' => [3, 4, 99]]), [3, 4, 5]), 'a deleted company does not count');
+    eq(['všetky firmy', 'všetky e-shopy'], $roles->beyond($anaNow, array_merge($anaNow, ['all_companies' => true, 'all_shops' => true]), [3, 4]));
+    $less = array_merge($anaNow, ['roles' => [], 'deny' => [], 'allow' => [Rights::ORDERS_VIEW]]);
+    eq([], $roles->beyond($anaNow, $less, [3, 4]), 'giving less is fine');
+
+    // activity log text
+    $d = $roles->describeChange($anaNow, array_merge($anaNow, ['roles' => [], 'allow' => [], 'all_shops' => true, 'companies' => [3]]),
+        [3 => 'ERMA', 4 => 'Iná'], ['0:1' => 'Howies']);
+    ok(strpos($d, 'roly: −Expedícia test') !== false && strpos($d, 'navyše: −Faktúry — prezeranie') !== false
+        && strpos($d, 'e-shopy: všetky') !== false && strpos($d, 'firmy: −Iná') !== false, $d);
+    eq('', $roles->describeChange($anaNow, $anaNow, [], []), 'nothing changed');
+
+    // delete a role: taken away from its holders
+    $roles->delete($exp);
+    eq([], $roles->person($ana->getId(), 10)['roles']);
+    ok(!(new Panel\Core\Access($db, $ana->getId(), 10))->can(Rights::STOCK_VIEW));
+    $roles->grantCompany($ana->getId(), 9);
+    ok(in_array(9, $roles->person($ana->getId(), 10)['companies'], true));
+});
+
+test('permissions: e-shop scope of the order sources (SQL and Webservice) — lists, search, detail, stats', function () {
+    // Webservice source: shops 1 Howies (orders 10, 12), 2 SPZ (order 11)
+    $src = new Panel\Shop\ShopOrdersApi(fakeOrderShop(), 3, 'Vzdialený e-shop');
+    $src->restrictShops([2]);
+    eq([['id_shop' => 2, 'name' => 'SPZ']], $src->shops());
+    eq([11], array_column($src->search([])['rows'], 'id_order'));
+    eq(0, $src->search(['shop' => 1])['total'], 'a foreign shop in the filter gives nothing');
+    eq(null, $src->find(10), 'order of a foreign shop = not found');
+    eq(['SPZ'], array_column($src->stats()['per_shop'], 'name'));
+    $src->restrictShops([1]);
+    eq(10, $src->find(10)['id_order'], 'own shop: detail as usual (the fake shop has the full detail of order 10)');
+    $src->restrictShops([]);
+    eq([[], 0, null], [$src->shops(), $src->search([])['total'], $src->find(10)], 'no shop = nothing');
+    $src->restrictShops(null);
+    eq(3, $src->search([])['total'], 'null = all');
+
+    // SQL source (shop tables in the panel database)
+    $db = testDb('pt_');
+    $pdo = $db->pdo();
+    $t = 'tsc_';
+    foreach (['orders', 'shop', 'customer', 'address', 'order_state', 'order_state_lang', 'currency', 'lang', 'carrier', 'order_carrier'] as $x) {
+        $pdo->exec("DROP TABLE IF EXISTS `{$t}$x`");
+    }
+    $pdo->exec("CREATE TABLE {$t}orders (id_order INT PRIMARY KEY, id_shop INT, id_customer INT, id_address_invoice INT, id_carrier INT, current_state INT,
+        id_currency INT, reference VARCHAR(9), date_add DATETIME, total_paid_tax_incl DECIMAL(20,6), payment VARCHAR(64))");
+    $pdo->exec("CREATE TABLE {$t}shop (id_shop INT PRIMARY KEY, name VARCHAR(64), deleted TINYINT)");
+    $pdo->exec("CREATE TABLE {$t}customer (id_customer INT PRIMARY KEY, firstname VARCHAR(32), lastname VARCHAR(32), email VARCHAR(128), company VARCHAR(64))");
+    $pdo->exec("CREATE TABLE {$t}address (id_address INT PRIMARY KEY, company VARCHAR(64), firstname VARCHAR(32), lastname VARCHAR(32))");
+    $pdo->exec("CREATE TABLE {$t}order_state (id_order_state INT PRIMARY KEY, color VARCHAR(32), paid TINYINT)");
+    $pdo->exec("CREATE TABLE {$t}order_state_lang (id_order_state INT, id_lang INT, name VARCHAR(64))");
+    $pdo->exec("CREATE TABLE {$t}currency (id_currency INT PRIMARY KEY, iso_code VARCHAR(3))");
+    $pdo->exec("CREATE TABLE {$t}lang (id_lang INT PRIMARY KEY, iso_code VARCHAR(2))");
+    $pdo->exec("CREATE TABLE {$t}carrier (id_carrier INT PRIMARY KEY, name VARCHAR(64), url VARCHAR(255))");
+    $pdo->exec("CREATE TABLE {$t}order_carrier (id_order_carrier INT PRIMARY KEY, id_order INT, tracking_number VARCHAR(64))");
+    $pdo->exec("INSERT INTO {$t}shop VALUES (1, 'Howies', 0), (2, 'SPZ', 0)");
+    $pdo->exec("INSERT INTO {$t}lang VALUES (1, 'sk')");
+    $now = date('Y-m-d H:i:s');
+    $pdo->exec("INSERT INTO {$t}orders VALUES (1, 1, 0, 0, 0, 0, 0, 'AAA', '$now', 10, 'x'), (2, 2, 0, 0, 0, 0, 0, 'BBB', '$now', 20, 'x'),
+        (3, 2, 0, 0, 0, 0, 0, 'CCC', '$now', 30, 'x')");
+    $sql = new Panel\Shop\ShopOrders($db, $t);
+    eq(3, $sql->search([])['total']);
+    $sql->restrictShops([2]);
+    eq([[2, 'SPZ']], array_map(function ($r) { return [(int)$r['id_shop'], $r['name']]; }, $sql->shops()));
+    eq([3, 2], array_map('intval', array_column($sql->search([])['rows'], 'id_order')));
+    eq(0, $sql->search(['shop' => 1])['total']);
+    eq(null, $sql->find(1), 'order of a foreign shop = not found');
+    $st = $sql->stats();
+    eq([2, 50.0, ['SPZ']], [$st['month'], $st['month_total'], array_column($st['per_shop'], 'name')]);
+    $sql->restrictShops([]);
+    eq([0, []], [$sql->search([])['total'], $sql->shops()]);
 });
 
 test('panel: issue invoices — numbers in sequence, issued is immutable, credit note', function () {
@@ -615,6 +770,35 @@ test('secrets: AES-256-GCM round trip, wrong key / tampering → null; Fio input
     throws(function () { new Panel\Secret(''); }, RuntimeException::class);
     throws(function () { Panel\Invoicing\Fio::movements('bad token!', '2026-01-01', '2026-01-31'); }, InvalidArgumentException::class);
     throws(function () { Panel\Invoicing\Fio::movements(str_repeat('a', 40), '1.1.2026', '2026-01-31'); }, InvalidArgumentException::class);
+});
+
+test('Fio JSON (periods) → statement entries: symbols, IBAN, card payment, VS from the message', function () {
+    // shape of https://fioapi.fio.cz/v1/rest/periods/{token}/…/transactions.json (real answer 2026-11-21, values made up)
+    $c = function ($id, $v) { return ['value' => $v, 'name' => 'x', 'id' => $id]; };
+    $json = json_encode(['accountStatement' => [
+        'info' => ['accountId' => '2501809819', 'bankId' => '8330', 'currency' => 'EUR', 'iban' => 'SK1783300000002501809819'],
+        'transactionList' => ['transaction' => [
+            ['column22' => $c(22, 27935030001), 'column0' => $c(0, '2026-11-18+0100'), 'column1' => $c(1, 975.6),
+             'column14' => $c(14, 'EUR'), 'column2' => $c(2, 'SK3111000000002612345678'), 'column3' => null,
+             'column10' => $c(10, 'ZM Technik, spol. s r. o.'), 'column4' => $c(4, '0308'), 'column5' => $c(5, '2027000001'),
+             'column6' => $c(6, '55'), 'column16' => $c(16, 'faktura 2027000001'), 'column8' => $c(8, 'Bezhotovostní příjem')],
+            ['column22' => $c(22, 27935030002), 'column0' => $c(0, '2026-11-19+0100'), 'column1' => $c(1, -51.83),
+             'column14' => $c(14, 'EUR'), 'column2' => null, 'column10' => $c(10, 'Obchod'), 'column5' => $c(5, '1234'),
+             'column16' => $c(16, 'Nákup: Obchod, Trenčín'), 'column8' => $c(8, 'Platba kartou')],
+            ['column22' => $c(22, 27935030003), 'column0' => $c(0, '2026-11-20+0100'), 'column1' => $c(1, 20),
+             'column14' => $c(14, 'EUR'), 'column2' => $c(2, '2900123456'), 'column3' => $c(3, '2010'),
+             'column10' => $c(10, 'Ján Novák'), 'column5' => null, 'column16' => $c(16, '/VS0000123456/SS/KS0308')],
+        ]]]]);
+    $st = Panel\Invoicing\Fio::parseJson($json);
+    eq(['SK1783300000002501809819', 'EUR', 3], [$st['iban'], $st['currency'], count($st['entries'])]);
+    eq(['ref' => '27935030001', 'date' => '2026-11-18', 'amount' => 975.6, 'currency' => 'EUR', 'vs' => '2027000001', 'ss' => '55',
+        'ks' => '0308', 'payer' => 'ZM Technik, spol. s r. o.', 'payer_iban' => 'SK3111000000002612345678', 'message' => 'faktura 2027000001'],
+        $st['entries'][0]);
+    eq([-51.83, '1234', ''], [$st['entries'][1]['amount'], $st['entries'][1]['vs'], $st['entries'][1]['payer_iban']], 'card payment');
+    eq(['0000123456', '0308', ''], [$st['entries'][2]['vs'], $st['entries'][2]['ks'], $st['entries'][2]['payer_iban']], 'VS from the message, local account no IBAN');
+    $open = [['id' => 8, 'variable_symbol' => '2027000001', 'total' => '975.60', 'paid' => '0']];
+    eq(8, Invoices::matchTransaction($st['entries'][0], $open)['id']);
+    throws(function () { Panel\Invoicing\Fio::parseJson('<response/>'); }, RuntimeException::class);
 });
 
 test('e-invoice UBL 2.1 / Peppol BIS 3.0: structure, totals, discount line, credit note, non-payer rules', function () {

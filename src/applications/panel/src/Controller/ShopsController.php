@@ -49,6 +49,15 @@ class ShopsController
         return new PrestaShopApi((string)$c['url'], $key);
     }
 
+    /**
+     * The person's e-shop scope (Core\Access): the connection marked "this database" is order source 0 (the shop ids
+     * are the same), any other connection is its own source.
+     */
+    private function shopAllowed(array $c, int $shopId): bool
+    {
+        return $this->ctx->canShop($c['local_db'] ? 0 : (int)$c['id'], $shopId);
+    }
+
     private function notFound(): Response
     {
         return Response::html($this->ctx->page('notfound', [], 'E-shop neexistuje', 'eshops'), 404);
@@ -56,6 +65,9 @@ class ShopsController
 
     public function index(Request $req, array $params): string
     {
+        // mode work = menu E-shopy (the shops, their products and stock); settings = Nastavenia → E-shopy (connections,
+        // order states) — docs/panel-architektura.md
+        $settings = ($params['mode'] ?? '') === 'settings';
         $list = [];
         foreach ($this->ctx->db()->query("SELECT * FROM {$this->t()} ORDER BY active DESC, name") as $c) {
             $c['shops'] = [];
@@ -63,16 +75,16 @@ class ShopsController
             if ($c['active']) {
                 try {
                     $c['shops'] = (new ShopStock($this->api($c)))->shops();
+                    if (!$settings) {   // menu E-shopy: only the person's e-shops
+                        $c['shops'] = array_values(array_filter($c['shops'], function ($s) use ($c) { return $this->shopAllowed($c, (int)$s['id']); }));
+                    }
                 } catch (\Throwable $e) {
                     $c['error'] = $e->getMessage();
                 }
             }
             $list[] = $c;
         }
-        // mode work = menu E-shopy (the shops, their products and stock); settings = Nastavenia → E-shopy (connections,
-        // order states) — docs/panel-architektura.md
-        $settings = ($params['mode'] ?? '') === 'settings';
-        return $this->ctx->page($settings ? 'stock/shop-connections' : 'stock/shops', ['connections' => $list, 'isAdmin' => $this->ctx->isAdmin()],
+        return $this->ctx->page($settings ? 'stock/shop-connections' : 'stock/shops', ['connections' => $list, 'canSettings' => $this->ctx->can(Rights::SETTINGS_ESHOPS)],
             $settings ? 'Pripojené e-shopy' : 'E-shopy', $settings ? 'settings:eshops' : 'eshops');
     }
 
@@ -154,7 +166,7 @@ class ShopsController
     public function stock(Request $req, array $params)
     {
         $c = $this->connection((int)$params['cid']);
-        if (!$c || !$c['active']) {
+        if (!$c || !$c['active'] || !$this->shopAllowed($c, (int)$params['sid'])) {
             return $this->notFound();
         }
         $f = ['q' => trim((string)$req->query('q', '')), 'inactive' => (bool)$req->query('inactive'), 'page' => max(1, (int)$req->query('page', 1))];
@@ -186,7 +198,7 @@ class ShopsController
     public function product(Request $req, array $params, array $errors = [])
     {
         $c = $this->connection((int)$params['cid']);
-        if (!$c || !$c['active']) {
+        if (!$c || !$c['active'] || !$this->shopAllowed($c, (int)$params['sid'])) {
             return $this->notFound();
         }
         try {
@@ -220,7 +232,7 @@ class ShopsController
             return Response::text('Formulár vypršal, načítajte stránku znova.', 400);
         }
         $c = $this->connection((int)$params['cid']);
-        if (!$c || !$c['active']) {
+        if (!$c || !$c['active'] || !$this->shopAllowed($c, (int)$params['sid'])) {
             return $this->notFound();
         }
         $pid = (int)$params['pid'];
@@ -257,7 +269,7 @@ class ShopsController
             return Response::text('Formulár vypršal, načítajte stránku znova.', 400);
         }
         $c = $this->connection((int)$params['cid']);
-        if (!$c || !$c['active']) {
+        if (!$c || !$c['active'] || !$this->shopAllowed($c, (int)$params['sid'])) {
             return $this->notFound();
         }
         $pid = (int)$params['pid'];
@@ -283,7 +295,7 @@ class ShopsController
             return Response::text('Formulár vypršal, načítajte stránku znova.', 400);
         }
         $c = $this->connection((int)$params['cid']);
-        if (!$c || !$c['active']) {
+        if (!$c || !$c['active'] || !$this->shopAllowed($c, (int)$params['sid'])) {
             return $this->notFound();
         }
         $pid = (int)$params['pid'];
@@ -401,7 +413,7 @@ class ShopsController
             return Response::text('Formulár vypršal, načítajte stránku znova.', 400);
         }
         $c = $this->connection((int)$params['cid']);
-        if (!$c || !$c['active']) {
+        if (!$c || !$c['active'] || !$this->shopAllowed($c, (int)$params['sid'])) {
             return $this->notFound();
         }
         $back = $this->ctx->url('/eshops/' . $c['id'] . '/' . (int)$params['sid']) . '?' . http_build_query(array_filter([

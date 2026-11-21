@@ -34,10 +34,14 @@ Vo firme v časti **Pre účtovníka (mesačný balík)** vyplňte e-mail účto
 V časti **Export do Omegy** nechajte predvolené hodnoty, kým vám účtovníčka nepovie iné. Podrobne:
 [Pre účtovníka](help:pre-uctovnika)
 
-## 5. Zamestnanci
+## 5. Zamestnanci a roly
 
-**Nastavenia → Zamestnanci → + Nový zamestnanec**: meno, e-mail (je to prihlasovacie meno), heslo, oprávnenia
-a prístup k firmám. Podrobne: [Zamestnanci](help:zamestnanci)
+1. **Nastavenia → Zamestnanci a roly → Roly** — pozrite pripravené roly (*Fakturácia a účtovníctvo*, *Expedícia*,
+   *Sklad a nákup*, *Len čítanie*) a upravte ich podľa toho, kto u vás čo robí.
+2. **Zamestnanci → + Nový zamestnanec**: meno, e-mail (je to prihlasovacie meno), heslo, roly, firmy a e-shopy.
+3. **Kto čo smie** — skontrolujte, či nikto nemá viac, ako treba.
+
+Podrobne: [Zamestnanci a roly](help:zamestnanci), [Roly a práva](help:roly-a-prava)
 
 ## 6. Kontrola
 

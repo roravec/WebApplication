@@ -197,11 +197,14 @@ passwords, keys, tokens or full customer data.
 ## 6. Patterns of the panel (use them in bigger apps)
 
 - **Modules** (`src/applications/panel/src/Modules/`, interface `Panel\Module`): each part registers its routes, menu
-  items (`nav()`), tabs of Nastavenia (`settingsTabs()`); `App.php` only lists them. `Panel\Navigation` builds the menu
-  filtered by permissions. A page states its menu section in `PanelContext::page($template, $vars, $title, 'invoices:payments')`.
+  items (`nav()`), tabs of Nastavenia (`settingsTabs()`) and its permissions (`permissions()`); `App.php` only lists
+  them. `Panel\Navigation` builds the menu filtered by permissions. A page states its menu section in
+  `PanelContext::page($template, $vars, $title, 'invoices:payments')`. **How to write a module, step by step:
+  [panel-modules.md](panel-modules.md).**
 - **Context object** (`Panel\PanelContext`): one place for the user, permissions, database, services, `page()`.
-- **Permissions** (`Panel\Rights`): permission strings per module; route guard `$guard($permission, $handler)`;
-  administrators `Rights::ADMIN_ONLY`; companies the user may access (`canCompany()`).
+- **Permissions** (`Panel\Core\Access`, docs/panel-architektura.md chapter 5): roles + exceptions + scope (companies,
+  e-shops); route guard `$guard($permission, $handler)`; in code `$ctx->can(Rights::X)`, `canCompany()`, `canShop()`,
+  `shopVisible()`; lists filtered in the database. Details: [panel-modules.md](panel-modules.md#permissions).
 - **Migrations**: `sql/NNN_name.sql`, `{p}` = table prefix, applied automatically on the next request after a deploy.
 - **Audit** (`Panel\Audit::log`): who did what with which record — for every change of business data.
 - **Secrets in the database** encrypted with `Panel\Secret` (AES-256-GCM, key from `jwtSecret`).

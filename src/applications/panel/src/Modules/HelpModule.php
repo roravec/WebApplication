@@ -86,4 +86,9 @@ class HelpModule implements Module
     {
         return [];
     }
+
+    public function permissions(): array
+    {
+        return [];
+    }
 }

@@ -52,4 +52,14 @@ class OrdersModule implements Module
     {
         return [];
     }
+
+    public function permissions(): array
+    {
+        return [
+            ['key' => Rights::ORDERS_VIEW, 'group' => 'Objednávky', 'sensitive' => false,
+                'label' => 'Objednávky z e-shopov — prezeranie, poznámky, expedícia'],
+            ['key' => Rights::ORDERS_EDIT, 'group' => 'Objednávky', 'sensitive' => false,
+                'label' => 'Objednávky — zmeny v e-shope (stav, sledovanie, adresy, položky, vrátenie, správa zákazníkovi)'],
+        ];
+    }
 }

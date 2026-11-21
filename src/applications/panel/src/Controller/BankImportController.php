@@ -79,8 +79,7 @@ class BankImportController
             if ($token === null) {
                 throw new \RuntimeException('Uložený token sa nedá prečítať (zmenil sa jwtSecret?) — zadajte ho pri firme znova.');
             }
-            $xml = \Panel\Invoicing\Fio::movements($token, $from, $to);
-            $st = BankStatement::parseCamt053($xml);
+            $st = \Panel\Invoicing\Fio::movements($token, $from, $to);
         } catch (\Throwable $e) {
             return Response::html($this->form($req, $params, $e->getMessage()), 422);
         }

@@ -1,4 +1,4 @@
-<?php /** @var array $connections; bool $isAdmin — Nastavenia → E-shopy: connections (Webservice key) and order states */ ?>
+<?php /** @var array $connections; bool $canSettings — Nastavenia → E-shopy: connections (Webservice key) and order states */ ?>
 <p class="muted">E-shop (PrestaShop) je s panelom prepojený kľúčom Webservice. Cez pripojenie panel mení objednávky (stav,
   adresy, číslo zásielky …), produkty, ceny a sklad priamo v e-shope. <b>Stavy objednávok</b> patria inštalácii
   PrestaShopu — sú spoločné pre všetky jej obchody.</p>

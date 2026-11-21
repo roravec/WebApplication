@@ -24,4 +24,9 @@ class DashboardModule implements Module
     {
         return [];
     }
+
+    public function permissions(): array
+    {
+        return [];
+    }
 }

@@ -24,12 +24,10 @@ class ReportsController
         }
         $report = $this->ctx->salesReport();
         $allShops = $report->shops();
-        // only e-shops of the companies the employee may see (+ e-shops not assigned to any company: admin only)
-        $companies = $this->ctx->companies();
+        // only e-shops of the person (e-shop scope) and of the companies he may see (e-shops without a company: all companies)
         $visible = [];
         foreach ($allShops as $id => $name) {
-            $company = $companies->companyForShop(0, $id);
-            if ($company ? $this->ctx->canCompany($company) : $this->ctx->isAdmin()) {
+            if ($this->ctx->shopVisible(0, (int)$id)) {
                 $visible[$id] = $name;
             }
         }
@@ -49,14 +47,18 @@ class ReportsController
     const PP_PER_PAGE = 100;
     const PP_QUEUE = 'pp_queue';
 
+    /** Rules for ALL e-shops (no e-shop chosen) — only a person who sees all companies and all e-shops. */
+    private function globalCosts(): bool
+    {
+        return $this->ctx->allCompanies() && $this->ctx->access()->allShops();
+    }
+
     /** e-shops (id => name) of this database the employee may see */
     private function visibleShops(): array
     {
-        $companies = $this->ctx->companies();
         $out = [];
         foreach ($this->ctx->salesReport()->shops() as $id => $name) {
-            $company = $companies->companyForShop(0, $id);
-            if ($company ? $this->ctx->canCompany($company) : $this->ctx->isAdmin()) {
+            if ($this->ctx->shopVisible(0, (int)$id)) {
                 $out[$id] = $name;
             }
         }
@@ -338,7 +340,7 @@ class ReportsController
             return $r['shop_id'] === null || isset($shops[(int)$r['shop_id']]);
         }));
         return $this->ctx->page('reports/order-costs', ['rules' => $posted ?? $rules, 'shops' => $shops, 'carriers' => $oc->carriers(),
-            'payments' => $oc->paymentModules(), 'errors' => $errors, 'global' => $this->ctx->isAdmin(),
+            'payments' => $oc->paymentModules(), 'errors' => $errors, 'global' => $this->globalCosts(),
             'canEdit' => $this->ctx->can(\Panel\Rights::EXPENSES_EDIT)], 'Náklady objednávok', 'settings:order-costs');
     }
 
@@ -363,7 +365,7 @@ class ReportsController
             $r['label'] = $key === '' ? '' : ($type === 'shipping' ? ($carriers[$key] ?? $key) : ($payments[$key] ?? $key));
             $rows[] = $r;
         }
-        $errors = $oc->save($rows, array_keys($this->visibleShops()), $this->ctx->isAdmin(), $this->ctx->user());
+        $errors = $oc->save($rows, array_keys($this->visibleShops()), $this->globalCosts(), $this->ctx->user());
         if ($errors) {
             return Response::html($this->orderCosts($req, $params, $errors, array_map(function ($r) {
                 return $r + ['id' => '', 'shop_id' => '', 'type' => '', 'match_key' => '', 'fixed' => '', 'percent' => '', 'valid_from' => '',

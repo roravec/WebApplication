@@ -45,4 +45,14 @@ class ExpensesModule implements Module
     {
         return [];
     }
+
+    public function permissions(): array
+    {
+        return [
+            ['key' => Rights::EXPENSES_VIEW, 'group' => 'Náklady', 'sensitive' => false,
+                'label' => 'Náklady — prijaté doklady (prezeranie)'],
+            ['key' => Rights::EXPENSES_EDIT, 'group' => 'Náklady', 'sensitive' => false,
+                'label' => 'Náklady — zadávanie dokladov, úhrady, storno, kategórie, náklady objednávok'],
+        ];
+    }
 }
