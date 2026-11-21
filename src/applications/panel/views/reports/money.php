@@ -75,5 +75,5 @@ foreach ($flows as $x) {
     <?php endforeach ?></tbody>
   </table>
   <p class="muted small">Príjmy = zapísané úhrady faktúr (z výpisu, pri vystavení), výdavky = uhradené prijaté doklady. Platby, ktoré panel nepozná
-    (napr. objednávky bez faktúry), tu nie sú — importujte výpisy pravidelne (Faktúry → Import výpisu).</p>
+    (napr. objednávky bez faktúry), tu nie sú — importujte výpisy pravidelne (Faktúry → Úhrady).</p>
 </section>

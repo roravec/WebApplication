@@ -26,7 +26,7 @@ $filters = ['missing_sold' => 'Predané za 12 mesiacov bez nákupnej ceny', 'mis
 
 <?php if (!$canEdit): ?>
   <p class="flash err"><?= !$canStock ? 'Na zmenu nákupných cien potrebujete právo „Sklad — príjemky, výdajky…“.'
-    : 'Na zápis do e-shopu treba pripojenie s Webservice kľúčom označené „táto databáza“ (Sklad → E-shopy → Pripojiť e-shop).' ?></p>
+    : 'Na zápis do e-shopu treba pripojenie s Webservice kľúčom označené „táto databáza“ (Nastavenia → E-shopy → Pripojiť e-shop).' ?></p>
 <?php endif ?>
 
 <?php if ($errors): ?><p class="flash err"><?= implode('<br>', array_map($e, $errors)) ?></p><?php endif ?>

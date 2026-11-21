@@ -5,7 +5,7 @@ $qs = function (array $change) use ($filters) {
 };
 ?>
 <?= $view->partial('stock/tabs', ['tab' => 'shops']) ?>
-<p><a href="<?= $e($ctx->url('/stock/shops')) ?>">← E-shopy</a></p>
+<p><a href="<?= $e($ctx->url('/eshops')) ?>">← E-shopy</a></p>
 <?php if ($error): ?><p class="flash err"><?= $e($error) ?></p><?php endif ?>
 <?php if ($shop): ?>
 <p class="muted"><?= $e($c['name']) ?> · <?= $e($shop['name']) ?> · skupina <?= $e($shop['group_name']) ?><?= $shop['share_stock'] ? ' — <b>spoločný sklad skupiny</b> (zmena platí pre všetky jej e-shopy)' : '' ?></p>
@@ -15,7 +15,7 @@ $qs = function (array $change) use ($filters) {
   <button class="primary">Hľadať</button>
 </form>
 <p class="muted"><?= (int)$total ?> riadkov (produkty bez kombinácií a jednotlivé kombinácie)</p>
-<form method="post" action="<?= $e($ctx->url('/stock/shops/' . $c['id'] . '/' . $shop['id'])) ?>" data-only-changed>
+<form method="post" action="<?= $e($ctx->url('/eshops/' . $c['id'] . '/' . $shop['id'])) ?>" data-only-changed>
   <?= Csrf::field() ?>
   <input type="hidden" name="q" value="<?= $e($filters['q']) ?>"><input type="hidden" name="inactive" value="<?= $filters['inactive'] ? '1' : '' ?>">
   <input type="hidden" name="page" value="<?= (int)$page ?>">
@@ -24,7 +24,7 @@ $qs = function (array $change) use ($filters) {
     <tbody>
     <?php foreach ($rows as $r): $n = 'row[' . (int)$r['stock_id'] . ']'; ?>
       <tr class="<?= $r['active'] ? '' : 'inactive' ?>" data-row>
-        <td><a href="<?= $e($ctx->url('/stock/shops/' . $c['id'] . '/' . $shop['id'] . '/product/' . $r['product_id'])) ?>" title="Nastavenia skladu produktu"><?= $e($r['name'] !== '' ? $r['name'] : '(bez názvu #' . $r['product_id'] . ')') ?></a><?= $r['combination_id'] ? ' <span class="badge">kombinácia</span>' : '' ?>
+        <td><a href="<?= $e($ctx->url('/eshops/' . $c['id'] . '/' . $shop['id'] . '/product/' . $r['product_id'])) ?>" title="Nastavenia skladu produktu"><?= $e($r['name'] !== '' ? $r['name'] : '(bez názvu #' . $r['product_id'] . ')') ?></a><?= $r['combination_id'] ? ' <span class="badge">kombinácia</span>' : '' ?>
           <input type="hidden" name="<?= $n ?>[name]" value="<?= $e($r['name']) ?>"></td>
         <td><?= $e($r['reference']) ?></td><td><?= $e($r['ean']) ?></td>
         <td><input name="<?= $n ?>[quantity]" value="<?= (int)$r['quantity'] ?>" size="5" class="num" inputmode="numeric"<?= $canEdit ? '' : ' readonly' ?>>

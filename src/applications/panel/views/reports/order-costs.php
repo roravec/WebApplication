@@ -16,7 +16,7 @@ $dis = $canEdit ? '' : ' disabled';
   ste platiteľ DPH, inak s DPH. Pri zmene ceny neprepisujte starú — dajte jej „do“ a pridajte novú „od“, staré objednávky
   ostanú so starou cenou. Platí najkonkrétnejšie pravidlo (e-shop + dopravca &gt; dopravca &gt; e-shop &gt; všetky).</p>
 <?php if ($errors): ?><div class="flash err"><ul><?php foreach ($errors as $m): ?><li><?= $e($m) ?></li><?php endforeach ?></ul></div><?php endif ?>
-<form method="post" action="<?= $e($ctx->url('/reports/order-costs')) ?>">
+<form method="post" action="<?= $e($ctx->url('/settings/order-costs')) ?>">
   <?= Csrf::field() ?>
   <div class="scroll-x">
   <table class="grid compact">

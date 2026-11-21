@@ -29,7 +29,7 @@ class LegislationController
         $values = $values ?? ['rates' => $legal->allRates(), 'texts' => $legal->allTexts()];
         return $this->ctx->page('settings/legislation', ['values' => $values, 'errors' => $errors,
             'textsNow' => $legal->textsOn(date('Y-m-d')),
-            'vatReg' => $vatReg ?? (new \Panel\Reports\VatTurnover($this->ctx->db()))->rules()], 'Legislatíva', 'legislation');
+            'vatReg' => $vatReg ?? (new \Panel\Reports\VatTurnover($this->ctx->db()))->rules()], 'Legislatíva', 'settings:legal');
     }
 
     /** POST /settings/legal/vat-registration — thresholds for the VAT registration of a non-payer (module E). */

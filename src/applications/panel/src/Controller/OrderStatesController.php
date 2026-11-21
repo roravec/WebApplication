@@ -37,8 +37,8 @@ class OrderStatesController
         }
         if ($api === null) {
             return $src === 0
-                ? 'Nie je pripojený e-shop tejto databázy — Sklad → E-shopy: pripojenie s kľúčom Webservice, „Aktívne“ a „E-shop je v tej istej databáze ako panel“.'
-                : 'Pripojenie e-shopu je neaktívne (Sklad → E-shopy).';
+                ? 'Nie je pripojený e-shop tejto databázy — Nastavenia → E-shopy: pripojenie s kľúčom Webservice, „Aktívne“ a „E-shop je v tej istej databáze ako panel“.'
+                : 'Pripojenie e-shopu je neaktívne (Nastavenia → E-shopy).';
         }
         try {
             $langId = (new ShopStock($api))->langId();
@@ -57,7 +57,7 @@ class OrderStatesController
         return $out;
     }
 
-    /** GET /orders/states */
+    /** GET /settings/eshops/states */
     public function index(Request $req, array $params): string
     {
         $shop = $this->shop($req);
@@ -71,16 +71,16 @@ class OrderStatesController
             }
         }
         return $this->ctx->page('orders/states', ['states' => $states, 'error' => $error, 'src' => (int)$req->query('src', 0),
-            'sources' => $this->sources()], 'Stavy objednávok', 'orders');
+            'sources' => $this->sources()], 'Stavy objednávok', 'settings:eshops');
     }
 
-    /** GET /orders/states/{sid} (0 = new) */
+    /** GET /settings/eshops/states/{sid} (0 = new) */
     public function form(Request $req, array $params, array $errors = [], ?array $values = null)
     {
         $shop = $this->shop($req);
         if (is_string($shop)) {
             Session::flash('error', $shop);
-            return Response::redirect($this->ctx->url('/orders/states'));
+            return Response::redirect($this->ctx->url('/settings/eshops/states'));
         }
         list($src, $repo, $langId) = $shop;
         $sid = (int)$params['sid'];
@@ -88,19 +88,19 @@ class OrderStatesController
             $states = $repo->all($langId);
         } catch (\Throwable $e) {
             Session::flash('error', 'Stavy sa nedajú načítať: ' . $e->getMessage());
-            return Response::redirect($this->ctx->url('/orders/states?src=' . $src));
+            return Response::redirect($this->ctx->url('/settings/eshops/states?src=' . $src));
         }
         if ($sid && !isset($states[$sid])) {
-            return Response::html($this->ctx->page('notfound', [], 'Stav neexistuje', 'orders'), 404);
+            return Response::html($this->ctx->page('notfound', [], 'Stav neexistuje', 'settings:eshops'), 404);
         }
         $values = $values ?? ($sid ? $states[$sid] : ['name' => '', 'template' => '', 'color' => '#4169e1', 'send_email' => false,
             'paid' => false, 'shipped' => false, 'delivery' => false, 'pdf_delivery' => false, 'logable' => false, 'hidden' => false]);
         return $this->ctx->page('orders/state-form', ['sid' => $sid, 'src' => $src, 'values' => $values, 'errors' => $errors,
             'state' => $sid ? $states[$sid] : null, 'templates' => ShopOrderStates::templates($states)],
-            $sid ? 'Stav ' . $states[$sid]['name'] : 'Nový stav objednávky', 'orders');
+            $sid ? 'Stav ' . $states[$sid]['name'] : 'Nový stav objednávky', 'settings:eshops');
     }
 
-    /** POST /orders/states/{sid} */
+    /** POST /settings/eshops/states/{sid} */
     public function save(Request $req, array $params)
     {
         if (!Csrf::check($req)) {
@@ -109,7 +109,7 @@ class OrderStatesController
         $shop = $this->shop($req);
         if (is_string($shop)) {
             Session::flash('error', $shop);
-            return Response::redirect($this->ctx->url('/orders/states'));
+            return Response::redirect($this->ctx->url('/settings/eshops/states'));
         }
         list($src, $repo, $langId) = $shop;
         $sid = (int)$params['sid'];
@@ -134,6 +134,6 @@ class OrderStatesController
         Audit::log($this->ctx->db(), $this->ctx->user(), 'shop_state', $id, $sid ? 'update' : 'create',
             $v['name'] . ' (e-mail: ' . ($v['send_email'] ? $v['template'] : 'nie') . '; ' . implode(', ', $flags) . ')');
         Session::flash('msg', 'Stav „' . $v['name'] . '“ uložený v e-shope.' . ($v['send_email'] ? ' Pri prechode do neho dostane zákazník e-mail (šablóna ' . $v['template'] . ').' : ''));
-        return Response::redirect($this->ctx->url('/orders/states' . ($src ? '?src=' . $src : '')));
+        return Response::redirect($this->ctx->url('/settings/eshops/states' . ($src ? '?src=' . $src : '')));
     }
 }

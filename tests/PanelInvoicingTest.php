@@ -1980,3 +1980,43 @@ test('returns: partial credit note (returned goods + shipping), order log, brand
         contains($needle, $html);
     }
 });
+
+test('Pomocník: Markdown is escaped and formatted; every page has a guide; links between guides work', function () {
+    $url = function ($p) { return '/panel' . $p; };
+    $html = Panel\Markdown::toHtml("## Postup\n\n1. **Uložiť** <script>\n2. pozri [Firmy](/companies) a [návod](help:slovnik)\n\n"
+        . "> Pozor: `kód` *dôležité*\n\n| A | B |\n|---|---|\n| 1 | [x](https://example.sk) |", $url);
+    contains('<h3 id="postup">Postup</h3>', $html);
+    contains('<ol><li><b>Uložiť</b> &lt;script&gt;</li>', $html);
+    contains('<a href="/panel/companies">Firmy</a>', $html);
+    contains('<a href="/panel/help/slovnik">návod</a>', $html);
+    contains('<blockquote>Pozor: <code>kód</code> <i>dôležité</i></blockquote>', $html);
+    contains('<th>A</th>', $html);
+    contains('target="_blank" rel="noopener"', $html);
+    ok(strpos($html, '<script>') === false, 'no raw HTML');
+    eq('Nastavenia firmy', Panel\Markdown::title("# Nastavenia firmy\n\ntext"));
+
+    $dir = __DIR__ . '/../src/applications/panel';
+    $idx = require $dir . '/help/_index.php';
+    $missing = [];
+    foreach (glob($dir . '/src/Controller/*.php') as $f) {   // every page rendered by a controller has its guide
+        preg_match_all("/page\('([a-z\/-]+)'/", file_get_contents($f), $m);
+        foreach ($m[1] as $tpl) {
+            if (!in_array($tpl, ['notfound', 'forbidden'], true) && !isset($idx['pages'][$tpl])) {
+                $missing[] = $tpl;
+            }
+        }
+    }
+    eq([], array_values(array_unique($missing)), 'pages without a guide in help/_index.php');
+    $slugs = array_merge(array_merge(...array_values($idx['groups'])), array_values($idx['pages']), array_values($idx['sections']));
+    foreach (array_unique($slugs) as $s) {
+        ok(is_file("$dir/help/$s.md"), "guide $s.md exists");
+    }
+    foreach (glob("$dir/help/*.md") as $f) {
+        preg_match_all('/\(help:([a-z0-9-]+)\)/', file_get_contents($f), $m);
+        foreach ($m[1] as $s) {
+            ok(is_file("$dir/help/$s.md"), basename($f) . " links to help:$s");
+        }
+        ok(in_array(basename($f, '.md'), $slugs, true), basename($f) . ' is listed in help/_index.php');
+        ok(Panel\Markdown::title(file_get_contents($f)) !== '', basename($f) . ' has a "# title"');
+    }
+});

@@ -43,9 +43,9 @@ $qs = function (array $change) use ($f) {
     <section class="card"><h2>Príspevok na krytie</h2><p class="big"><?= $e($m($s['contribution'])) ?></p>
       <p class="muted small"><?= $e($pct($s['contribution_pct'])) ?> z tržieb · marža + doprava − doprava <?= $e($m($s['ship_cost'])) ?>
         − platby <?= $e($m($s['pay_cost'])) ?> − balné <?= $e($m($s['pack_cost'])) ?>
-        <?php if ($s['no_ship_rule']): ?><br><b><?= (int)$s['no_ship_rule'] ?></b> objednávok bez ceny dopravy — <a href="<?= $e($ctx->url('/reports/order-costs')) ?>">doplniť</a><?php endif ?></p></section>
+        <?php if ($s['no_ship_rule']): ?><br><b><?= (int)$s['no_ship_rule'] ?></b> objednávok bez ceny dopravy — <a href="<?= $e($ctx->url('/settings/order-costs')) ?>">doplniť</a><?php endif ?></p></section>
     <?php else: ?>
-    <section class="card"><h2>Príspevok na krytie</h2><p class="muted">Nastavte <a href="<?= $e($ctx->url('/reports/order-costs')) ?>">náklady objednávok</a>
+    <section class="card"><h2>Príspevok na krytie</h2><p class="muted">Nastavte <a href="<?= $e($ctx->url('/settings/order-costs')) ?>">náklady objednávok</a>
       (doprava, poplatky za platby, balné) — uvidíte, koľko vám objednávky naozaj zarobia.</p></section>
     <?php endif ?>
     <section class="card"><h2>Presnosť</h2>

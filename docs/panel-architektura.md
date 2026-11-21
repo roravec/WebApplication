@@ -209,6 +209,28 @@ Pri každom: čo je jeho **domov**, čo z jadra / kmeňových dát používa, na
 - **Výkazy práce**: hodiny pri úlohe (stopky alebo ručne), týždenný výkaz, fakturovateľné / nie; vstup pre ziskovosť
   zákaziek a náklady výroby. **Dovolenky** (žiadosť → schválenie) a štátne sviatky (dáta v Legislatíve) v kalendári.
 
+- **Financie projektu** (každý projekt — bežný, vývoj, V-model, zákazka; majiteľ 21. 11. 2026: „trackovanie financií
+  v projekte“): **rozpočet** po kategóriách (práca, materiál a súčiastky, služby a subdodávky, cestovné, iné) a
+  voliteľne po etapách; **skutočnosť** sa skladá sama z toho, čo už v paneli je — hodiny z výkazov × nákladová sadzba
+  človeka, prijaté doklady (Náklady) a nákupné objednávky priradené k projektu, materiál vydaný zo skladu na projekt,
+  náklady výroby; **výnosy** — faktúry a zálohové faktúry priradené k projektu (pri zákazke aj fakturačné míľniky);
+  **prehľad**: rozpočet vs. skutočnosť vs. odhad do konca, marža, čerpanie v čase (graf), upozornenie pri prekročení
+  (napr. 80 % a 100 % rozpočtu) → notifikácia a „Treba urobiť“. Vlastný vývoj (produkt bez zákazníka) = náklady vývoja
+  produktu, ktoré sa neskôr ukážu pri marži produktu (či ich účtovať ako majetok, rozhodne účtovníčka).
+  Sadzby ľudí (nákladová / fakturačná) a čísla financií vidí len ten, kto má oprávnenie `projects.finance`.
+- **Správa rozpočtu** (majiteľ 21. 11. 2026: „budget na projekt treba spravovať“):
+  - **Zostavenie**: položky rozpočtu (kategória, etapa, popis, množstvo × cena — napr. 120 h vývoja FW × sadzba,
+    50 ks DPS, certifikácia CE), aj zo šablóny projektu alebo z cenovej ponuky (zákazka); hodiny rozpočtu sa dajú
+    rozdeliť na úlohy (odhad úlohy → plán vs. skutočne odpracované).
+  - **Schválenie a verzie**: rozpočet má stav (návrh → schválený); **každá zmena schváleného rozpočtu je zmena
+    s dôvodom** (navýšenie, presun medzi kategóriami / etapami, rezerva), kto ju navrhol a kto schválil, história
+    verzií — vždy vidno pôvodný rozpočet, aktuálny a prečo sa menil.
+  - **Viazané prostriedky**: objednané, ale ešte nezaplatené (nákupné objednávky, potvrdené subdodávky) sa rátajú
+    ako čerpané → „voľný rozpočet“ = rozpočet − skutočnosť − viazané.
+  - **Kontrola výdavkov**: pri priradení nákladu / objednávky k projektu panel ukáže zostatok kategórie; nad zostatok
+    (alebo nad limit) treba schválenie oprávnenou osobou (`projects.budget.approve`) — nastaviteľné na projekte.
+  - **Rezerva** projektu a jej čerpanie, **odhad do konca** (zostávajúce hodiny úloh × sadzby + plánované nákupy),
+    upozornenia pri 80 % / 100 % kategórie aj celku, prehľad rozpočtov všetkých projektov firmy (portfólio).
 - **Číslo úlohy** = kľúč projektu + poradové číslo: `LED-123` (osobné úlohy `U-45`). Používa sa všade: v komentároch,
   dokumentoch, **v správach commitov** (6.11), na štítkoch.
 
@@ -418,9 +440,22 @@ Majiteľ 21. 11. 2026: „všetko bude musieť byť dôkladne popísané!“ Pla
 - **Návody pre ľudí mimo firmy**: účtovníčka (import do Omegy), zákazník (nahratie podkladov, schválenie náhľadu),
   externý spolupracovník (práca v projekte), testovacie prípravky a CI (API).
 - **Jednoduchá slovenčina**, krátke vety, snímky obrazoviek, príklady. Návody sú súbory v repozitári
-  (`docs/pomocnik/…`), panel ich zobrazuje — menia sa spolu s kódom, takže nikdy nezastarajú.
+  (`src/applications/panel/help/…` — idú na hosting spolu s panelom), panel ich zobrazuje — menia sa spolu s kódom,
+  takže nikdy nezastarajú.
 - **Pravidlo pre vývoj**: zmena funkcie = zmena návodu v tom istom kroku; kontrola pri každej fáze („je v Pomocníkovi
   všetko, čo sa zmenilo?“). Technická dokumentácia (pre vývoj) ostáva v `docs/` a HANDOVER.
+
+**Dokumentácia pre vývojárov** (majiteľ 21. 11. 2026: „je WebApplication dôkladne zdokumentované, aby tvorcovia ďalších
+appiek vedeli, čo a ako použiť správne?“ — dnes čiastočne: README má základ, chýba úplný popis a postupy):
+- **Príručka frameworku** (`docs/framework/`, fáza 0): každá trieda a jej použitie s príkladmi (Router a vzory adries,
+  Request, Response, View a layouty, Session a flash správy, CSRF, prihlásenie používateľov a API tokeny / JWT,
+  Database a transakcie, Logger, texty z databázy, konfigurácia), **nová aplikácia krok za krokom** (priečinok,
+  `apps.json`, konfigurácia, migrácie, testy, nasadenie), **bezpečnostný kontrolný zoznam** (SQL parametre,
+  escapovanie, CSRF, práva, nahrávanie súborov, tajné kľúče), konvencie (UTF-8, PHP 8.5, štýl kódu), časté chyby.
+  Ukážková aplikácia `demo` ostáva živým príkladom pokrytým testami.
+- **Príručka modulu panela** (fáza 1, s rozhraním `Module`): ako pridať modul (trasy, menu, oprávnenia, záložky
+  nastavení, typy záznamov, udalosti, migrácie, návod v Pomocníkovi, testy práv) — vzorový modul.
+- Pravidlo: zmena verejného API frameworku = zmena príručky v tom istom kroku.
 
 ## 8. Poradie prác
 
@@ -429,13 +464,13 @@ sa dá meniť podľa toho, čo firma potrebuje skôr.
 
 | Fáza | Čo | Veľkosť | Stojí na |
 |---|---|---|---|
-| **0** | Preusporiadanie: nové menu, Nastavenia so záložkami, E-shopy samostatne, stavy objednávok do Nastavenia → E-shopy; rozhranie `Module`, presun dnešných častí — **bez zmeny funkcií**; **Pomocník** (tlačidlo ?, návody) + návody ku všetkému, čo panel už vie | M | — |
+| **0** ✅ | **HOTOVÉ 21. 11. 2026** — Preusporiadanie: nové menu, Nastavenia so záložkami, E-shopy samostatne, stavy objednávok do Nastavenia → E-shopy; rozhranie `Module`, presun dnešných častí — **bez zmeny funkcií**; **Pomocník** (tlačidlo ?, návody) + návody ku všetkému, čo panel už vie; **príručka frameworku pre vývojárov** | M | — |
 | **1** | Jadro: **práva (roly, rozsahy, zdieľanie, `Access`)**, Ref + QR odkazy, prepojenia, udalosti, aktivita, komentáre, notifikácie, súbory, číslovanie + PDF šablóny, kalendár, plánovač, vyhľadávanie, API kľúče, integrácie | L | 0 |
 | **2** | Úlohy a projekty: zoznam, kanban, Moje úlohy, komentáre, prílohy, prepojenia, notifikácie; výkazy práce; **commity pri úlohách** (webhook / post-receive, čísla `LED-123`) | L | 1 |
-| **3** | Timeline + závislosti, kalendár (dovolenky, sviatky), opakované úlohy, šablóny projektov; **register povinností a termínov** (stavia len na kalendári a plánovači) | M | 2 |
+| **3** | Timeline + závislosti, kalendár (dovolenky, sviatky), opakované úlohy, šablóny projektov; **register povinností a termínov** (stavia len na kalendári a plánovači); **financie projektu — správa rozpočtu (zostavenie, schválenie, zmeny s dôvodom, viazané prostriedky, kontrola výdavkov) a skutočnosť** (hodiny, priradené náklady) | M | 2 |
 | **4** | Dokumenty (jeden píše, ostatní vidia; verzie, komentáre) | M | 1 |
 | **5** | V-model: položky, trasovateľnosť (až po commity), matica, **testovacie behy + API**, vydania; vetvy / PR a príkazy v commitoch | L | 2, 4 |
-| **6** | Kontakty (zlúčenie), príležitosti, cenové ponuky, **zákazky ako kontajner (3D tlač, gravírovanie: podklady od zákazníka, odkaz na nahratie, schválenie náhľadu, kalkulačka ceny, fronta strojov)**, zálohové faktúry; **jednoduché reklamácie e-shopov** | L | 1 (+ 2 pre úlohy zákazky) |
+| **6** | **Financie projektu — výnosy a marža** (faktúry, zálohy, míľniky pri projekte); Kontakty (zlúčenie), príležitosti, cenové ponuky, **zákazky ako kontajner (3D tlač, gravírovanie: podklady od zákazníka, odkaz na nahratie, schválenie náhľadu, kalkulačka ceny, fronta strojov)**, zálohové faktúry; **jednoduché reklamácie e-shopov** | L | 1 (+ 2 pre úlohy zákazky) |
 | **7** | **Pošta** (schránky, priradenie správ, odpovede z panela) + **Platby** (GoPay odkaz, príkazy do Fio, predpoveď cash-flow) | L | 1, 6 (kontakty, zákazky) |
 | **8** | Katalóg položiek, súčiastky (distribútori), produkty a revízie, **BOM z KiCadu**, nákup | L | 1, 6 (dodávatelia) |
 | **9** | Výroba: výrobné príkazy, **sériové čísla a register kusov**, štítky, výstupné testy, náklady výroby; majetok a kalibrácie | L | 5 (testy), 8 |

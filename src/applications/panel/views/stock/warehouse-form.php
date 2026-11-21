@@ -11,7 +11,7 @@ $err = function ($k) use ($errors, $e) { return isset($errors[$k]) ? '<span clas
   <label>Kód <input name="code" value="<?= $e($values['code']) ?>" maxlength="20" required placeholder="napr. HOWIES"><?= $err('code') ?></label>
   <label>Názov <input name="name" value="<?= $e($values['name']) ?>" required><?= $err('name') ?></label>
   <input type="hidden" name="kind" value="other">
-  <p class="wide muted small">Vlastný sklad v paneli (dávky s nákupnou cenou, FIFO) — pre veci mimo e-shopov. Sklad e-shopu sa spravuje v e-shope (Sklad → E-shopy).</p>
+  <p class="wide muted small">Vlastný sklad v paneli (dávky s nákupnou cenou, FIFO) — pre veci mimo e-shopov. Sklad e-shopu sa spravuje v e-shope (menu E-shopy).</p>
   <label class="wide">Umiestnenie <input name="location" value="<?= $e($values['location']) ?>" placeholder="adresa, miestnosť, regál …"></label>
   <label class="check wide"><input type="checkbox" name="active" value="1"<?= $values['active'] ? ' checked' : '' ?>> Aktívny</label>
   <p class="wide"><button class="primary">Uložiť</button></p>

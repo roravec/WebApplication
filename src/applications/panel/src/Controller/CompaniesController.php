@@ -33,7 +33,7 @@ class CompaniesController
             $c['vat'] = $repo->vatOn((int)$c['id'], date('Y-m-d'));
             $c['series'] = $repo->series((int)$c['id'], null, true);
         }
-        return $this->ctx->page('companies/list', ['companies' => $list], 'Firmy', 'companies');
+        return $this->ctx->page('companies/list', ['companies' => $list], 'Firmy', 'settings:companies');
     }
 
     public function form(Request $req, array $params, array $errors = [], ?array $values = null)
@@ -70,7 +70,7 @@ class CompaniesController
         }
         return $this->ctx->page('companies/form', ['company' => $company, 'values' => $values, 'errors' => $errors,
             'shops' => $shops, 'shopMap' => $repo->shopMap(), 'allCompanies' => $repo->all($this->ctx->companyIds()),
-            'series' => $series], $company ? $company['name'] : 'Nová firma', 'companies');
+            'series' => $series], $company ? $company['name'] : 'Nová firma', 'settings:companies');
     }
 
     public function save(Request $req, array $params)
@@ -331,7 +331,7 @@ class CompaniesController
         }
         return $this->ctx->page('companies/series', ['company' => $company, 'series' => $series, 'values' => $values,
             'errors' => $errors, 'used' => $series ? $repo->seriesUsed((int)$series['id']) : false, 'year' => $year],
-            $series ? 'Číselný rad ' . $series['name'] : 'Nový číselný rad', 'companies');
+            $series ? 'Číselný rad ' . $series['name'] : 'Nový číselný rad', 'settings:companies');
     }
 
     public function seriesSave(Request $req, array $params)
@@ -415,7 +415,7 @@ class CompaniesController
 
     private function notFound(): Response
     {
-        return Response::html($this->ctx->page('notfound', [], 'Firma neexistuje', 'companies'), 404);
+        return Response::html($this->ctx->page('notfound', [], 'Firma neexistuje', 'settings:companies'), 404);
     }
 
     public static function validIban(string $iban): bool

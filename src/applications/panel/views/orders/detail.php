@@ -15,7 +15,7 @@ $cur = (string)$o['currency'];
 ?>
 <p><a href="<?= $e($ctx->url('/orders' . ($src ? '?src=' . $src : ''))) ?>">← Objednávky</a></p>
 <?php if (!empty($editBlocked)): ?><p class="flash warn"><?= $e($editBlocked) ?><?php if (!empty($canManageShops)): ?>
-  <a href="<?= $e($ctx->url('/stock/shops')) ?>">Otvoriť Sklad → E-shopy</a><?php endif ?></p><?php endif ?>
+  <a href="<?= $e($ctx->url('/settings/eshops')) ?>">Otvoriť Nastavenia → E-shopy</a><?php endif ?></p><?php endif ?>
 <div class="cards">
   <section class="card">
     <h2>Objednávka</h2>

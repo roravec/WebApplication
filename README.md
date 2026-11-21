@@ -4,7 +4,9 @@ Small PHP framework that runs several web applications (sites, admin panels, API
 installation on shared hosting. Each request is routed to one app by domain (and optionally path);
 each app has its own folder, database table prefix and login type.
 
-- PHP **7.3 – 8.4** (tested on both ends), MySQL/MariaDB via PDO.
+- PHP **8.5** (hosting and dev since 2026-11-20; older code is still 7.3-style), MySQL/MariaDB via PDO.
+- **Full developer guide: [docs/framework/README.md](docs/framework/README.md)** — request flow, a new app step by
+  step, API reference, security checklist, conventions, tests, deploy. Read it before writing an app.
 - No build step — deploy by copying `src/`. Optional Composer libraries live in `src/vendor` (see `composer.json`;
   `src/bootstrap.php` loads `vendor/autoload.php` when it exists; deprecation notices from `src/vendor` are not logged).
 - Apps written for the previous version keep working (`IWebApp`, old database API via a compatibility layer).
@@ -139,11 +141,11 @@ to `/index.php` (the existing rule does). `config/config.php` is created once on
 
 ```bash
 cd dev
-docker compose up -d --build                      # http://<host>:8090/  (demo app, PHP 7.3)
-docker compose exec web php /dev-tools/seed.php   # tables + user admin/admin
-docker compose run --rm test                      # tests on PHP 7.3
-PHP_VERSION=8.4 docker compose run --rm test      # tests on PHP 8.4
+COMPOSE_PROJECT_NAME=webapplication docker compose up -d --build      # http://<host>:8090/ (PHP 8.5)
+docker compose exec web php /dev-tools/seed.php                       # tables + user admin/admin
+COMPOSE_PROJECT_NAME=webapplication docker compose run --rm test      # tests on PHP 8.5
 ```
+Without the dev server: docs/framework/README.md, section 7.
 
 ## Changes compared with the previous version
 

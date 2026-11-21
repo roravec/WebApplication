@@ -90,9 +90,9 @@ class OrdersController
         $editBlocked = null;
         if ($this->ctx->can(Rights::ORDERS_EDIT) && !$canChange) {
             $editBlocked = $src === 0
-                ? 'Objednávku nie je možné meniť: v paneli nie je pripojený e-shop tejto databázy. Sklad → E-shopy → pripojenie'
+                ? 'Objednávku nie je možné meniť: v paneli nie je pripojený e-shop tejto databázy. Nastavenia → E-shopy → pripojenie'
                   . ' s kľúčom Webservice, zaškrtnuté „Aktívne“ aj „Toto je e-shop, ktorého tabuľky sú v databáze panela“.'
-                : 'Objednávku nie je možné meniť: pripojenie e-shopu je neaktívne (Sklad → E-shopy).';
+                : 'Objednávku nie je možné meniť: pripojenie e-shopu je neaktívne (Nastavenia → E-shopy).';
         }
         $states = [];
         if ($canChange) {
@@ -149,7 +149,7 @@ class OrdersController
         $stateId = (int)$req->post('state', 0);
         $names = array_column($source->states(), 'name', 'id_order_state');
         if ($c === null || !isset($names[$stateId])) {
-            Session::flash('error', $c === null ? 'Nie je pripojený e-shop tejto databázy (Sklad → E-shopy).' : 'Neplatný stav.');
+            Session::flash('error', $c === null ? 'Nie je pripojený e-shop tejto databázy (Nastavenia → E-shopy).' : 'Neplatný stav.');
             return $back;
         }
         $sendEmail = (bool)$req->post('sendemail');

@@ -40,7 +40,7 @@ class InvoicesController
         $res = $this->ctx->invoices()->search($f, $ids, $page);
         return $this->ctx->page('invoices/list', ['filters' => $f, 'rows' => $res['rows'], 'total' => $res['total'], 'sum' => $res['sum'],
             'page' => $page, 'pages' => (int)ceil($res['total'] / 50), 'companies' => $this->ctx->companies()->all($ids),
-            'years' => $this->ctx->invoices()->years($ids)], 'Faktúry', 'invoices');
+            'years' => $this->ctx->invoices()->years($ids)], 'Faktúry', 'invoices:list');
     }
 
     public function create(Request $req, array $params)
@@ -620,12 +620,12 @@ class InvoicesController
     {
         $companies = $this->ctx->companies()->all($this->ctx->companyIds());
         if (!$companies) {
-            return $this->ctx->page('invoices/no-company', [], 'Export do Omegy', 'invoices');
+            return $this->ctx->page('invoices/no-company', [], 'Export do Omegy', 'invoices:export');
         }
         $values = $values ?? ['company' => (int)$companies[0]['id'], 'from' => date('Y-m-01', strtotime('first day of last month')),
             'to' => date('Y-m-t', strtotime('last day of last month')), 'only_new' => 1, 'trial' => 0];
         return $this->ctx->page('invoices/export', ['companies' => $companies, 'values' => $values, 'errors' => $errors],
-            'Export do Omegy', 'invoices');
+            'Export do Omegy', 'invoices:export');
     }
 
     /** POST: download the TXT file for Omega (Firma → Import → Import z textového súboru). */

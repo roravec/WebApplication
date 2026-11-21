@@ -35,6 +35,23 @@ code { background: var(--code); padding: 0 .3rem; border-radius: 3px; }
 .side nav a:hover { background: var(--side-hover); color: #fff; }
 .side nav a.active { background: var(--red); color: #fff; }
 .side nav .soon { opacity: .45; cursor: default; }
+.side nav .nav-group { margin: .9rem .6rem .2rem; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--side-muted); }
+.page-head { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+.page-head h1 { margin-right: auto; }
+.help-link { font-size: .85rem; text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: .2rem .7rem; color: var(--ink); white-space: nowrap; }
+.help-link:hover { background: var(--surface-2); }
+/* Pomocník (help pages) */
+.help { max-width: 52rem; line-height: 1.6; }
+.help h2 { margin-top: 1.8rem; }
+.help h3 { margin-top: 1.3rem; }
+.help ol, .help ul { padding-left: 1.4rem; }
+.help li { margin: .25rem 0; }
+.help blockquote { margin: 1rem 0; padding: .6rem 1rem; border-left: 4px solid var(--red); background: var(--surface-2); border-radius: 0 6px 6px 0; }
+.help code { background: var(--surface-2); padding: .05rem .3rem; border-radius: 4px; }
+.help table { border-collapse: collapse; margin: 1rem 0; }
+.help th, .help td { border: 1px solid var(--line); padding: .35rem .6rem; text-align: left; vertical-align: top; }
+.help-index { columns: 2 18rem; column-gap: 2rem; }
+.help-index section { break-inside: avoid; margin-bottom: 1rem; }
 .me { margin-top: auto; border-top: 1px solid var(--side-line); padding: .8rem .6rem 0; display: flex; flex-direction: column; gap: .15rem; }
 .me a.active { color: #fff; font-weight: 600; }
 .me small { color: var(--side-muted); }

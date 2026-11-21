@@ -3,7 +3,6 @@
 $pkg = $preview['package'];
 $sent = $pkg && $pkg['status'] === 'sent';
 ?>
-<p><a href="<?= $e($ctx->url('/invoices')) ?>">← Faktúry</a></p>
 <form class="filters" method="get" action="<?= $e($ctx->url('/accounting')) ?>">
   <?php if (count($companies) > 1): ?>
   <select name="company" onchange="this.form.submit()"><?php foreach ($companies as $c): ?><option value="<?= (int)$c['id'] ?>"<?= $cid === (int)$c['id'] ? ' selected' : '' ?>><?= $e($c['name']) ?></option><?php endforeach ?></select>

@@ -4,10 +4,10 @@ $ro = $canEdit ? '' : ' readonly';
 $price = function ($v) { return $v === '' ? '' : rtrim(rtrim(number_format((float)$v, 4, ',', ''), '0'), ','); };
 ?>
 <?= $view->partial('stock/tabs', ['tab' => 'shops']) ?>
-<p><a href="<?= $e($ctx->url('/stock/shops/' . $c['id'] . '/' . $shop['id'] . '?q=' . rawurlencode($p['reference']))) ?>">← Sklad e-shopu <?= $e($shop['name']) ?></a></p>
+<p><a href="<?= $e($ctx->url('/eshops/' . $c['id'] . '/' . $shop['id'] . '?q=' . rawurlencode($p['reference']))) ?>">← Sklad e-shopu <?= $e($shop['name']) ?></a></p>
 <p class="muted">Kód <b><?= $e($p['reference']) ?></b><?= $p['ean'] ? ' · EAN ' . $e($p['ean']) : '' ?> · <?= $p['active'] ? 'aktívny' : 'neaktívny' ?> ·
   nastavenia sa ukladajú priamo do e-shopu <?= $e($shop['name']) ?>. Množstvá sa menia v zozname skladu.</p>
-<form method="post" action="<?= $e($ctx->url('/stock/shops/' . $c['id'] . '/' . $shop['id'] . '/product/' . $p['id'])) ?>">
+<form method="post" action="<?= $e($ctx->url('/eshops/' . $c['id'] . '/' . $shop['id'] . '/product/' . $p['id'])) ?>">
   <?= Csrf::field() ?>
   <section class="card form-grid">
     <h2>Produkt</h2>
@@ -69,14 +69,14 @@ $price = function ($v) { return $v === '' ? '' : rtrim(rtrim(number_format((floa
             <?= $sp['all_shops'] ? ' <small class="muted">(všetky e-shopy)</small>' : '' ?></td>
           <td><?= $sp['combination'] ? $e($combos[$sp['combination']] ?? '#' . $sp['combination']) : 'všetky' ?></td>
           <td><?= $e($d($sp['from'])) ?: '—' ?></td><td><?= $e($d($sp['to'])) ?: 'bez konca' ?></td><td class="num"><?= (int)$sp['from_quantity'] ?></td>
-          <td><?php if ($canEdit): ?><form method="post" action="<?= $e($ctx->url('/stock/shops/' . $c['id'] . '/' . $shop['id'] . '/product/' . $p['id'] . '/sale/' . $sp['id'] . '/delete')) ?>" class="inline">
+          <td><?php if ($canEdit): ?><form method="post" action="<?= $e($ctx->url('/eshops/' . $c['id'] . '/' . $shop['id'] . '/product/' . $p['id'] . '/sale/' . $sp['id'] . '/delete')) ?>" class="inline">
             <?= Csrf::field() ?><button class="link" data-confirm="Zrušiť túto akciu v e-shope?">zrušiť</button></form><?php endif ?></td></tr>
       <?php endforeach ?>
       </tbody>
     </table>
     <?php endif ?>
     <?php if ($canEdit): ?>
-    <form method="post" action="<?= $e($ctx->url('/stock/shops/' . $c['id'] . '/' . $shop['id'] . '/product/' . $p['id'] . '/sale')) ?>" class="form-grid" style="margin-top: 1rem">
+    <form method="post" action="<?= $e($ctx->url('/eshops/' . $c['id'] . '/' . $shop['id'] . '/product/' . $p['id'] . '/sale')) ?>" class="form-grid" style="margin-top: 1rem">
       <?= Csrf::field() ?>
       <label>Zľava <input name="value" inputmode="decimal" class="num" required placeholder="napr. 10"></label>
       <label>Druh <select name="type"><option value="percentage">% z ceny</option><option value="amount">€ z ceny</option></select></label>

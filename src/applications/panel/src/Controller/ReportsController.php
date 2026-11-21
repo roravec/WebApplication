@@ -330,7 +330,7 @@ class ReportsController
     public function orderCosts(Request $req, array $params, array $errors = [], ?array $posted = null)
     {
         if (!$this->ctx->shopOrders()->available()) {
-            return $this->ctx->page('reports/unavailable', [], 'Náklady objednávok', 'reports');
+            return $this->ctx->page('reports/unavailable', [], 'Náklady objednávok', 'settings:order-costs');
         }
         $oc = $this->ctx->orderCosts();
         $shops = $this->visibleShops();
@@ -339,7 +339,7 @@ class ReportsController
         }));
         return $this->ctx->page('reports/order-costs', ['rules' => $posted ?? $rules, 'shops' => $shops, 'carriers' => $oc->carriers(),
             'payments' => $oc->paymentModules(), 'errors' => $errors, 'global' => $this->ctx->isAdmin(),
-            'canEdit' => $this->ctx->can(\Panel\Rights::EXPENSES_EDIT)], 'Náklady objednávok', 'reports');
+            'canEdit' => $this->ctx->can(\Panel\Rights::EXPENSES_EDIT)], 'Náklady objednávok', 'settings:order-costs');
     }
 
     public function orderCostsSave(Request $req, array $params)
@@ -371,7 +371,7 @@ class ReportsController
             }, $rows)), 422);
         }
         \WebApplication\Session::flash('msg', 'Náklady objednávok uložené — Predaje a marža ich hneď započítajú.');
-        return Response::redirect($this->ctx->url('/reports/order-costs'));
+        return Response::redirect($this->ctx->url('/settings/order-costs'));
     }
 
     /** The grouped table for Excel (semicolon, UTF-8 with BOM, comma decimals). */

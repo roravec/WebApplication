@@ -14,7 +14,7 @@ use WebApplication\Http\Response;
 use WebApplication\Session;
 
 /**
- * Sklad → E-shopy: connected PrestaShop installations (Webservice) and the stock of their shops, edited directly in the
+ * E-shopy (menu) + Nastavenia → E-shopy: connected PrestaShop installations (Webservice) and the stock of their shops, edited directly in the
  * shop (docs/sklad-specifikacia.md). Connections (URL + encrypted key) are managed by an administrator.
  */
 class ShopsController
@@ -51,7 +51,7 @@ class ShopsController
 
     private function notFound(): Response
     {
-        return Response::html($this->ctx->page('notfound', [], 'E-shop neexistuje', 'stock'), 404);
+        return Response::html($this->ctx->page('notfound', [], 'E-shop neexistuje', 'eshops'), 404);
     }
 
     public function index(Request $req, array $params): string
@@ -69,7 +69,11 @@ class ShopsController
             }
             $list[] = $c;
         }
-        return $this->ctx->page('stock/shops', ['connections' => $list, 'isAdmin' => $this->ctx->isAdmin()], 'E-shopy', 'stock');
+        // mode work = menu E-shopy (the shops, their products and stock); settings = Nastavenia → E-shopy (connections,
+        // order states) — docs/panel-architektura.md
+        $settings = ($params['mode'] ?? '') === 'settings';
+        return $this->ctx->page($settings ? 'stock/shop-connections' : 'stock/shops', ['connections' => $list, 'isAdmin' => $this->ctx->isAdmin()],
+            $settings ? 'Pripojené e-shopy' : 'E-shopy', $settings ? 'settings:eshops' : 'eshops');
     }
 
     // ------------------------------------------------------------------ connection (administrator)
@@ -82,7 +86,7 @@ class ShopsController
         }
         $values = $values ?? ($c ?: ['name' => '', 'url' => 'https://', 'active' => 1]);
         return $this->ctx->page('stock/shop-form', ['c' => $c, 'values' => $values, 'errors' => $errors],
-            $c ? 'Pripojenie ' . $c['name'] : 'Pripojiť e-shop', 'stock');
+            $c ? 'Pripojenie ' . $c['name'] : 'Pripojiť e-shop', 'settings:eshops');
     }
 
     public function save(Request $req, array $params)
@@ -142,7 +146,7 @@ class ShopsController
         (new \Panel\Shop\ShopCache($db, $id))->clear();   // URL / key / shop may have changed
         Audit::log($db, $this->ctx->user(), 'shop_connection', $id, $c ? 'update' : 'create', $v['url']);
         Session::flash('msg', 'Pripojenie uložené — e-shopov: ' . count($shops) . ' (' . implode(', ', array_column($shops, 'name')) . ').');
-        return Response::redirect($this->ctx->url('/stock/shops'));
+        return Response::redirect($this->ctx->url('/settings/eshops'));
     }
 
     // ------------------------------------------------------------------ stock of one shop
@@ -175,7 +179,7 @@ class ShopsController
         $page = min($f['page'], $pages);
         return $this->ctx->page('stock/shop-stock', ['c' => $c, 'shop' => $shop, 'rows' => array_slice($rows, ($page - 1) * self::PER_PAGE, self::PER_PAGE),
             'total' => $total, 'page' => $page, 'pages' => $pages, 'filters' => $f, 'error' => $error,
-            'canEdit' => $this->ctx->can(Rights::STOCK_EDIT)], 'Sklad e-shopu' . ($shop ? ' ' . $shop['name'] : ''), 'stock');
+            'canEdit' => $this->ctx->can(Rights::STOCK_EDIT)], 'Sklad e-shopu' . ($shop ? ' ' . $shop['name'] : ''), 'eshops');
     }
 
     /** GET — stock settings of one product and its combinations (in the shop). */
@@ -196,7 +200,7 @@ class ShopsController
             $product = $sp->product($shop, (int)$params['pid'], $ss->langId());
         } catch (\Throwable $e) {
             Session::flash('error', $e->getMessage());
-            return Response::redirect($this->ctx->url('/stock/shops/' . $c['id'] . '/' . (int)$params['sid']));
+            return Response::redirect($this->ctx->url('/eshops/' . $c['id'] . '/' . (int)$params['sid']));
         }
         $sales = null;
         $salesError = '';
@@ -206,7 +210,7 @@ class ShopsController
             $salesError = $e->getMessage();   // e.g. the key lacks specific_prices
         }
         return $this->ctx->page('stock/shop-product', ['c' => $c, 'shop' => $shop, 'p' => $product, 'errors' => $errors,
-            'sales' => $sales, 'salesError' => $salesError, 'canEdit' => $this->ctx->can(Rights::STOCK_EDIT)], $product['name'] ?: 'Produkt', 'stock');
+            'sales' => $sales, 'salesError' => $salesError, 'canEdit' => $this->ctx->can(Rights::STOCK_EDIT)], $product['name'] ?: 'Produkt', 'eshops');
     }
 
     /** POST — new sale (specific price) of the product in the shop: % or € off, from–to, optionally one combination. */
@@ -220,7 +224,7 @@ class ShopsController
             return $this->notFound();
         }
         $pid = (int)$params['pid'];
-        $back = Response::redirect($this->ctx->url('/stock/shops/' . $c['id'] . '/' . (int)$params['sid'] . '/product/' . $pid . '#sales'));
+        $back = Response::redirect($this->ctx->url('/eshops/' . $c['id'] . '/' . (int)$params['sid'] . '/product/' . $pid . '#sales'));
         $type = $req->post('type') === 'amount' ? 'amount' : 'percentage';
         $value = \Panel\Invoicing\Calculator::parse((string)$req->post('value', ''));
         $date = function ($v) { $v = trim((string)$v); return $v === '' || (preg_match('/^\d{4}-\d{2}-\d{2}$/', $v) && strtotime($v)) ? $v : null; };
@@ -269,7 +273,7 @@ class ShopsController
         } catch (\Throwable $e) {
             Session::flash('error', 'Akcia sa nezrušila: ' . $e->getMessage());
         }
-        return Response::redirect($this->ctx->url('/stock/shops/' . $c['id'] . '/' . (int)$params['sid'] . '/product/' . $pid . '#sales'));
+        return Response::redirect($this->ctx->url('/eshops/' . $c['id'] . '/' . (int)$params['sid'] . '/product/' . $pid . '#sales'));
     }
 
     /** POST — save changed product / combination settings in the shop. */
@@ -283,7 +287,7 @@ class ShopsController
             return $this->notFound();
         }
         $pid = (int)$params['pid'];
-        $back = $this->ctx->url('/stock/shops/' . $c['id'] . '/' . (int)$params['sid'] . '/product/' . $pid);
+        $back = $this->ctx->url('/eshops/' . $c['id'] . '/' . (int)$params['sid'] . '/product/' . $pid);
         $int = function ($v, $min) { return preg_match('/^\d+$/', trim((string)$v)) && (int)$v >= $min; };
         $money = function ($v) {
             $x = \Panel\Invoicing\Calculator::parse($v);
@@ -400,7 +404,7 @@ class ShopsController
         if (!$c || !$c['active']) {
             return $this->notFound();
         }
-        $back = $this->ctx->url('/stock/shops/' . $c['id'] . '/' . (int)$params['sid']) . '?' . http_build_query(array_filter([
+        $back = $this->ctx->url('/eshops/' . $c['id'] . '/' . (int)$params['sid']) . '?' . http_build_query(array_filter([
             'q' => (string)$req->post('q', ''), 'inactive' => (string)$req->post('inactive', ''), 'page' => (string)$req->post('page', '')]));
         $ok = 0;
         $errors = [];

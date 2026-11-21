@@ -8,7 +8,6 @@ $err = function ($k) use ($errors, $e) {
     return '<span class="field-err">' . implode('<br>', array_map($e, $m)) . '</span>';
 };
 ?>
-<p><a href="<?= $e($ctx->url('/invoices')) ?>">← Faktúry</a></p>
 <form class="card form" method="post" action="<?= $e($ctx->url('/invoices/export')) ?>">
   <?= Csrf::field() ?>
   <p class="muted small">Textový súbor pre účtovníka: v Omege <b>Firma → Import → Import z textového súboru</b>.

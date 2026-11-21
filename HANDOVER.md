@@ -496,6 +496,24 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
    editable like any line. Not for credit notes. Panel CSS / JS now carry `?v=filemtime` (views/layout.php, login.php)
    so a browser loads changed files right after an FTP upload. JS not machine-checked (no node locally) — read through.
 
+38. **Phase 0 of the panel plan DONE** (2026-11-21, docs/panel-architektura.md): **modules** — `src/Module.php`
+   (routes, nav, settingsTabs), `src/Modules/*Module.php` (Dashboard, Orders, Eshops, Customers, Invoicing, Expenses,
+   Reports, Stock, Companies, Legislation, Employees, Help, Settings); `App.php` only lists them; `src/Navigation.php`
+   builds the grouped menu (Prehľad · Predaj: Objednávky, E-shopy, Odberatelia · Financie: Faktúry, Náklady, Výsledky ·
+   Sklad · Nastavenia) filtered by permissions and the tabs above pages (section `"key:tab"` in `PanelContext::page`;
+   guard accepts an array = any of the permissions). **Moved**: e-shop products / stock `/stock/shops/…` → `/eshops/…`;
+   connections → `/settings/eshops` (+ `/new`, `/{cid}/edit`); order states `/orders/states` → `/settings/eshops/states`;
+   order cost rules `/reports/order-costs` → `/settings/order-costs`; old GET URLs redirect (301). Nastavenia = tabs
+   Firmy · E-shopy · Náklady objednávok · Legislatíva · Zamestnanci (`/settings` → first allowed). Faktúry tabs:
+   Faktúry a dobropisy · Úhrady (výpis, Fio) · Pre účtovníka · Export do Omegy. **Pomocník**: "? Pomocník" on every page
+   (`/help/for?page=<template>&section=…`), `/help` index, 37 guides in `src/applications/panel/help/*.md` (simple
+   Slovak, step by step) mapped in `help/_index.php`, rendered by `src/Markdown.php` (escaped subset); a test fails
+   when a page has no guide or a guide link is broken. **Developer guide** `docs/framework/README.md` (README links it).
+   Verified locally: tests 67/67 (PHP 8.5.13 + MariaDB), every main page + old-URL redirects + all guides rendered on a
+   local PHP server (status 200, no PHP warnings). **Deploy: upload the whole `applications/panel/` folder** (new
+   `help/`, `src/Modules/`, `src/Navigation.php`, `src/Module.php`, `src/Markdown.php`, many changed files; it contains
+   the untested order-lines code of item 32 too — still don't use it on live orders).
+
 ### Dev environment (home server)
 - **Without the home server** (owner away, 2026-11-21): a temporary setup on the owner's PC in the Claude session's
   scratchpad (not installed, nothing in PATH, gone with the session): official PHP 8.5.13 NTS x64 zip (windows.php.net,

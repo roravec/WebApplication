@@ -11,7 +11,7 @@ use WebApplication\Http\Response;
 use WebApplication\Session;
 
 /**
- * Faktúry → Import výpisu: upload a CAMT.053 bank statement (or download it from Fio), the panel pairs incoming payments
+ * Faktúry → Úhrady (výpis, Fio): upload a CAMT.053 bank statement (or download it from Fio), the panel pairs incoming payments
  * with open invoices by the variable symbol and outgoing payments with unpaid received documents (Náklady) by VS or the
  * supplier's IBAN + amount; an outgoing payment without a document can become a new cost (bank fee …). The employee
  * checks the proposal and confirms. A bank transaction is imported only once.
@@ -55,7 +55,7 @@ class BankImportController
                 }
             }
         }
-        return $this->ctx->page('invoices/bank-import', ['error' => $error, 'apis' => $apis], 'Import bankového výpisu', 'invoices');
+        return $this->ctx->page('invoices/bank-import', ['error' => $error, 'apis' => $apis], 'Import bankového výpisu', 'invoices:payments');
     }
 
     /** POST /payments/import/fio — download movements of a period through the bank's API. */
@@ -159,7 +159,7 @@ class BankImportController
         Session::set(self::SESSION_KEY, ['token' => $token, 'company' => $companyId, 'iban' => $st['iban'], 'rows' => $rows]);
         return $this->ctx->page('invoices/bank-review', ['token' => $token, 'iban' => $st['iban'], 'rows' => $rows, 'open' => $open,
             'openExp' => $openExp, 'in' => $in, 'out' => $out, 'categories' => $out ? $this->ctx->expenses()->categories(true) : [],
-            'company' => $this->ctx->companies()->find($companyId)], 'Import bankového výpisu — kontrola', $in ? 'invoices' : 'expenses');
+            'company' => $this->ctx->companies()->find($companyId)], 'Import bankového výpisu — kontrola', $in ? 'invoices:payments' : 'expenses');
     }
 
     public function confirm(Request $req, array $params)

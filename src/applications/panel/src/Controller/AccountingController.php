@@ -27,7 +27,7 @@ class AccountingController
     {
         $companies = $this->ctx->companies()->all($this->ctx->companyIds());
         if (!$companies) {
-            return $this->ctx->page('invoices/no-company', [], 'Pre účtovníka', 'invoices');
+            return $this->ctx->page('invoices/no-company', [], 'Pre účtovníka', 'invoices:accounting');
         }
         $cid = (int)$req->query('company', 0);
         if (!$this->ctx->canCompany($cid)) {
@@ -51,7 +51,7 @@ class AccountingController
                           'expenses' => count($c['expenses']),
                           'package' => $c['package']],
             'history' => $acc->history($cid), 'configured' => $this->ctx->mailer()->configured(),
-        ], 'Pre účtovníka', 'invoices');
+        ], 'Pre účtovníka', 'invoices:accounting');
     }
 
     /** POST /accounting/send — send the package of a month now (again = once more, same content). */

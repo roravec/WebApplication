@@ -26,6 +26,7 @@ class PanelContext
     /** @var array|null */ private $connections = null;
     /** @var OrderSource[]|null */ private $orderSources = null;
     /** @var Rights|null */ private $rights = null;
+    /** @var Navigation|null */ private $navigation = null;
 
     public function __construct(Application $app, Request $request)
     {
@@ -33,6 +34,20 @@ class PanelContext
         $this->request = $request;
         $this->view = new View(dirname(__DIR__) . '/views');
         $this->view->share('app', $app)->share('ctx', $this)->share('f', new Format());
+    }
+
+    /** The menu and tabs (built from the modules in App.php). */
+    public function setNavigation(Navigation $navigation): void
+    {
+        $this->navigation = $navigation;
+    }
+
+    public function navigation(): Navigation
+    {
+        if ($this->navigation === null) {
+            $this->navigation = new Navigation();   // e.g. tests rendering a page without the app
+        }
+        return $this->navigation;
     }
 
     public function user(): ?Client
@@ -158,6 +173,7 @@ class PanelContext
         return $this->view->render($template, $vars + [
             'title' => $title,
             'section' => $section,
+            'helpPage' => $template,   // the "? Pomocník" link opens the guide of this page (HelpModule)
             'user' => $this->user(),
             'flash' => Session::flash('msg'),
             'flashError' => Session::flash('error'),
@@ -233,7 +249,7 @@ class PanelContext
         return (array)$this->app->getConfig()->get('apps.' . $this->app->getApplicationName() . '.shop', []);
     }
 
-    // ------------------------------------------------------------------ connected e-shops (Sklad → E-shopy)
+    // ------------------------------------------------------------------ connected e-shops (Nastavenia → E-shopy)
 
     /** @return array id => connection row (all, also inactive) */
     public function shopConnections(): array
@@ -262,7 +278,7 @@ class PanelContext
     {
         $key = (new Secret($this->app->getJwtSecret()))->decrypt((string)$connection['api_key']);
         if ($key === null) {
-            throw new \RuntimeException('Uložený kľúč e-shopu „' . $connection['name'] . '“ sa nedá prečítať (zmenil sa jwtSecret?) — zadajte ho znova v Sklad → E-shopy.');
+            throw new \RuntimeException('Uložený kľúč e-shopu „' . $connection['name'] . '“ sa nedá prečítať (zmenil sa jwtSecret?) — zadajte ho znova v Nastavenia → E-shopy.');
         }
         return new PrestaShopApi((string)$connection['url'], $key);
     }
@@ -286,7 +302,7 @@ class PanelContext
                     $this->orderSources[$id] = new ShopOrdersApi($this->shopApi($c), $id, (string)$c['name'],
                         (string)($this->shopConfig()['lang'] ?? 'sk'), new ShopCache($this->db(), $id));
                 } catch (\Throwable $e) {
-                    // unreadable key / bad URL — the source is left out; Sklad → E-shopy shows the connection
+                    // unreadable key / bad URL — the source is left out; Nastavenia → E-shopy shows the connection
                 }
             }
         }

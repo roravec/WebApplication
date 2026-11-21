@@ -3,18 +3,10 @@
 use Panel\Rights;
 use WebApplication\Csrf;
 
-$nav = [
-    ['dashboard', '/', 'Prehľad', ''],
-    ['orders', '/orders', 'Objednávky', Rights::ORDERS_VIEW],
-    ['invoices', '/invoices', 'Faktúry', Rights::INVOICES_VIEW],
-    ['customers', '/customers', 'Odberatelia', Rights::INVOICES_VIEW],
-    ['stock', '/stock', 'Sklad', Rights::STOCK_VIEW],
-    ['expenses', '/expenses', 'Náklady', Rights::EXPENSES_VIEW],
-    ['reports', '/reports/result', 'Výsledky', Rights::REPORTS_VIEW],
-    ['companies', '/companies', 'Firmy', Rights::COMPANIES_MANAGE],
-    ['employees', '/employees', 'Zamestnanci', Rights::ADMIN_ONLY],
-    ['legislation', '/settings/legal', 'Legislatíva', Rights::ADMIN_ONLY],
-];
+$menu = $ctx->navigation()->menu($ctx);            // groups of the left menu (src/Navigation.php, from the modules)
+$active = Panel\Navigation::menuKey($section);
+$tabs = $ctx->navigation()->tabs($section, $ctx);  // tabs above the page (Nastavenia, Faktúry)
+$helpUrl = $ctx->url('/help/for') . '?' . http_build_query(['page' => (string)($helpPage ?? ''), 'section' => $section]);
 ?>
 <!doctype html>
 <html lang="sk" data-theme="<?= $e($ctx->theme()) ?>" data-theme-path="<?= $e($ctx->themeCookiePath()) ?>">
@@ -34,23 +26,25 @@ $nav = [
   <aside class="side">
     <a class="brand" href="<?= $e($ctx->url('/')) ?>"><img src="<?= $e($app->asset('img/mark.png')) ?>" alt="" width="32" height="32"><span>ERMA <b>panel</b></span></a>
     <nav>
-      <?php foreach ($nav as list($key, $path, $label, $rights)): if ($rights !== '' && !$ctx->can($rights)) continue; ?>
-        <?php if ($path === null): ?>
-          <span class="soon" title="Pripravuje sa"><?= $e($label) ?></span>
-        <?php else: ?>
-          <a href="<?= $e($ctx->url($path)) ?>" class="<?= $section === $key ? 'active' : '' ?>"><?= $e($label) ?></a>
-        <?php endif ?>
+      <?php foreach ($menu as $group): ?>
+        <?php if ($group['label'] !== ''): ?><span class="nav-group"><?= $e($group['label']) ?></span><?php endif ?>
+        <?php foreach ($group['items'] as $i): ?>
+          <a href="<?= $e($ctx->url($i['path'])) ?>" class="<?= $active === $i['key'] ? 'active' : '' ?>"><?= $e($i['label']) ?></a>
+        <?php endforeach ?>
       <?php endforeach ?>
     </nav>
     <div class="me">
       <a href="<?= $e($ctx->url('/account')) ?>" class="<?= $section === 'account' ? 'active' : '' ?>"><?= $e($user->getName()) ?></a>
       <small><?= $e(Rights::roleLabel($user->getRights())) ?></small>
+      <a href="<?= $e($ctx->url('/help')) ?>" class="<?= $section === 'help' ? 'active' : '' ?>">? Pomocník — návody</a>
       <button type="button" class="link theme-toggle" data-theme-toggle title="Prepnúť farebný režim"><span class="to-light">☀ Denný režim</span><span class="to-dark">☾ Tmavý režim</span></button>
       <form method="post" action="<?= $e($ctx->url('/logout')) ?>"><?= Csrf::field() ?><button class="link">Odhlásiť</button></form>
     </div>
   </aside>
   <main class="content">
-    <h1><?= $e($title) ?></h1>
+    <div class="page-head"><h1><?= $e($title) ?></h1>
+      <a class="help-link" href="<?= $e($helpUrl) ?>" target="_blank" rel="noopener" title="Návod k tejto stránke (otvorí sa na novej karte)">? Pomocník</a></div>
+    <?php if ($tabs): ?><nav class="tabs"><?php foreach ($tabs as $t): ?><a href="<?= $e($ctx->url($t['path'])) ?>" class="<?= $t['active'] ? 'active' : '' ?>"><?= $e($t['label']) ?></a><?php endforeach ?></nav><?php endif ?>
     <?php if ($flash): ?><p class="flash ok"><?= $e($flash) ?></p><?php endif ?>
     <?php if ($flashError): ?><p class="flash err"><?= $e($flashError) ?></p><?php endif ?>
     <?= $content ?>

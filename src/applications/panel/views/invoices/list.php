@@ -26,10 +26,7 @@ $qs = function (array $change) use ($filters) {
   </select>
   <button class="primary">Hľadať</button>
   <a href="<?= $e($ctx->url('/invoices')) ?>">Zrušiť filter</a>
-  <a class="button push" href="<?= $e($ctx->url('/accounting')) ?>">Pre účtovníka</a>
-  <a class="button" href="<?= $e($ctx->url('/invoices/export')) ?>">Export do Omegy</a>
-  <?php if ($ctx->can(Rights::INVOICES_EDIT)): ?><a class="button" href="<?= $e($ctx->url('/payments/import')) ?>">Import výpisu</a><?php endif ?>
-  <?php if ($ctx->can(Rights::INVOICES_EDIT)): ?><a class="button primary" href="<?= $e($ctx->url('/invoices/new')) ?>">+ Nová faktúra</a><?php endif ?>
+  <?php if ($ctx->can(Rights::INVOICES_EDIT)): ?><a class="button primary push" href="<?= $e($ctx->url('/invoices/new')) ?>">+ Nová faktúra</a><?php endif ?>
 </form>
 <p class="muted"><?= (int)$total ?> dokladov · vystavené spolu <?= $e($f->money($sum)) ?></p>
 <table class="grid">

@@ -1,17 +1,17 @@
-<?php /** @var array $connections; bool $isAdmin */ ?>
-<?= $view->partial('stock/tabs', ['tab' => 'shops']) ?>
-<p class="muted">Sklad e-shopu ostáva v e-shope — panel ho číta a mení priamo v ňom (produkty a kombinácie presne ako v
-  PrestaShope). Predaj v e-shope odpisuje e-shop sám.</p>
-<?php if ($isAdmin): ?><p><a class="button primary" href="<?= $e($ctx->url('/stock/shops/new')) ?>">+ Pripojiť e-shop</a></p><?php endif ?>
-<?php if (!$connections): ?><p class="muted">Zatiaľ nie je pripojený žiadny e-shop.</p><?php endif ?>
+<?php /** @var array $connections; bool $isAdmin — menu E-shopy: the shops, their products, prices, sales and stock */ ?>
+<p class="muted">Produkty, ceny, akcie a sklad e-shopov — panel ich číta a mení priamo v e-shope (produkty a kombinácie
+  presne ako v PrestaShope). Sklad e-shopu ostáva v e-shope a predaj v e-shope ho odpisuje sám.
+  <?php if ($isAdmin): ?>Pripojenia e-shopov a stavy objednávok sú v <a href="<?= $e($ctx->url('/settings/eshops')) ?>">Nastaveniach → E-shopy</a>.<?php endif ?></p>
+<?php if (!$connections): ?>
+  <p class="muted">Zatiaľ nie je pripojený žiadny e-shop.<?php if ($isAdmin): ?> Pripojíte ho v <a href="<?= $e($ctx->url('/settings/eshops')) ?>">Nastaveniach → E-shopy</a>.<?php endif ?></p>
+<?php endif ?>
 <div class="cards">
-<?php foreach ($connections as $c): ?>
+<?php foreach ($connections as $c): if (!$c['active']) continue; ?>
   <section class="card">
-    <h2><?= $e($c['name']) ?><?= $c['active'] ? '' : ' <span class="badge">neaktívne</span>' ?></h2>
-    <p class="muted small"><?= $e($c['url']) ?> · PrestaShop Webservice · objednávky <?= !empty($c['local_db']) ? 'z databázy panela' : 'cez Webservice' ?><?php if ($isAdmin): ?> · <a href="<?= $e($ctx->url('/stock/shops/' . $c['id'] . '/edit')) ?>">nastavenie</a><?php endif ?></p>
+    <h2><?= $e($c['name']) ?></h2>
     <?php if ($c['error']): ?><p class="flash err"><?= $e($c['error']) ?></p><?php endif ?>
     <?php foreach ($c['shops'] as $s): ?>
-      <p><a href="<?= $e($ctx->url('/stock/shops/' . $c['id'] . '/' . $s['id'])) ?>"><?= $e($s['name']) ?></a>
+      <p><a href="<?= $e($ctx->url('/eshops/' . $c['id'] . '/' . $s['id'])) ?>"><?= $e($s['name']) ?></a>
         <span class="muted small">· skupina <?= $e($s['group_name']) ?><?= $s['share_stock'] ? ' (spoločný sklad skupiny)' : '' ?></span></p>
     <?php endforeach ?>
   </section>

@@ -3,7 +3,6 @@
   <a href="<?= $e($ctx->url('/stock')) ?>" class="<?= $tab === 'index' ? 'active' : '' ?>">Stav skladu</a>
   <a href="<?= $e($ctx->url('/stock/docs')) ?>" class="<?= $tab === 'docs' ? 'active' : '' ?>">Doklady</a>
   <a href="<?= $e($ctx->url('/stock/warehouses')) ?>" class="<?= $tab === 'warehouses' ? 'active' : '' ?>">Sklady</a>
-  <a href="<?= $e($ctx->url('/stock/shops')) ?>" class="<?= $tab === 'shops' ? 'active' : '' ?>">E-shopy</a>
   <?php if ($ctx->can(Rights::STOCK_EDIT)): ?>
     <span class="push"></span>
     <a class="button" href="<?= $e($ctx->url('/stock/docs/new?type=receipt')) ?>">+ Príjemka</a>

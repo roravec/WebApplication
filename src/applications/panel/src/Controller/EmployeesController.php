@@ -37,7 +37,7 @@ class EmployeesController
     public function index(Request $req, array $params): string
     {
         $list = Client::readAll($this->ctx->app->getDatabase(), 'WHERE type = 0 ORDER BY status DESC, name');
-        return $this->ctx->page('employees/list', ['employees' => $list], 'Zamestnanci', 'employees');
+        return $this->ctx->page('employees/list', ['employees' => $list], 'Zamestnanci', 'settings:employees');
     }
 
     public function form(Request $req, array $params, array $errors = [], ?array $values = null): string
@@ -46,7 +46,7 @@ class EmployeesController
         if (isset($params['id'])) {
             $client = Client::readById($this->ctx->app->getDatabase(), (int)$params['id']);
             if ($client === null) {
-                return $this->ctx->page('notfound', [], 'Zamestnanec neexistuje', 'employees');
+                return $this->ctx->page('notfound', [], 'Zamestnanec neexistuje', 'settings:employees');
             }
         }
         $db = $this->ctx->app->getDatabase();
@@ -60,7 +60,7 @@ class EmployeesController
         ];
         $companies = $this->ctx->companies()->all($this->ctx->companyIds());
         return $this->ctx->page('employees/form', ['client' => $client, 'values' => $values, 'errors' => $errors, 'companies' => $companies,
-            'minPassword' => self::MIN_PASSWORD], $client ? 'Upraviť zamestnanca' : 'Nový zamestnanec', 'employees');
+            'minPassword' => self::MIN_PASSWORD], $client ? 'Upraviť zamestnanca' : 'Nový zamestnanec', 'settings:employees');
     }
 
     public function save(Request $req, array $params)
@@ -71,7 +71,7 @@ class EmployeesController
         $db = $this->ctx->app->getDatabase();
         $client = isset($params['id']) ? Client::readById($db, (int)$params['id']) : new Client($db);
         if ($client === null) {
-            return Response::html($this->ctx->page('notfound', [], 'Zamestnanec neexistuje', 'employees'), 404);
+            return Response::html($this->ctx->page('notfound', [], 'Zamestnanec neexistuje', 'settings:employees'), 404);
         }
         $v = [
             'identifier' => self::normalizeEmail((string)$req->post('identifier', '')),

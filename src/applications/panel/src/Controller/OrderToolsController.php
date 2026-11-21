@@ -67,7 +67,7 @@ class OrderToolsController
         return $this->load($params);
     }
 
-    /** Webservice that changes orders of this source; null = no connection (Sklad → E-shopy). */
+    /** Webservice that changes orders of this source; null = no connection (Nastavenia → E-shopy). */
     private function api(int $src): ?PrestaShopApi
     {
         try {
@@ -118,7 +118,7 @@ class OrderToolsController
         list($src, $source, $o) = $l;
         $api = $this->api($src);
         if ($api === null) {
-            Session::flash('error', Session::flash('error') ?: 'Nie je pripojený e-shop tejto databázy (Sklad → E-shopy).');
+            Session::flash('error', Session::flash('error') ?: 'Nie je pripojený e-shop tejto databázy (Nastavenia → E-shopy).');
             return $this->back($src, $o);
         }
         $number = trim((string)$req->post('tracking', ''));
@@ -283,7 +283,7 @@ class OrderToolsController
         }
         $api = $this->api($src);
         if ($api === null) {
-            $errors['form'] = 'Nie je pripojený e-shop tejto databázy (Sklad → E-shopy).';
+            $errors['form'] = 'Nie je pripojený e-shop tejto databázy (Nastavenia → E-shopy).';
         }
         if ($errors) {
             return Response::html($this->addressForm($req, $params, $errors, $v), 422);
@@ -362,7 +362,7 @@ class OrderToolsController
         $state = (int)$req->post('state', 0);
         $api = ($wantRestock || $state) && $this->hasApi($src) ? $this->ctx->orderWriteApi($src) : null;
         if (($wantRestock || $state) && $api === null) {
-            $errors[] = 'Na naskladnenie a zmenu stavu treba pripojený e-shop (Sklad → E-shopy).';
+            $errors[] = 'Na naskladnenie a zmenu stavu treba pripojený e-shop (Nastavenia → E-shopy).';
         }
         if ($errors) {
             return Response::html($this->returnForm($req, $params, $errors, $req->post()), 422);
@@ -441,7 +441,7 @@ class OrderToolsController
         $carriers = $products = [];
         $loadError = null;
         if ($api === null) {
-            $loadError = 'Nie je pripojený e-shop tejto databázy (Sklad → E-shopy) — položky sa nedajú meniť.';
+            $loadError = 'Nie je pripojený e-shop tejto databázy (Nastavenia → E-shopy) — položky sa nedajú meniť.';
         } else {
             try {
                 $carriers = (new ShopOrderLines($api))->carriers((int)$o['id_shop']);
@@ -524,7 +524,7 @@ class OrderToolsController
         }
         $api = $this->hasApi($src) ? $this->ctx->orderWriteApi($src) : null;
         if ($api === null) {
-            $errors[] = 'Nie je pripojený e-shop tejto databázy (Sklad → E-shopy).';
+            $errors[] = 'Nie je pripojený e-shop tejto databázy (Nastavenia → E-shopy).';
         }
         if ($errors) {
             return Response::html($this->linesForm($req, $params, $errors, $req->post()), 422);
@@ -702,7 +702,7 @@ class OrderToolsController
         }
         $api = $this->api($src);
         if ($api === null) {
-            Session::flash('error', 'Nie je pripojený e-shop tejto databázy (Sklad → E-shopy).');
+            Session::flash('error', 'Nie je pripojený e-shop tejto databázy (Nastavenia → E-shopy).');
             return $back;
         }
         $ok = 0;

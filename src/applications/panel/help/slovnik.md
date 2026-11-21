@@ -1,0 +1,25 @@
+# Slovník pojmov
+
+| Pojem | Čo to znamená |
+|---|---|
+| **Koncept** | Rozpracovaný doklad (faktúra, dobropis). Dá sa meniť aj zmazať, ešte nemá číslo. |
+| **Vystavenie** | Doklad dostane číslo a od tej chvíle sa **nedá meniť ani zmazať** (oprava len dobropisom). |
+| **Dobropis** | Opravná faktúra — vracia peniaze alebo opravuje vystavenú faktúru (záporné položky). |
+| **Zálohová faktúra** | Výzva na zaplatenie vopred (zatiaľ panel nevystavuje). |
+| **VS — variabilný symbol** | Číslo, podľa ktorého banka a panel spárujú platbu s faktúrou. Panel ho robí z čísla faktúry. |
+| **PAY by square** | QR kód na faktúre — zákazník ho naskenuje v bankovej aplikácii a platba sa vyplní sama. |
+| **E-faktúra (UBL, Peppol)** | Faktúra ako dátový súbor (XML) pre účtovné programy a systém e-faktúr. |
+| **Omega** | Účtovný program účtovníčky (KROS). Panel pre ňu robí súbor na import. |
+| **Balík pre účtovníka** | Mesačný e-mail účtovníčke: súbor pre Omegu, PDF dokladov, prehľad úhrad. |
+| **Webservice** | Rozhranie PrestaShopu, cez ktoré panel mení veci priamo v e-shope. Potrebuje kľúč. |
+| **Stav objednávky** | Napr. „Platba akceptovaná“, „Zaplatená a odoslaná“. Nastavuje sa v e-shope — niektoré stavy posielajú zákazníkovi e-mail. |
+| **Kombinácia** | Varianta produktu v e-shope (veľkosť, farba …) s vlastným skladom. |
+| **Akcia (zľava)** | Dočasná znížená cena produktu v e-shope. |
+| **Nákupná cena** | Za koľko produkt kupujete — z nej sa počíta marža. |
+| **Marža / príspevok na krytie** | Koľko zarobíte na tovare; príspevok navyše odráta dopravu, poplatky za platby a balné. |
+| **Prijatý doklad (náklad)** | Faktúra alebo blok od dodávateľa — zadáva sa do Nákladov. |
+| **Storno** | Zrušenie prijatého dokladu s dôvodom (nemaže sa, ostáva v histórii). |
+| **Šarža / dávka** | Časť zásoby prijatá naraz za jednu cenu; vydáva sa od najstaršej (FIFO). |
+| **Príjemka / výdajka / prevodka** | Skladové doklady: príjem na sklad, výdaj zo skladu, presun medzi skladmi. |
+| **Číselný rad** | Pravidlo číslovania dokladov (napr. FA2026/000216). |
+| **Platiteľ DPH** | Firma registrovaná pre DPH — na faktúrach účtuje DPH. ERMA Group zatiaľ nie je. |

@@ -12,7 +12,8 @@
 > nerobíme špagety", "poriadna správa práv pre všetko").
 > **No panel feature without a user guide** (owner 2026-11-21: "všetko bude musieť byť dôkladne popísané, aby v tom
 > vedel robiť aj idiot"): every change ships with its help page in simple Slovak, step by step (panel Pomocník,
-> `docs/pomocnik/`, plan chapter 7), field hints on screen and error messages that say what to do.
+> `src/applications/panel/help/`, plan chapter 7), field hints on screen and error messages that say what to do.
+> Framework changes ship with the developer guide (`docs/framework/`, plan chapter 7) in the same step.
 > Keep these files up to date — the owner wants everything written down so a new session loses nothing.
 
 ## What this is

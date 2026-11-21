@@ -2,9 +2,9 @@
 /** @var array|null $c; array $values, $errors */
 $err = function ($k) use ($errors, $e) { return isset($errors[$k]) ? '<span class="field-err">' . $e($errors[$k]) . '</span>' : ''; };
 ?>
-<p><a href="<?= $e($ctx->url('/stock/shops')) ?>">← E-shopy</a></p>
+<p><a href="<?= $e($ctx->url('/settings/eshops')) ?>">← Pripojené e-shopy</a></p>
 <?php if (isset($errors['test'])): ?><p class="flash err"><?= $e($errors['test']) ?></p><?php endif ?>
-<form class="card form" method="post" action="<?= $e($ctx->url($c ? '/stock/shops/' . $c['id'] . '/edit' : '/stock/shops')) ?>" style="max-width: 42rem">
+<form class="card form" method="post" action="<?= $e($ctx->url($c ? '/settings/eshops/' . $c['id'] . '/edit' : '/settings/eshops')) ?>" style="max-width: 42rem">
   <?= Csrf::field() ?>
   <label>Názov <input name="name" value="<?= $e($values['name']) ?>" required placeholder="napr. E-shopy ERMA (PrestaShop)"><?= $err('name') ?></label>
   <label>Adresa e-shopu <input name="url" value="<?= $e($values['url']) ?>" required placeholder="https://www.example.sk/store/"><?= $err('url') ?>

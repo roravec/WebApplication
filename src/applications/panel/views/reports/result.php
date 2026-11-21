@@ -80,7 +80,7 @@ $levelClass = ['ok' => 'pay-paid', 'warn' => 'pay-unpaid', 'over' => 'pay-overdu
     </tbody>
   </table>
   <p class="muted small">Výsledok e-shopu = príspevok na krytie − prijaté doklady so strediskom tohto e-shopu. Réžia celej firmy sa nerozpočítava.
-    <?php if (!$cur['costs']): ?>Príspevok sa počíta po nastavení <a href="<?= $e($ctx->url('/reports/order-costs')) ?>">nákladov objednávok</a>.<?php endif ?></p>
+    <?php if (!$cur['costs']): ?>Príspevok sa počíta po nastavení <a href="<?= $e($ctx->url('/settings/order-costs')) ?>">nákladov objednávok</a>.<?php endif ?></p>
 </section>
 <?php elseif (!$hasShops): ?>
   <p class="muted">Firma nemá priradené e-shopy tejto databázy (Firmy → E-shopy) — tržby sú len z faktúr.</p>

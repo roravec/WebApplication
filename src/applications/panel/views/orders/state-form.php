@@ -3,10 +3,10 @@
 $err = function ($k) use ($errors, $e) { return isset($errors[$k]) ? '<span class="field-err">' . $e($errors[$k]) . '</span>' : ''; };
 $q = $src ? '?src=' . $src : '';
 ?>
-<p><a href="<?= $e($ctx->url('/orders/states' . $q)) ?>">← Stavy objednávok</a></p>
+<p><a href="<?= $e($ctx->url('/settings/eshops/states' . $q)) ?>">← Stavy objednávok</a></p>
 <?php if (isset($errors['form'])): ?><p class="flash err"><?= $e($errors['form']) ?></p><?php endif ?>
 <?php if ($state && $state['module_name'] !== ''): ?><p class="muted">Tento stav používa modul <b><?= $e($state['module_name']) ?></b> (napr. platobná brána) — meňte opatrne.</p><?php endif ?>
-<form class="card form-grid narrow" method="post" action="<?= $e($ctx->url('/orders/states/' . $sid . $q)) ?>">
+<form class="card form-grid narrow" method="post" action="<?= $e($ctx->url('/settings/eshops/states/' . $sid . $q)) ?>">
   <?= Csrf::field() ?>
   <label class="wide">Názov <input name="name" value="<?= $e($values['name']) ?>" maxlength="64" required><?= $err('name') ?></label>
   <label>Farba <input type="color" name="color" value="<?= $e($values['color'] ?: '#4169e1') ?>"><?= $err('color') ?></label>

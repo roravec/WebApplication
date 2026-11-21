@@ -76,7 +76,7 @@ $bankRow = function (array $b) use ($e) { ?>
     </table>
     <template id="bank-rows-tpl"><?php $bankRow(['id' => 0, 'account_name' => '', 'iban' => '', 'bic' => '', 'bank' => '', 'is_default' => 0, 'active' => 1, 'api_token' => null]); ?></template>
     <p class="muted small">API banky: token Fio banky (internetbanking → Nastavenia → API, oprávnenie len na čítanie) — pohyby sa
-      potom sťahujú tlačidlom vo Faktúry → Import výpisu. Token sa uloží zašifrovaný a už sa nezobrazí.</p>
+      potom sťahujú tlačidlom vo Faktúry → Úhrady (výpis, Fio). Token sa uloží zašifrovaný a už sa nezobrazí.</p>
     <p><button type="button" data-add-row="bank-rows">+ Bankový účet</button></p>
   </section>
 
