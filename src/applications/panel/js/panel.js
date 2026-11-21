@@ -97,6 +97,99 @@
     if (ev.target.closest && ev.target.closest('#employee-access')) syncPerms();
   });
 
+  // ---------------------------------------------------------------- bell + scheduler tick (Core\Scheduler, Core\Notifications)
+  // the scheduler runs due jobs when somebody works in the panel: a quiet POST at most once a minute per browser
+  // (the server allows one tick per minute in total); the bell refreshes its count every minute while the tab is visible
+  (function () {
+    var tick = document.body.getAttribute('data-tick');
+    if (tick && window.fetch) {
+      var last = 0;
+      try { last = parseInt(localStorage.getItem('panel_tick') || '0', 10); } catch (e) {}
+      if (Date.now() - last > 60000) {
+        try { localStorage.setItem('panel_tick', String(Date.now())); } catch (e) {}
+        setTimeout(function () { fetch(tick, { method: 'POST', credentials: 'same-origin', keepalive: true }).catch(function () {}); }, 1500);
+      }
+    }
+    var bell = document.querySelector('[data-bell]');
+    if (!bell || !window.fetch) return;
+    var badge = bell.querySelector('.bell-count');
+    setInterval(function () {
+      if (document.hidden) return;
+      fetch(bell.getAttribute('data-bell'), { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) { if (d) { badge.textContent = d.unread; badge.hidden = !d.unread; } })
+        .catch(function () {});
+    }, 60000);
+  })();
+
+  // ---------------------------------------------------------------- record box: files from Nextcloud loaded after the page
+  document.querySelectorAll('[data-files]').forEach(function (box) {
+    if (!window.fetch) return;
+    fetch(box.getAttribute('data-files'), { credentials: 'same-origin' })
+      .then(function (r) { return r.text().then(function (t) { return { ok: r.ok, t: t }; }); })
+      .then(function (r) { box.innerHTML = r.ok ? r.t : '<p class="flash err">Súbory sa nedajú načítať.</p>'; })
+      .catch(function () { box.innerHTML = '<p class="flash err">Súbory sú dočasne nedostupné (Nextcloud neodpovedá).</p>'; });
+  });
+
+  // ---------------------------------------------------------------- record box: @mentions and the "Prepojiť" lookup
+  function pickList(box, items, onPick) {
+    box.innerHTML = '';
+    items.forEach(function (it) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = it.text;
+      b.addEventListener('mousedown', function (ev) { ev.preventDefault(); onPick(it); box.hidden = true; });
+      box.appendChild(b);
+    });
+    box.hidden = items.length === 0;
+  }
+  // "@Ja" in a comment → names of colleagues (datalist.people of the record box); a click puts "@Ján Novák "
+  document.addEventListener('input', function (ev) {
+    var ta = ev.target;
+    if (!ta.matches || !ta.matches('textarea[data-mentions]')) return;
+    var card = ta.closest('.record'), dl = card && card.querySelector('datalist.people');
+    if (!dl) return;
+    var box = ta.parentNode.querySelector('.mention-list');
+    if (!box) { box = document.createElement('div'); box.className = 'mention-list'; box.hidden = true; ta.insertAdjacentElement('afterend', box); }
+    var before = ta.value.slice(0, ta.selectionStart), m = before.match(/(^|\s)@([^\s@]{0,30})$/);
+    if (!m) { box.hidden = true; return; }
+    var q = m[2].toLowerCase(), items = [];
+    dl.querySelectorAll('option').forEach(function (o) {
+      if (items.length < 8 && o.value.toLowerCase().indexOf(q) !== -1) items.push({ text: o.value });
+    });
+    pickList(box, items, function (it) {
+      var start = before.length - m[2].length - 1;
+      ta.value = ta.value.slice(0, start) + '@' + it.text + ' ' + ta.value.slice(ta.selectionStart);
+      ta.focus();
+    });
+  });
+  // the "Prepojiť" field: records the person may see, by number / name (GET /links/lookup)
+  var lookupTimer = null;
+  document.addEventListener('input', function (ev) {
+    var inp = ev.target;
+    if (!inp.matches || !inp.matches('input[data-lookup]')) return;
+    var form = inp.form, box = form.querySelector('.lookup-list');
+    form.querySelector('input[name=target_ref]').value = '';
+    clearTimeout(lookupTimer);
+    if (inp.value.trim().length < 2) { box.hidden = true; return; }
+    lookupTimer = setTimeout(function () {
+      fetch(inp.getAttribute('data-lookup') + '?q=' + encodeURIComponent(inp.value.trim()), { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (list) {
+          pickList(box, list.map(function (r) { return { text: r.label + ' ' + r.title, ref: r.ref }; }), function (it) {
+            inp.value = it.text;
+            form.querySelector('input[name=target_ref]').value = it.ref;
+          });
+        })
+        .catch(function () { box.hidden = true; });
+    }, 250);
+  });
+  document.addEventListener('focusout', function (ev) {
+    if (ev.target.matches && ev.target.matches('input[data-lookup], textarea[data-mentions]')) {
+      setTimeout(function () { document.querySelectorAll('.lookup-list, .mention-list').forEach(function (b) { b.hidden = true; }); }, 150);
+    }
+  });
+
   // ---------------------------------------------------------------- invoice lines: live totals
   function num(v) {
     var n = parseFloat(String(v || '').replace(/\s/g, '').replace(',', '.'));

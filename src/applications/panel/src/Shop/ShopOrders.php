@@ -185,6 +185,12 @@ class ShopOrders implements OrderSource
     }
 
     /** One order with lines, addresses, payments, state history; null if not found. */
+    public function brief(int $id): ?array
+    {
+        $o = $this->db->fetchOne("SELECT id_order, reference, id_shop FROM `{$this->p}orders` WHERE id_order = ? AND {$this->shopCondition('id_shop')}", [$id]);
+        return $o === false ? null : ['id_order' => (int)$o['id_order'], 'reference' => (string)$o['reference'], 'id_shop' => (int)$o['id_shop']];
+    }
+
     public function find(int $id): ?array
     {
         $o = $this->db->fetchOne(

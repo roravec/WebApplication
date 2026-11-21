@@ -62,4 +62,25 @@ class OrdersModule implements Module
                 'label' => 'Objednávky — zmeny v e-shope (stav, sledovanie, adresy, položky, vrátenie, správa zákazníkovi)'],
         ];
     }
+
+    public function recordTypes(): array
+    {
+        return [['type' => 'order', 'label' => 'Objednávka', 'parts' => 2,   // order:<source>:<id_order>
+            'resolve' => function (PanelContext $ctx, array $ids): ?array {
+                $src = $ctx->can(Rights::ORDERS_VIEW) ? $ctx->orderSource($ids[0]) : null;
+                $o = $src ? $src->brief($ids[1]) : null;   // null also for an order of an e-shop the person may not see
+                return $o ? ['title' => 'Objednávka ' . $o['reference'] . ($ids[0] ? ' (' . $src->label() . ')' : ''),
+                    'url' => '/orders/' . ($ids[0] ? $ids[0] . '/' : '') . $ids[1],
+                    'company_id' => (int)$ctx->companies()->companyForShop($ids[0], (int)$o['id_shop'])] : null;
+            },
+            'lookup' => function (PanelContext $ctx, string $q): array {
+                $out = [];
+                foreach ($ctx->can(Rights::ORDERS_VIEW) ? $ctx->orderSources() : [] as $id => $src) {
+                    foreach ($src->search(['q' => $q], 1, 5)['rows'] as $r) {
+                        $out[] = 'order:' . $id . ':' . (int)$r['id_order'];
+                    }
+                }
+                return $out;
+            }]];
+    }
 }

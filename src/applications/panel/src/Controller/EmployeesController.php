@@ -132,7 +132,6 @@ class EmployeesController
             'roles' => $repo->all(), 'groups' => Permissions::grouped(), 'companies' => $this->companyChoices(), 'shops' => $shops,
             'shopErrors' => $shopErrors, 'editorAdmin' => $this->ctx->isAdmin(), 'editorPerms' => $this->ctx->access()->permissions(),
             'readOnly' => $beyond, 'effective' => $repo->effective($values['access']),
-            'history' => $client ? Audit::forEntity($db, 'employee', $client->getId()) : [],
         ], $client ? 'Upraviť zamestnanca' : 'Nový zamestnanec', 'settings:employees');
     }
 
@@ -301,8 +300,7 @@ class EmployeesController
         }
         return $this->ctx->page('employees/role-form', ['role' => $role, 'values' => $values, 'errors' => $errors,
             'groups' => Permissions::grouped(), 'editorAdmin' => $this->ctx->isAdmin(), 'editorPerms' => $mine, 'holders' => $holders,
-            'readOnly' => $role && !$this->ctx->isAdmin() ? array_values(array_diff($role['permissions'], $mine)) : [],
-            'history' => $role ? Audit::forEntity($this->ctx->db(), 'role', $role['id']) : []],
+            'readOnly' => $role && !$this->ctx->isAdmin() ? array_values(array_diff($role['permissions'], $mine)) : []],
             $role ? 'Rola ' . $role['name'] : 'Nová rola', 'settings:employees');
     }
 
@@ -378,7 +376,11 @@ class EmployeesController
 
     public function accountForm(Request $req, array $params, array $errors = []): string
     {
-        return $this->ctx->page('employees/account', ['errors' => $errors, 'minPassword' => self::MIN_PASSWORD],
+        $me = $this->ctx->user();
+        $canKeys = $this->ctx->can(Rights::API_KEYS);
+        return $this->ctx->page('employees/account', ['errors' => $errors, 'minPassword' => self::MIN_PASSWORD,
+            'notifyMode' => $this->ctx->notifications()->mode($me->getId()), 'canApiKeys' => $canKeys,
+            'apiKeys' => $canKeys ? (new \Panel\Core\ApiKeys($this->ctx->db()))->forOwner($me->getId()) : []],
             'Môj účet', 'account');
     }
 

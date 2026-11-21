@@ -209,3 +209,4 @@ $bankRow = function (array $b) use ($e) { ?>
   <p><a class="button" href="<?= $e($ctx->url('/companies/' . $company['id'] . '/series/new')) ?>">+ Číselný rad</a></p>
 </section>
 <?php endif ?>
+<?php if ($company): ?><?= $view->partial('core/record', ['ref' => 'company:' . (int)$company['id']]) ?><?php endif ?>

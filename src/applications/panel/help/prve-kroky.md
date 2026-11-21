@@ -21,6 +21,7 @@ Tento návod je pre človeka, ktorý panel otvára prvýkrát.
   - **Sklad** — vlastné sklady mimo e-shopov.
   - **Nastavenia** — všetko, čo sa nastaví raz a mení len občas (firmy, e-shopy, legislatíva, zamestnanci).
 - V menu vidíte **len to, na čo máte právo**. Ak vám niečo chýba, povedzte správcovi.
+- Hore je pole **Hľadať** ([Hľadanie](help:hladanie)), vľavo dole **🔔 Upozornenia** ([Upozornenia](help:upozornenia)).
 - **Vpravo hore na každej stránke je „? Pomocník“** — otvorí návod presne k stránke, na ktorej ste.
 - Dole vľavo je **Denný režim / Tmavý režim** (svetlé alebo tmavé farby) a **Odhlásiť**.
 

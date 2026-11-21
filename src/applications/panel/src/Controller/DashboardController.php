@@ -80,6 +80,7 @@ class DashboardController
         }
         list($business, $todo) = $this->business();
         return $this->ctx->page('dashboard', [
+            'feed' => $this->ctx->activity()->feed($this->ctx->refs(), 0, 8, 300)['rows'],
             'canOrders' => $canOrders,
             'shopAvailable' => $available,
             'stats' => $stats,

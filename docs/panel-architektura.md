@@ -134,6 +134,43 @@ nepoužíva). Staré adresy presmerujú na nové.
 | **API** | `/panel/api/v1/…`, JSON, kľúč s rozsahom práv, audit volaní, limity; pre testovacie prípravky, CI, zariadenia, web (rezervácie) |
 | **Integrácie** | spoločný spôsob pre externé služby (PrestaShop, Fio, distribútori súčiastok, Packeta …): zašifrované kľúče, limity volaní, medzipamäť, stav pripojenia |
 
+**Stav — krok 1b HOTOVÝ 21. 11. 2026:** `Core\Refs` (odkaz `typ:id`; typy registrujú moduly v `Module::recordTypes()` —
+faktúra, objednávka `order:<zdroj>:<id>`, prijatý doklad, odberateľ, firma, skladová karta, skladový doklad, sklad,
+zamestnanec, rola; `resolve` vráti názov + adresu len tomu, kto záznam smie vidieť), krátky odkaz `/panel/r/<ref>`,
+QR (`/r/<ref>/qr`) a **štítok na tlač** (`/r/<ref>/label`); `Core\Links` (súvisí, blokuje, overuje, vzniklo z,
+nahrádza — na druhej strane opačným slovom); `Core\Comments` (komentáre so **@zmienkami** — celé meno aktívneho
+zamestnanca, odkazy `invoice:15` v texte sa stanú odkazmi, len autor upravuje / maže, zmazaný ostáva ako „zmazaný“);
+`Core\Activity` (história záznamu a kanál **Čo sa deje** na Prehľade + `/activity` — `audit` má stĺpec `ref`, staré
+riadky doplnené migráciou `020_records.sql`). Spoločný blok **Komentáre · Prepojenia · História** (`views/core/record.php`)
+je na stránkach objednávky, faktúry, dokladu, skladovej karty a dokladu, odberateľa, firmy, zamestnanca a roly.
+**Interné poznámky objednávok sú komentáre** (staré prenesené, `order_note` sa už nepíše). Upozornenia na zmienky
+(zvonček, e-mail) prídu v kroku 1c — zmienky sa už ukladajú (`comment_mention`).
+
+**Stav — kroky 1c–1f HOTOVÉ 21. 11. 2026 (fáza 1 kompletná):**
+- **1c** `Core\Events` (moduly ohlasujú `comment.added`, `comment.edited`, `link.added`, `invoice.issued`,
+  `order.state_changed`; reagujú moduly s `ProvidesListeners`), `Core\Notifications` (zvonček s počtom — obnova každú
+  minútu, stránka Upozornenia; e-mail **hneď / denný súhrn o 7:00 / nie** podľa voľby človeka v Môj účet; upozornenie
+  len na záznam, ktorý adresát smie vidieť — kontrola jeho očami, `PanelContext::asUser`), dnes: @zmienka a nový
+  komentár v diskusii, kde človek písal. `Core\Scheduler` (úlohy modulov cez `ProvidesJobs`; jedna adresa
+  `/panel/cron?token=` pre cron hostingu + **tichý „tik“ z otvoreného panela** najviac raz za minútu → funguje aj bez
+  cronu; zámok, posledný beh a výsledok, Nastavenia → **Systém → Plánovač**). Úlohy: e-maily upozornení, denný súhrn,
+  balík pre účtovníka, mesačný súhrn, opakované náklady. Stará adresa `/cron/accounting` spúšťa plánovač.
+- **1d** `Core\Integrations` (nastavenia služieb, heslá šifrované, stav pripojenia, Nastavenia → Systém →
+  **Integrácie**), `Core\Nextcloud` (WebDAV + zdieľanie), `Core\Files` (priečinok záznamu
+  `Panel/<firma>/<druh>/<typ-id>` zafixovaný v `record_folder`, nahratie, stiahnutie cez panel, zmazanie, odkazy na
+  stiahnutie / **na nahratie pre zákazníka** s platnosťou a heslom, zrušenie; všetko v histórii záznamu). Časť
+  **Súbory** v bloku záznamu sa načíta dodatočne (pomalý Nextcloud nebrzdí stránku; vypnutý = „dočasne nedostupné“).
+  Overené proti skutočnému Nextcloudu 31 v dočasnom kontajneri. **Treba od majiteľa:** v jeho Nextcloude vytvoriť
+  používateľa `erma-panel` + heslo aplikácie a zadať ich v paneli (návod v Pomocníkovi „Nastavenia → Systém“).
+- **1e** `Core\Documents` (číselné rady pre doklady ďalších modulov cez `ProvidesDocumentTypes` + `allocate()`;
+  spoločná PDF šablóna v štýle firmy `views/pdf/document.php` — `Documents::pdf()`), `Core\Calendar` (moduly cez
+  `ProvidesCalendar`; dnes splatnosti faktúr a prijatých dokladov, opakované náklady; menu **Práca → Kalendár**),
+  **Hľadať** hore na každej stránke (`/search`, lookups všetkých typov záznamov + firmy, zamestnanci).
+- **1f** `Core\ApiKeys` + `/panel/api/v1/…` (me, search, activity, records/{ref}, komentáre čítať / pridať): kľúč
+  `pk_…` ukázaný raz, uložený len hash, práva vybrané z vlastných a pri každom volaní orezané na to, čo autor práve má
+  (`Access::limitTo`), platnosť, zrušenie, záznam volaní, 120 volaní / min. Vlastné kľúče v **Môj účet** (právo
+  `api.keys`), prehľad všetkých v Nastavenia → Systém → **API kľúče**.
+
 ### 4.1 Úložisko súborov (veľké súbory mimo zdieľaného hostingu)
 Majiteľ 21. 11. 2026: „zdieľanie väčších dokumentov — je nezmysel to mať na shared hostingu.“ Súhlas: hosting má málo
 miesta, PHP má limit veľkosti nahrávania a času, a každý bajt by šiel cez PHP.
@@ -485,7 +522,7 @@ sa dá meniť podľa toho, čo firma potrebuje skôr.
 | Fáza | Čo | Veľkosť | Stojí na |
 |---|---|---|---|
 | **0** ✅ | **HOTOVÉ 21. 11. 2026** — Preusporiadanie: nové menu, Nastavenia so záložkami, E-shopy samostatne, stavy objednávok do Nastavenia → E-shopy; rozhranie `Module`, presun dnešných častí — **bez zmeny funkcií**; **Pomocník** (tlačidlo ?, návody) + návody ku všetkému, čo panel už vie; **príručka frameworku pre vývojárov** | M | — |
-| **1** | Jadro, po krokoch: **1a ✅ práva** (roly, výnimky, firmy, e-shopy, `Access` — 21. 11. 2026, kap. 5) → 1b Ref + QR odkazy, prepojenia, aktivita, komentáre → 1c udalosti, notifikácie, plánovač → 1d súbory (Nextcloud, 4.1) → 1e číslovanie + PDF šablóny, kalendár, vyhľadávanie → 1f API kľúče, integrácie | L | 0 |
+| **1** | Jadro, po krokoch: **1a ✅ práva** (roly, výnimky, firmy, e-shopy, `Access` — 21. 11. 2026, kap. 5) → **1b ✅ Ref + QR odkazy, prepojenia, aktivita, komentáre** (21. 11. 2026, kap. 4) → **1c ✅ udalosti, notifikácie, plánovač** → **1d ✅ súbory (Nextcloud, 4.1), integrácie** → **1e ✅ číslovanie + PDF šablóny, kalendár, vyhľadávanie** → **1f ✅ API kľúče** — fáza 1 hotová 21. 11. 2026 | L | 0 |
 | **2** | Úlohy a projekty: zoznam, kanban, Moje úlohy, komentáre, prílohy, prepojenia, notifikácie; výkazy práce; **commity pri úlohách** (webhook / post-receive, čísla `LED-123`) | L | 1 |
 | **3** | Timeline + závislosti, kalendár (dovolenky, sviatky), opakované úlohy, šablóny projektov; **register povinností a termínov** (stavia len na kalendári a plánovači); **financie projektu — správa rozpočtu (zostavenie, schválenie, zmeny s dôvodom, viazané prostriedky, kontrola výdavkov) a skutočnosť** (hodiny, priradené náklady) | M | 2 |
 | **4** | Dokumenty (jeden píše, ostatní vidia; verzie, komentáre) | M | 1 |
@@ -525,7 +562,8 @@ na dev → nasadenie → technická dokumentácia tu a v HANDOVER. Nové zákonn
 **Otvorené** (netreba hneď — každá otázka sa týka až svojej fázy):
 1. **V-model — aké projekty a úrovne?** Elektronika + firmvér (LedBoard, StadiumControl …)? (fáza 5)
 2. **Výsledky testov odkiaľ** — testovacie prípravky (aký výstup?), CI (GitHub Actions …), ručne? (fázy 5, 9)
-3. **Nextcloud** (4.1): rádovo koľko dát (GB / TB) a aké najväčšie súbory? (fáza 1)
+3. **Nextcloud** (4.1): rádovo koľko dát (GB / TB) a aké najväčšie súbory? (fáza 1) — *napojenie hotové 21. 11. 2026;
+   cez panel idú súbory do limitu PHP / Cloudflare (100 MB), väčšie priamo do Nextcloudu alebo cez odkaz na nahratie.*
 4. **Roly**: sedí zoznam v kapitole 5? Kto dnes v paneli pracuje a čo má robiť? (fáza 1) — *netreba čakať: roly sú
    od 21. 11. 2026 upraviteľné v Nastavenia → Zamestnanci a roly → Roly; ostatné (Výroba, Vývoj, Servis …) pribudnú
    s modulmi.*

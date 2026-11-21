@@ -20,6 +20,8 @@
 | **Správca** | Človek, ktorý v paneli smie všetko, vo všetkých firmách a e-shopoch (aj v moduloch, ktoré pribudnú). |
 | **Rola** | Pomenovaná sada práv pre jednu prácu (napr. Expedícia). Zamestnanec môže mať viac rolí — [Roly a práva](help:roly-a-prava). |
 | **Výnimka (práva)** | Jedno právo navyše alebo zakázané konkrétnemu človeku, popri jeho rolách. |
+| **Prepojenie** | Väzba medzi dvoma záznamami (napr. objednávka ↔ doklad za dopravu) — [Komentáre, prepojenia](help:komentare-a-prepojenia). |
+| **Krátky odkaz / kód záznamu** | Napr. `invoice:15` — otvorí záznam (aj z QR štítku); v komentári sa z neho stane odkaz. |
 | **Prijatý doklad (náklad)** | Faktúra alebo blok od dodávateľa — zadáva sa do Nákladov. |
 | **Storno** | Zrušenie prijatého dokladu s dôvodom (nemaže sa, ostáva v histórii). |
 | **Šarža / dávka** | Časť zásoby prijatá naraz za jednu cenu; vydáva sa od najstaršej (FIFO). |

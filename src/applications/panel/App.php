@@ -42,7 +42,7 @@ class PanelApp implements RequestHandler
             new Modules\DashboardModule(), new Modules\OrdersModule(), new Modules\EshopsModule(), new Modules\CustomersModule(),
             new Modules\InvoicingModule(), new Modules\ExpensesModule(), new Modules\ReportsModule(), new Modules\StockModule(),
             new Modules\CompaniesModule(), new Modules\LegislationModule(), new Modules\EmployeesModule(), new Modules\HelpModule(),
-            new Modules\SettingsModule(),
+            new Modules\SettingsModule(), new Modules\RecordsModule(), new Modules\SystemModule(),
         ];
     }
 

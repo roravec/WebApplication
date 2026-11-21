@@ -110,7 +110,7 @@ class OrdersController
         $orderId = (int)$order['id_order'];
         return $this->ctx->page('orders/detail', ['o' => $order, 'source' => $source, 'invoice' => $invoice, 'invoiceCompany' => $companyId,
             'panelEmails' => $panelEmails, 'shopEmails' => $shopEmails,
-            'notes' => $log->notes($src, $orderId), 'messages' => $log->messages($src, $orderId), 'returns' => $log->returns($src, $orderId),
+            'messages' => $log->messages($src, $orderId), 'returns' => $log->returns($src, $orderId),
             'canEdit' => $canChange, 'editBlocked' => $editBlocked, 'canManageShops' => $this->ctx->can(Rights::SETTINGS_ESHOPS),
             'canInvoice' => $this->ctx->can(Rights::INVOICES_EDIT) && $companyId && $this->ctx->canCompany($companyId),
             'canSeeInvoice' => $this->ctx->can(Rights::INVOICES_VIEW),
@@ -165,7 +165,9 @@ class OrdersController
         }
         Audit::log($this->ctx->db(), $this->ctx->user(), 'shop_order', (int)$order['id_order'], 'state',
             ($src ? $source->label() . ' ' : '') . $order['reference'] . ': ' . $order['state'] . ' → ' . ($names[$new] ?? $new)
-            . ($sendEmail ? ' (s e-mailom)' : ''));
+            . ($sendEmail ? ' (s e-mailom)' : ''), 'order:' . $src . ':' . (int)$order['id_order']);
+        \Panel\Core\Events::emit($this->ctx, 'order.state_changed', ['ref' => 'order:' . $src . ':' . (int)$order['id_order'], 'actor' => $this->ctx->user(),
+            'from' => (string)$order['state'], 'to' => (string)($names[$new] ?? $new), 'state_id' => (int)$new]);
         Session::flash('msg', 'Stav v e-shope: ' . ($names[$new] ?? $new) . '.');
         return $back;
     }

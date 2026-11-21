@@ -57,3 +57,5 @@ $total = array_sum(array_column($levels, 'qty'));
   <?php if (!$moves): ?><tr><td colspan="5" class="muted">Žiadne pohyby.</td></tr><?php endif ?>
   </tbody>
 </table>
+
+<?= $view->partial('core/record', ['ref' => 'stock_item:' . (int)$item['id']]) ?>

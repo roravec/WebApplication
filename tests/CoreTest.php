@@ -30,6 +30,32 @@ function resolverConfig(array $extra = []): Config
 }
 
 // ---------------------------------------------------------------- app selection
+test('request: several uploaded files (name[] multiple), one file, empty slots', function () {
+    $multi = ['name' => ['a.txt', '', 'b.pdf'], 'type' => ['text/plain', '', 'application/pdf'], 'tmp_name' => ['/tmp/a', '', '/tmp/b'],
+        'error' => [UPLOAD_ERR_OK, UPLOAD_ERR_NO_FILE, UPLOAD_ERR_INI_SIZE], 'size' => [3, 0, 0]];
+    $r = new Request('POST', 'x', '/', [], [], [], [], '', [], ['files' => $multi, 'one' => ['name' => 'c', 'type' => '', 'tmp_name' => '/tmp/c',
+        'error' => UPLOAD_ERR_OK, 'size' => 1]]);
+    eq(['a.txt', 'b.pdf'], array_column($r->files('files'), 'name'));
+    eq(UPLOAD_ERR_INI_SIZE, $r->files('files')[1]['error']);
+    eq(['c'], array_column($r->files('one'), 'name'));
+    eq([], $r->files('none'));
+    eq(null, $r->file('files'), 'file() is for a single input');
+});
+
+test('request: path from the request URI (also "type:id" segments that parse_url() rejects), query and fragment cut', function () {
+    eq('/panel/r/invoice:7', Request::pathFromUri('/panel/r/invoice:7'));
+    eq('/panel/r/invoice:7/qr', Request::pathFromUri('/panel/r/invoice:7/qr?x=1#a'));
+    eq('/panel/r/order:0:2481', Request::pathFromUri('/panel/r/order:0:2481'));
+    eq('/', Request::pathFromUri(''));
+    eq('/', Request::pathFromUri('?a=1'));
+    eq('/a/b', Request::pathFromUri('https://erma.sk/a/b?c=d'));
+    eq('/', Request::pathFromUri('https://erma.sk'));
+    // the router matches such a segment
+    $r = new Router();
+    $r->get('/r/{ref:[a-z][a-z_]+(?::\d+)+}', function ($req, $p) { return Response::text($p['ref']); });
+    eq('invoice:7', $r->dispatch(req('x', '/r/invoice:7'))->body());
+});
+
 test('resolver: domain and www. domain map to the same app', function () {
     $r = new AppResolver(resolverConfig());
     eq('erma', $r->resolve(req('erma.sk'))->name);

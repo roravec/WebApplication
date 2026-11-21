@@ -78,4 +78,9 @@ class EshopsModule implements Module
                 'label' => 'Nastavenia → E-shopy — pripojenia (kľúče Webservice) a stavy objednávok'],
         ];
     }
+
+    public function recordTypes(): array
+    {
+        return [];
+    }
 }

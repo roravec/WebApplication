@@ -89,22 +89,4 @@ class AccountingController
         return new Response($b['zip'], 200, ['Content-Type' => 'application/zip', 'Content-Disposition' => 'attachment; filename="' . $b['name'] . '"',
             'X-Content-Type-Options' => 'nosniff', 'Cache-Control' => 'private, no-store']);
     }
-
-    /** GET /cron/accounting?token=… — automatic sending without a logged-in employee (404 unless a token is configured). */
-    public function cron(Request $req, array $params)
-    {
-        $app = $this->ctx->app;
-        $token = (string)$app->getConfig()->get('apps.' . $app->getApplicationName() . '.cron_token', '');
-        if (strlen($token) < 20 || !hash_equals($token, (string)$req->query('token', ''))) {
-            return Response::text('Not found', 404);
-        }
-        $out = [];
-        foreach ($this->ctx->accounting()->sendDue($this->ctx->mailer()) as $r) {
-            $out[] = ($r['ok'] ? 'OK ' : 'CHYBA ') . $r['message'];
-        }
-        foreach ((new \Panel\Reports\MonthlySummary($this->ctx))->sendDue($this->ctx->mailer()) as $r) {
-            $out[] = ($r['ok'] ? 'OK ' : 'CHYBA ') . $r['message'];
-        }
-        return Response::text($out ? implode("\n", $out) : 'Nič na odoslanie.');
-    }
 }

@@ -22,13 +22,14 @@ class Numbering
     /** All document types that have number series (invoices + stock). */
     public static function allTypes(): array
     {
-        return self::TYPES + self::STOCK_TYPES;
+        return self::TYPES + self::STOCK_TYPES + array_map(function ($t) { return $t['label']; }, \Panel\Core\Documents::types());
     }
 
     /** Table whose documents use numbers of this type. */
     public static function tableFor(string $docType): string
     {
-        return isset(self::STOCK_TYPES[$docType]) ? 'stock_doc' : 'invoice';
+        $module = \Panel\Core\Documents::types()[$docType] ?? null;   // documents of other modules (Core\ProvidesDocumentTypes)
+        return $module ? $module['table'] : (isset(self::STOCK_TYPES[$docType]) ? 'stock_doc' : 'invoice');
     }
 
     public static function format(string $format, int $counter, string $date): string

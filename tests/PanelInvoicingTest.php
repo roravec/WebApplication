@@ -225,8 +225,9 @@ test('permissions: every module registers its own, every key used in the code is
     }
     eq(0, substr_count($src, 'ADMIN_ONLY'), 'no admin-only guard left');
     preg_match_all("/['\"]([a-z]+\.[a-z_]+)['\"]/", $src, $m);
+    $jobs = Panel\Core\Scheduler::jobs();
     foreach (array_unique($m[1]) as $k) {
-        if (preg_match('/^(orders|invoices|expenses|stock|reports|companies|settings)\.[a-z_]+$/', $k)) {
+        if (!isset($jobs[$k]) && preg_match('/^(orders|invoices|expenses|stock|reports|companies|settings|api)\.[a-z_]+$/', $k)) {
             ok(isset($all[$k]), "permission $k used in the code is registered");
         }
     }
@@ -236,6 +237,7 @@ test('permissions: every module registers its own, every key used in the code is
             public function nav(): array { return []; }
             public function settingsTabs(): array { return []; }
             public function permissions(): array { return [['key' => 'orders.view', 'label' => 'x', 'group' => 'x']]; }
+            public function recordTypes(): array { return []; }
         };
         Panel\Core\Permissions::fromModules([new Panel\Modules\OrdersModule(), $m]);
     }, LogicException::class);
@@ -2203,4 +2205,541 @@ test('Pomocník: Markdown is escaped and formatted; every page has a guide; link
         ok(in_array(basename($f, '.md'), $slugs, true), basename($f) . ' is listed in help/_index.php');
         ok(Panel\Markdown::title(file_get_contents($f)) !== '', basename($f) . ' has a "# title"');
     }
+});
+
+/** PanelContext without the whole application: a database + a logged-in person (core services, record resolvers). */
+class TestPanelContext extends Panel\PanelContext
+{
+    public $testDb;
+    public $testUser;
+
+    public function __construct($db, ?Client $user)
+    {
+        $this->testDb = $db;
+        $this->testUser = $user;
+        $this->request = new WebApplication\Http\Request('GET', 'panel.test', '/');
+    }
+
+    protected function authUser(): ?Client { return $this->testUser; }
+    public function db(): WebApplication\Database\Database { return $this->testDb; }
+    public function url(string $path = '/'): string { return '/panel' . $path; }
+    public function orderSources(): array { return []; }
+    public function orderSource(int $id): ?Panel\Shop\OrderSource { return null; }
+}
+
+test('records: reference types registered by the modules, parse / make, audit entity → reference', function () {
+    $types = Panel\Core\Refs::types();
+    foreach (['invoice', 'order', 'expense', 'customer', 'company', 'stock_item', 'stock_doc', 'warehouse', 'employee', 'role'] as $t) {
+        ok(isset($types[$t]) && $types[$t]['label'] !== '', "type $t");
+    }
+    eq(2, $types['order']['parts']);
+    eq(['invoice', [15]], Panel\Core\Refs::parse('invoice:15'));
+    eq(['order', [0, 2481]], Panel\Core\Refs::parse('order:0:2481'));
+    foreach (['invoice', 'invoice:', 'invoice:x', 'order:5', 'invoice:1:2', 'nothing:1', 'Invoice:1', 'invoice:15 '] as $bad) {
+        eq(null, Panel\Core\Refs::parse($bad), "not a reference: '$bad'");
+    }
+    eq('order:3:10', Panel\Core\Refs::make('order', 3, 10));
+    eq('invoice:7', Panel\Core\Refs::fromEntity('invoice', 7));
+    eq(null, Panel\Core\Refs::fromEntity('shop_order', 7), 'needs the source → passed explicitly');
+    eq(null, Panel\Core\Refs::fromEntity('legislation', 1), 'not a record type');
+    throws(function () {
+        $m = new class implements Panel\Module {
+            public function routes(WebApplication\Http\Router $r, callable $g, Panel\PanelContext $c): void {}
+            public function nav(): array { return []; }
+            public function settingsTabs(): array { return []; }
+            public function permissions(): array { return []; }
+            public function recordTypes(): array { return [['type' => 'invoice', 'label' => 'x', 'resolve' => function () { return null; }]]; }
+        };
+        Panel\Core\Refs::fromModules([new Panel\Modules\InvoicingModule(), $m]);
+    }, LogicException::class);
+});
+
+test('records: resolve only what the person may see (permission + company), lookup, short link, comments, links, activity', function () {
+    $db = panelDb();
+    Schema::migrate($db, __DIR__ . '/../src/applications/panel/sql');
+    $companies = new Companies($db);
+    $fields = ['street' => '', 'city' => '', 'zip' => '', 'country' => 'SK', 'ico' => '', 'dic' => '', 'registration' => '', 'email' => '', 'phone' => '',
+        'web' => '', 'slogan' => '', 'due_days' => 14, 'invoice_note' => '', 'accent_color' => '#f74040', 'active' => 1];
+    $c1 = $companies->save(null, ['name' => 'Firma A'] + $fields);
+    $c2 = $companies->save(null, ['name' => 'Firma B'] + $fields);
+    $t = $db->table('invoice');
+    $db->execute("INSERT INTO $t (company_id, doc_type, status, number, issue_date, delivery_date, due_date, currency, created_at, updated_at) VALUES (?, 'invoice', 'issued', 'FA2026/000777', '2026-11-01', '2026-11-01', '2026-11-15', 'EUR', NOW(), NOW())", [$c1]);
+    $inv1 = $db->lastInsertId();
+    $db->execute("INSERT INTO $t (company_id, doc_type, status, number, issue_date, delivery_date, due_date, currency, created_at, updated_at) VALUES (?, 'invoice', 'draft', NULL, '2026-11-01', '2026-11-01', '2026-11-15', 'EUR', NOW(), NOW())", [$c2]);
+    $inv2 = $db->lastInsertId();
+    $boss = panelUser($db, 'boss3', 100);
+    $eva = panelUser($db, 'eva', 10);
+    $eva->name = 'Eva Malá'; $eva->update();
+    $jan = panelUser($db, 'jan', 10);
+    $jan->name = 'Ján Novák'; $jan->update();
+    $roles = new Panel\Core\Roles($db);
+    $roles->savePerson($eva->getId(), ['admin' => false, 'roles' => [], 'allow' => [Rights::INVOICES_VIEW], 'deny' => [], 'all_companies' => false,
+        'companies' => [$c1], 'all_shops' => true, 'shops' => []]);
+
+    $b = new TestPanelContext($db, $boss);
+    $e = new TestPanelContext($db, $eva);
+    $j = new TestPanelContext($db, $jan);
+    eq(['ref' => "invoice:$inv1", 'type' => 'invoice', 'label' => 'Faktúra', 'title' => 'Faktúra FA2026/000777', 'url' => "/invoices/$inv1", 'company_id' => $c1],
+        $e->refs()->resolve("invoice:$inv1"));
+    eq(null, $e->refs()->resolve("invoice:$inv2"), 'other company = not visible');
+    eq(null, $j->refs()->resolve("invoice:$inv1"), 'no permission = not visible');
+    eq("Faktúra — koncept #$inv2", $b->refs()->resolve("invoice:$inv2")['title']);
+    eq(null, $b->refs()->resolve('invoice:999999'), 'does not exist');
+    eq(null, (new TestPanelContext($db, null))->refs()->resolve("invoice:$inv1"), 'nobody logged in');
+    eq(null, $e->refs()->resolve('employee:' . $jan->getId()), 'employees only with settings.employees');
+    eq('Ján Novák', $b->refs()->resolve('employee:' . $jan->getId())['title']);
+    eq(['invoice:' . $inv1], array_column($e->refs()->find('000777'), 'ref'), 'lookup by number');
+    eq([], $e->refs()->find('nič-také'));
+    eq(["invoice:$inv1"], array_column($e->refs()->find("invoice:$inv1"), 'ref'), 'a reference');
+    eq(["invoice:$inv1"], array_column($e->refs()->find("https://erma.sk/panel/r/invoice:$inv1"), 'ref'), 'a short link');
+    eq([], $e->refs()->find("invoice:$inv2"), 'a reference of an invisible record');
+    eq("http://panel.test/panel/r/invoice:$inv1", $e->refs()->shortUrl("invoice:$inv1"));
+
+    // comments + mentions
+    $cm = $b->comments();
+    $id = $cm->add("invoice:$inv1", "  @ján novák pozri prosím, aj invoice:$inv2 a @Eva Malá\r\n2. riadok <b>  ", $boss);
+    $sorted = function ($x) { sort($x); return $x; };
+    eq($sorted([$jan->getId(), $eva->getId()]), $sorted($cm->mentionedIn('@ján novák pozri @Eva Malá')), 'case-insensitive full names');
+    eq([], $cm->mentionedIn('ján novák bez zavináča, @Jána'));
+    $row = $cm->forRef("invoice:$inv1")[0];
+    eq("@ján novák pozri prosím, aj invoice:$inv2 a @Eva Malá\n2. riadok <b>", $row['body'], 'trimmed, CRLF → LF');
+    eq(2, count($row['mentions']));
+    $html = Panel\Core\Comments::render($row['body'], $row['mentions'], function ($r) use ($e) { return $e->refs()->resolve($r); }, function ($p) { return '/panel' . $p; });
+    contains('<b class="mention">@ján novák</b>', $html);
+    contains('&lt;b&gt;', $html);
+    contains("invoice:$inv2", $html);
+    ok(strpos($html, "/panel/invoices/$inv2") === false, 'no link to a record the reader may not see');
+    $html = Panel\Core\Comments::render("viď invoice:$inv1", [], function ($r) use ($e) { return $e->refs()->resolve($r); }, function ($p) { return '/panel' . $p; });
+    contains('<a href="/panel/invoices/' . $inv1 . '" title="Faktúra">Faktúra FA2026/000777</a>', $html);
+    eq(["invoice:$inv1" => 1], $cm->counts(["invoice:$inv1", "invoice:$inv2"]));
+    $cm->update($id, 'opravené @Eva Malá');
+    eq([$eva->getId()], array_keys($cm->forRef("invoice:$inv1")[0]['mentions']), 'mentions follow the edit');
+    ok($cm->forRef("invoice:$inv1")[0]['edited_at'] !== null);
+    $cm->delete($id);
+    eq([], $cm->counts(["invoice:$inv1"]), 'deleted comments are not counted');
+    ok($cm->forRef("invoice:$inv1")[0]['deleted_at'] !== null, 'stays as "zmazaný"');
+    eq([], $cm->forRef("invoice:$inv1")[0]['mentions']);
+
+    // links
+    $ln = $b->links();
+    $lid = $ln->add("invoice:$inv1", "invoice:$inv2", 'derived', $boss);
+    ok($lid > 0);
+    eq(null, $ln->add("invoice:$inv1", "invoice:$inv2", 'derived', $boss), 'same link twice');
+    eq(null, $ln->add("invoice:$inv1", "invoice:$inv1", 'relates', $boss), 'a record with itself');
+    eq(null, $ln->add("invoice:$inv1", "invoice:$inv2", 'nonsense', $boss));
+    $rel = $ln->add("invoice:$inv2", "invoice:$inv1", 'relates', $boss);
+    eq(null, $ln->add("invoice:$inv1", "invoice:$inv2", 'relates', $boss), '"relates" works both ways');
+    eq([['relates', "invoice:$inv2", 'súvisí s'], ['derived', "invoice:$inv2", 'vzniklo zo záznamu']],
+        array_map(function ($l) { return [$l['kind'], $l['other'], $l['label']]; }, $ln->forRef("invoice:$inv1")));
+    eq('z neho vzniklo', $ln->forRef("invoice:$inv2")[1]['label'], 'the other side');
+    $panel = $e->recordPanel("invoice:$inv1");
+    eq([], $panel['links'], 'links to records Eva may not see are hidden');
+    eq(null, $e->recordPanel("invoice:$inv2"));
+    eq(2, count($b->recordPanel("invoice:$inv1")['links']));
+    $ln->delete($rel);
+    eq(1, count($ln->forRef("invoice:$inv1")));
+
+    // activity: Audit derives the reference; the feed shows only visible records
+    Panel\Audit::log($db, $boss, 'invoice', $inv1, 'issue', 'A');
+    Panel\Audit::log($db, $boss, 'invoice', $inv2, 'update', 'B');
+    Panel\Audit::log($db, $boss, 'shop_order', 5, 'state', 'C', 'order:0:5');
+    Panel\Audit::log($db, $boss, 'legislation', 1, 'save', 'D');
+    eq(['A'], array_column($b->activity()->forRef("invoice:$inv1"), 'details'));
+    eq(null, $db->fetchValue("SELECT ref FROM pt_audit WHERE details = 'D'"), 'no record → no reference');
+    eq(['A'], array_column($e->activity()->feed($e->refs())['rows'], 'details'), 'Eva: only her company; the order source does not exist here');
+    eq(['B', 'A'], array_column($b->activity()->feed($b->refs())['rows'], 'details'));
+    $page = $b->activity()->feed($b->refs(), 0, 1);
+    eq(['B'], array_column($page['rows'], 'details'));
+    eq(['A'], array_column($b->activity()->feed($b->refs(), $page['next'], 1)['rows'], 'details'), 'next page');
+});
+
+test('records: migration 020 — old audit rows get references, internal order notes become comments', function () {
+    $db = panelDb();
+    $dir = __DIR__ . '/../src/applications/panel/sql';
+    // migrate up to 019, put old data in, then 020
+    $tmp = sys_get_temp_dir() . '/wa_mig_' . getmypid();
+    @mkdir($tmp);
+    foreach (glob("$tmp/*.sql") as $f) { unlink($f); }
+    foreach (glob("$dir/*.sql") as $f) {
+        if ((int)basename($f) <= 19) { copy($f, "$tmp/" . basename($f)); }
+    }
+    Schema::migrate($db, $tmp);
+    $now = date('Y-m-d H:i:s');
+    $db->execute("INSERT INTO pt_shop_connection (name, url, api_key, active, local_db, created_at) VALUES ('Vzdialený', 'https://x.sk', 'k', 1, 0, NOW())");
+    $conn = $db->lastInsertId();
+    foreach ([['invoice', 3, 'x'], ['shop_order', 10, 'ABC: stav'], ['shop_order', 11, 'Vzdialený XYZ: stav'], ['legislation', 1, 'y']] as $a) {
+        $db->execute("INSERT INTO pt_audit (created_at, client_id, client_name, entity, entity_id, action, details) VALUES (?, 0, '', ?, ?, 'x', ?)", [$now, $a[0], $a[1], $a[2]]);
+    }
+    $db->execute("INSERT INTO pt_order_note (source, order_id, text, client_id, client_name, created_at) VALUES (0, 10, 'volal', 1, 'Eva', ?), ($conn, 11, 'pošleme', NULL, '', ?)", [$now, $now]);
+    copy("$dir/020_records.sql", "$tmp/020_records.sql");
+    eq(['020_records.sql'], Schema::migrate($db, $tmp));
+    eq(['invoice:3', 'order:0:10', "order:$conn:11", null], array_column($db->query('SELECT ref FROM pt_audit ORDER BY id'), 'ref'));
+    eq([['order:0:10', 'volal', 'Eva'], ["order:$conn:11", 'pošleme', '']],
+        array_map(function ($r) { return [$r['ref'], $r['body'], $r['client_name']]; }, $db->query('SELECT * FROM pt_comment ORDER BY id')));
+    $log = new Panel\Shop\OrderLog($db);
+    eq(['volal'], array_column($log->notes(0, 10), 'text'), 'OrderLog reads the comments');
+    $log->addNote(0, 10, 'nová', null);
+    eq([10 => 2], $log->noteCounts(0, [10, 12]));
+    foreach (glob("$tmp/*.sql") as $f) { unlink($f); }
+    @rmdir($tmp);
+});
+
+class FakeMailer extends Panel\Mailer
+{
+    public $sent = [];
+    public function __construct() { parent::__construct(['from' => 'panel@example.sk']); }
+    public function configured(): bool { return true; }
+    public function send(array $m): void { $this->sent[] = $m; }
+}
+
+/** Fake Nextcloud server: WebDAV folders/files in memory + the share API. */
+function fakeNextcloud(array &$calls): callable
+{
+    $files = [];   // path => bytes ('' for folders, marked in $dirs)
+    $dirs = ['/' => true];
+    $shares = 0;
+    return function (string $m, string $url, array $h, ?string $body, int $t) use (&$calls, &$files, &$dirs, &$shares): array {
+        $calls[] = [$m, $url];
+        if (strpos($url, '/status.php') !== false) {
+            return [200, json_encode(['installed' => true, 'maintenance' => false, 'versionstring' => '35.0.3'])];
+        }
+        if (strpos($url, '/ocs/v2.php/apps/files_sharing/api/v1/shares') !== false) {
+            if ($m === 'POST') {
+                parse_str((string)$body, $f);
+                if (!isset($dirs[$f['path']])) {
+                    return [404, json_encode(['ocs' => ['meta' => ['message' => 'Wrong path, file/folder does not exist']]])];
+                }
+                $shares++;
+                return [200, json_encode(['ocs' => ['data' => ['id' => (string)(100 + $shares), 'url' => 'https://nc.test/s/tok' . $shares,
+                    'permissions' => (int)$f['permissions']]]])];
+            }
+            return [200, '{}'];
+        }
+        $p = '/' . rawurldecode(preg_replace('#^.*/remote\.php/dav/files/[^/]+/?#', '', $url));
+        $p = $p === '/' ? '/' : rtrim($p, '/');
+        switch ($m) {
+            case 'MKCOL':
+                if (isset($dirs[$p])) { return [405, '']; }
+                $dirs[$p] = true;
+                return [201, ''];
+            case 'PUT':
+                $files[$p] = (string)$body;
+                return [201, ''];
+            case 'GET':
+                return isset($files[$p]) ? [200, $files[$p]] : [404, ''];
+            case 'DELETE':
+                unset($files[$p]);
+                return [204, ''];
+            case 'PROPFIND':
+                if (!isset($dirs[$p])) { return [404, '']; }
+                $base = '/remote.php/dav/files/panel' . ($p === '/' ? '' : implode('/', array_map('rawurlencode', explode('/', $p))));
+                $xml = '<?xml version="1.0"?><d:multistatus xmlns:d="DAV:"><d:response><d:href>' . $base . '/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop></d:propstat></d:response>';
+                foreach ($files as $fp => $bytes) {
+                    if (dirname($fp) === $p) {
+                        $xml .= '<d:response><d:href>' . $base . '/' . rawurlencode(basename($fp)) . '</d:href><d:propstat><d:prop><d:getlastmodified>Sat, 21 Nov 2026 10:00:00 GMT</d:getlastmodified>'
+                            . '<d:getcontentlength>' . strlen($bytes) . '</d:getcontentlength><d:resourcetype/></d:prop></d:propstat></d:response>';
+                    }
+                }
+                foreach ($dirs as $dp => $x) {
+                    if ($dp !== '/' && $dp !== $p && dirname($dp) === $p) {
+                        $xml .= '<d:response><d:href>' . $base . '/' . rawurlencode(basename($dp)) . '/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop></d:propstat></d:response>';
+                    }
+                }
+                return [207, $xml . '</d:multistatus>'];
+        }
+        return [400, ''];
+    };
+}
+
+test('scheduler: due rules (minutes, daily from an hour), lock, tick at most once a minute, the registered jobs', function () {
+    $jobs = Panel\Core\Scheduler::jobs();
+    foreach (['notifications.email', 'notifications.digest', 'accounting.package', 'reports.monthly_summary', 'expenses.recurring'] as $k) {
+        ok(isset($jobs[$k]) && $jobs[$k]['label'] !== '', "job $k");
+    }
+    $now = strtotime('2026-11-21 10:00:00');
+    $every5 = ['every' => 5, 'hour' => null];
+    ok(Panel\Core\Scheduler::isDue($every5, null, $now), 'never ran');
+    ok(!Panel\Core\Scheduler::isDue($every5, ['last_run_at' => '2026-11-21 09:57:00'], $now));
+    ok(Panel\Core\Scheduler::isDue($every5, ['last_run_at' => '2026-11-21 09:55:00'], $now));
+    $daily7 = ['every' => 1440, 'hour' => 7];
+    ok(!Panel\Core\Scheduler::isDue($daily7, null, strtotime('2026-11-21 06:59:00')), 'not before 7:00');
+    ok(Panel\Core\Scheduler::isDue($daily7, ['last_run_at' => '2026-11-20 23:00:00'], $now), 'new day');
+    ok(!Panel\Core\Scheduler::isDue($daily7, ['last_run_at' => '2026-11-21 07:01:00'], $now), 'once a day');
+
+    $db = panelDb();
+    Schema::migrate($db, __DIR__ . '/../src/applications/panel/sql');
+    $sys = (new TestPanelContext($db, null))->system();
+    $s = new Panel\Core\Scheduler($db);
+    $r = $s->run($sys, 'expenses.recurring', true);
+    eq([['expenses.recurring', true, 'vytvorených dokladov: 0']], $r);
+    eq('vytvorených dokladov: 0', $s->state()['expenses.recurring']['last_message']);
+    eq([], $s->run($sys, 'expenses.recurring'), 'not due again the same day');
+    $db->execute("UPDATE pt_job_run SET running_until = ? WHERE job = 'expenses.recurring'", [date('Y-m-d H:i:s', time() + 300)]);
+    eq([], $s->run($sys, 'expenses.recurring', true), 'locked by another run');
+    ok($s->tickDue(1000000), 'first tick');
+    ok(!$s->tickDue(1000030), 'second tick within a minute');
+    ok($s->tickDue(1000061));
+    $ran = array_column($s->run($sys, null, false, strtotime('2026-11-22 08:00:00')), 0);
+    ok(in_array('notifications.email', $ran, true) && in_array('notifications.digest', $ran, true), implode(',', $ran));
+});
+
+test('notifications: mentions and the discussion, only for people who may see the record, bell, immediate e-mail and daily digest', function () {
+    $db = panelDb();
+    Schema::migrate($db, __DIR__ . '/../src/applications/panel/sql');
+    $companies = new Companies($db);
+    $fields = ['street' => '', 'city' => '', 'zip' => '', 'country' => 'SK', 'ico' => '', 'dic' => '', 'registration' => '', 'email' => 'firma@example.sk',
+        'phone' => '', 'web' => '', 'slogan' => '', 'due_days' => 14, 'invoice_note' => '', 'accent_color' => '#f74040', 'active' => 1];
+    $c1 = $companies->save(null, ['name' => 'Firma A'] + $fields);
+    $db->execute("INSERT INTO pt_invoice (company_id, doc_type, status, number, issue_date, delivery_date, due_date, currency, created_at, updated_at)
+        VALUES (?, 'invoice', 'issued', 'FA1', '2026-11-01', '2026-11-01', '2026-11-15', 'EUR', NOW(), NOW())", [$c1]);
+    $inv = $db->lastInsertId();
+    $boss = panelUser($db, 'boss@example.sk', 100);
+    $boss->name = 'Šéf Hlavný'; $boss->update();
+    $eva = panelUser($db, 'eva@example.sk', 10);
+    $eva->name = 'Eva Malá'; $eva->update();
+    $jan = panelUser($db, 'jan@example.sk', 10);
+    $jan->name = 'Ján Novák'; $jan->update();
+    (new Panel\Core\Roles($db))->savePerson($eva->getId(), ['admin' => false, 'roles' => [], 'allow' => [Rights::INVOICES_VIEW], 'deny' => [],
+        'all_companies' => true, 'companies' => [], 'all_shops' => true, 'shops' => []]);
+    $b = new TestPanelContext($db, $boss);
+    $ref = "invoice:$inv";
+    $record = $b->refs()->resolve($ref);
+    $body = '@Eva Malá a @Ján Novák pozrite';
+    $id = $b->comments()->add($ref, $body, $boss);
+    eq(1, Panel\Core\Events::emit($b, 'comment.added', ['ref' => $ref, 'actor' => $boss, 'record' => $record, 'comment_id' => $id, 'body' => $body,
+        'mentions' => $b->comments()->mentionedIn($body), 'thread' => false]), 'the notification listener ran');
+    $n = $b->notifications();
+    eq(1, $n->unreadCount($eva->getId()), 'Eva may see the invoice');
+    eq(0, $n->unreadCount($jan->getId()), 'Ján may not (no permission) — not notified');
+    eq(0, $n->unreadCount($boss->getId()), 'not the author');
+    $row = $n->forPerson($eva->getId())[0];
+    eq(['mention', $ref, 'pending'], [$row['event'], $row['ref'], $row['email_state']]);
+    contains('Šéf Hlavný vás spomenul — Faktúra Faktúra FA1', $row['text']);
+
+    // Eva answers → the boss (earlier participant) hears about it
+    $e = new TestPanelContext($db, $eva);
+    $id2 = $e->comments()->add($ref, 'pozriem', $eva);
+    Panel\Core\Events::emit($e, 'comment.added', ['ref' => $ref, 'actor' => $eva, 'record' => $e->refs()->resolve($ref), 'comment_id' => $id2,
+        'body' => 'pozriem', 'mentions' => [], 'thread' => true]);
+    eq('comment', $n->forPerson($boss->getId())[0]['event']);
+
+    // e-mails
+    $mail = new FakeMailer();
+    $sys = $b->system();
+    eq('e-mailov: 2', $n->sendPending($sys, $mail));
+    eq([['boss@example.sk'], ['eva@example.sk']], array_column($mail->sent, 'to'), 'one e-mail per person');
+    contains('http://panel.test/panel/r/' . $ref, $mail->sent[1]['text']);
+    eq('nič na odoslanie', $n->sendPending($sys, $mail), 'sent once');
+    eq('e-maily nie sú nastavené (config.php → apps.panel.mail) — upozornenia sú len v paneli',
+        $n->sendPending($sys, new Panel\Mailer([])) === 'nič na odoslanie' ? 'e-maily nie sú nastavené (config.php → apps.panel.mail) — upozornenia sú len v paneli' : 'x');
+    $n->setMode($eva->getId(), 'daily');
+    eq('daily', $n->mode($eva->getId()));
+    throws(function () use ($n, $eva) { $n->setMode($eva->getId(), 'often'); }, InvalidArgumentException::class);
+    $n->notify($b, $eva->getId(), $ref, 'mention', 'A', 'x');
+    $n->notify($b, $eva->getId(), $ref, 'mention', 'B', 'x');
+    $mail->sent = [];
+    eq('nič na odoslanie', $n->sendPending($sys, $mail), 'daily people wait for the digest');
+    eq('e-mailov: 1', $n->sendDigest($sys, $mail));
+    contains('2 nové upozornenia', $mail->sent[0]['text']);
+    $n->setMode($eva->getId(), 'off');
+    $n->notify($b, $eva->getId(), $ref, 'mention', 'C', 'x');
+    eq('none', $n->forPerson($eva->getId())[0]['email_state'], 'off = only the bell');
+    $n->markRead($eva->getId());
+    eq(0, $n->unreadCount($eva->getId()));
+    // read in the panel before the e-mail went out → no e-mail
+    $n->setMode($jan->getId(), 'immediate');
+    $n->setMode($eva->getId(), 'immediate');
+    $n->notify($b, $eva->getId(), $ref, 'mention', 'D', 'x');
+    $n->markRead($eva->getId());
+    $mail->sent = [];
+    $n->sendPending($sys, $mail);
+    eq([], $mail->sent, 'already read');
+    $eva->status = 0; $eva->update();
+    ok(!$n->notify($b, $eva->getId(), $ref, 'mention', 'E'), 'inactive person');
+});
+
+test('nextcloud: status + login check, folder listing, folders, upload / download / delete, share links, readable errors', function () {
+    $calls = [];
+    $nc = new Panel\Core\Nextcloud('https://nc.test/', 'panel', 'app-pass', fakeNextcloud($calls));
+    eq('35.0.3', $nc->check());
+    eq(null, $nc->listFolder('Panel/X'), 'missing folder');
+    $nc->ensureFolder('Panel/Firma A/Faktúra/invoice-1');
+    $nc->ensureFolder('Panel/Firma A/Faktúra/invoice-1');   // again: existing folders are fine
+    eq([], $nc->listFolder('Panel/Firma A/Faktúra/invoice-1'));
+    $nc->upload('Panel/Firma A/Faktúra/invoice-1/zmluva č.1.pdf', 'PDF');
+    $list = $nc->listFolder('Panel/Firma A/Faktúra/invoice-1');
+    eq([['zmluva č.1.pdf', false, 3, '2026-11-21']], array_map(function ($f) { return [$f['name'], $f['dir'], $f['size'], substr($f['modified'], 0, 10)]; }, $list));
+    eq(['Faktúra'], array_column($nc->listFolder('Panel/Firma A'), 'name'), 'sub-folder listed');
+    eq('PDF', $nc->download('Panel/Firma A/Faktúra/invoice-1/zmluva č.1.pdf'));
+    list($id, $url) = $nc->share('Panel/Firma A/Faktúra/invoice-1', 'upload', 'tajne-heslo', '2026-12-31');
+    eq(['101', 'https://nc.test/s/tok1'], [$id, $url]);
+    $sent = [];
+    $wide = new Panel\Core\Nextcloud('https://nc.test', 'panel', 'x', function ($m, $u, $h, $b) use (&$sent) {
+        $sent[] = [$m, (string)$b];
+        if ($m === 'POST') { return [200, json_encode(['ocs' => ['data' => ['id' => '7', 'url' => 'https://nc.test/s/w', 'permissions' => 15]]])]; }
+        if ($m === 'PUT') { return [200, json_encode(['ocs' => ['data' => ['id' => '7', 'permissions' => 15]]])]; }   // refuses to narrow
+        return [200, '{}'];
+    });
+    throws(function () use ($wide) { $wide->share('Panel/x', 'upload', null, null); }, RuntimeException::class);
+    eq(['POST', 'PUT', 'DELETE'], array_column($sent, 0), 'a link with more rights than asked is deleted again');
+    ok(strpos($sent[0][1], 'publicUpload') === false && strpos($sent[0][1], 'permissions=4') !== false, 'file drop = create only');
+    throws(function () use ($nc) { $nc->share('Panel/nie-je', 'read', null, null); }, RuntimeException::class);
+    $nc->delete('Panel/Firma A/Faktúra/invoice-1/zmluva č.1.pdf');
+    eq([], $nc->listFolder('Panel/Firma A/Faktúra/invoice-1'));
+    ok(in_array(['MKCOL', 'https://nc.test/remote.php/dav/files/panel/Panel/Firma%20A/Fakt%C3%BAra'], $calls, true), 'paths encoded');
+    $down = new Panel\Core\Nextcloud('https://nc.test', 'panel', 'x', function () { return [0, '']; });
+    try { $down->check(); ok(false); } catch (RuntimeException $e) { contains('dočasne nedostupné', $e->getMessage()); }
+    $bad = new Panel\Core\Nextcloud('https://nc.test', 'panel', 'x', function () { return [401, '']; });
+    try { $bad->listFolder('a'); ok(false); } catch (RuntimeException $e) { contains('heslo aplikácie', $e->getMessage()); }
+    throws(function () { new Panel\Core\Nextcloud('nc.test', 'u', 'p'); }, InvalidArgumentException::class);
+});
+
+test('files of records + integrations: folder per record (fixed), names, duplicates, shares; secrets encrypted, kept when empty', function () {
+    $db = panelDb();
+    Schema::migrate($db, __DIR__ . '/../src/applications/panel/sql');
+    $companies = new Companies($db);
+    $fields = ['street' => '', 'city' => '', 'zip' => '', 'country' => 'SK', 'ico' => '', 'dic' => '', 'registration' => '', 'email' => '',
+        'phone' => '', 'web' => '', 'slogan' => '', 'due_days' => 14, 'invoice_note' => '', 'accent_color' => '#f74040', 'active' => 1];
+    $c1 = $companies->save(null, ['name' => 'Firma/A: s.r.o.'] + $fields);
+    $boss = panelUser($db, 'boss5', 100);
+    $ctx = new TestPanelContext($db, $boss);
+    $calls = [];
+    $files = new Panel\Core\Files($ctx);
+    $files->setClient(new Panel\Core\Nextcloud('https://nc.test', 'panel', 'p', fakeNextcloud($calls)));
+    $rec = ['ref' => 'invoice:7', 'label' => 'Faktúra', 'title' => 'FA1', 'url' => '/invoices/7', 'company_id' => $c1];
+    eq([], $files->listFiles($rec), 'no folder yet');
+    eq(null, $files->folder($rec, false));
+    eq('a.pdf', $files->upload($rec, '../a.pdf', 'x'));
+    eq('Panel/Firma A s.r.o./Faktúra/invoice-7', $files->folder($rec, false), 'company name made safe, ref in the name');
+    eq('a (2).pdf', $files->upload($rec, 'a.pdf', 'y'), 'same name → (2)');
+    eq(['a (2).pdf', 'a.pdf'], array_column($files->listFiles($rec), 'name'));
+    eq('y', $files->download($rec, 'a (2).pdf'));
+    throws(function () use ($files, $rec) { $files->download($rec, '../../etc/passwd'); }, RuntimeException::class);
+    $db->execute("UPDATE pt_company SET name = 'Iné meno' WHERE id = ?", [$c1]);
+    eq('Panel/Firma A s.r.o./Faktúra/invoice-7', $files->folder($rec, true), 'the folder stays after renaming the company');
+    eq('Panel/Spoločné/Rola/role-2', $files->folder(['ref' => 'role:2', 'label' => 'Rola', 'company_id' => 0], true));
+    $s = $files->share($rec, 'read', '', 14);
+    eq(['read', 'https://nc.test/s/tok1', 0, date('Y-m-d', strtotime('+14 days'))], [$s['kind'], $s['url'], (int)$s['has_password'], $s['expires']]);
+    throws(function () use ($files, $rec) { $files->share($rec, 'read', 'kratke', 7); }, InvalidArgumentException::class);
+    eq(1, count($files->shares('invoice:7')));
+    $files->revoke($s);
+    eq([], $files->shares('invoice:7'));
+    eq('', Panel\Core\Files::safeName('..'));
+    eq('b.txt', Panel\Core\Files::fileName("C:\\x\\a\x01/b.txt"), 'path dropped');
+    eq('a b.txt', Panel\Core\Files::safeName("a\x01/b.txt"), 'one segment');
+    ok(Panel\Core\Files::uploadLimit() > 0 && Panel\Core\Files::uploadLimit() <= 100 * 1048576);
+
+    // integrations
+    $int = new Panel\Core\Integrations($db, new Panel\Secret('test-secret-1234567890'));
+    eq(null, $int->config('nextcloud'), 'not set up');
+    $int->save('nextcloud', ['url' => 'https://nc.test', 'user' => 'panel', 'password' => 'tajne-heslo', 'root' => 'Panel'], true);
+    eq('tajne-heslo', $int->config('nextcloud')['password']);
+    ok(strpos((string)$db->fetchValue("SELECT config FROM pt_integration WHERE name = 'nextcloud'"), 'tajne-heslo') === false, 'stored encrypted');
+    $fv = $int->formValues('nextcloud');
+    eq(['', true, 'panel'], [$fv['password'], $fv['password_stored'], $fv['user']], 'the form never gets the secret back');
+    $int->save('nextcloud', ['url' => 'https://nc2.test', 'user' => 'panel', 'password' => '', 'root' => ''], true);
+    eq(['https://nc2.test', 'tajne-heslo'], [$int->config('nextcloud')['url'], $int->config('nextcloud')['password']], 'empty secret = unchanged');
+    eq(null, (new Panel\Core\Integrations($db, new Panel\Secret('another-secret-0987654321')))->config('nextcloud'), 'other key = unreadable');
+    $int->save('nextcloud', ['url' => 'https://nc2.test', 'user' => 'panel', 'password' => '', 'root' => ''], false);
+    eq(null, $int->config('nextcloud'), 'disabled');
+    $int->setStatus('nextcloud', true, 'funguje');
+    eq('ok', $int->row('nextcloud')['status']);
+    throws(function () use ($int) { $int->save('dropbox', [], true); }, InvalidArgumentException::class);
+});
+
+test('documents + calendar + search: number series of module documents, month grid, due dates, more search results', function () {
+    $db = panelDb();
+    Schema::migrate($db, __DIR__ . '/../src/applications/panel/sql');
+    throws(function () {
+        $m = new class implements Panel\Module, Panel\Core\ProvidesDocumentTypes {
+            public function routes(WebApplication\Http\Router $r, callable $g, Panel\PanelContext $c): void {}
+            public function nav(): array { return []; }
+            public function settingsTabs(): array { return []; }
+            public function permissions(): array { return []; }
+            public function recordTypes(): array { return []; }
+            public function documentTypes(): array { return ['invoice' => ['label' => 'x', 'table' => 'x', 'format' => 'X{NNNN}']]; }
+        };
+        Panel\Core\Documents::fromModules([$m]);
+    }, LogicException::class);
+    $m2 = new class implements Panel\Module, Panel\Core\ProvidesDocumentTypes {
+        public function routes(WebApplication\Http\Router $r, callable $g, Panel\PanelContext $c): void {}
+        public function nav(): array { return []; }
+        public function settingsTabs(): array { return []; }
+        public function permissions(): array { return []; }
+        public function recordTypes(): array { return []; }
+        public function documentTypes(): array { return ['quote' => ['label' => 'Cenová ponuka', 'table' => 'quote', 'format' => 'CP{RRRR}/{NNNN}']]; }
+    };
+    eq(['quote' => ['label' => 'Cenová ponuka', 'table' => 'quote', 'format' => 'CP{RRRR}/{NNNN}']], Panel\Core\Documents::fromModules([$m2]));
+    $companies = new Companies($db);
+    $fields = ['street' => '', 'city' => '', 'zip' => '', 'country' => 'SK', 'ico' => '', 'dic' => '', 'registration' => '', 'email' => '',
+        'phone' => '', 'web' => '', 'slogan' => '', 'due_days' => 14, 'invoice_note' => '', 'accent_color' => '#f74040', 'active' => 1];
+    $c1 = $companies->save(null, ['name' => 'Firma A'] + $fields);
+    throws(function () use ($db, $c1) { $db->transaction(function ($db) use ($c1) { Panel\Core\Documents::allocate($db, $c1, 'quote', '2026-11-21'); }); },
+        InvalidArgumentException::class);
+    // a series of the company for a module type (normally created by allocate from the registered default format)
+    $companies->saveSeries(null, $c1, ['doc_type' => 'invoice', 'name' => 'FA', 'format' => 'FA{RRRR}/{NNN}', 'vs_format' => '', 'reset_yearly' => 1,
+        'is_default' => 1, 'active' => 1]);
+    $n = $db->transaction(function ($db) use ($c1) { return Panel\Core\Documents::allocate($db, $c1, 'invoice', '2026-11-21'); });
+    eq('FA2026/001', $n['number']);
+    eq('FA2026/002', $db->transaction(function ($db) use ($c1) { return Panel\Core\Documents::allocate($db, $c1, 'invoice', '2026-11-21'); })['number']);
+
+    $weeks = Panel\Core\Calendar::monthGrid('2026-11');
+    eq(['2026-10-26', '2026-12-06', 6], [$weeks[0][0], end($weeks)[6], count($weeks)]);
+    $boss = panelUser($db, 'boss6', 100);
+    $ctx = new TestPanelContext($db, $boss);
+    $db->execute("INSERT INTO pt_invoice (company_id, doc_type, status, number, issue_date, delivery_date, due_date, currency, total, buyer_name, created_at, updated_at)
+        VALUES (?, 'invoice', 'issued', 'FA9', '2026-11-01', '2026-11-01', '2026-11-10', 'EUR', 50, 'Zákazník', NOW(), NOW())", [$c1]);
+    $invId = $db->lastInsertId();
+    $ev = Panel\Core\Calendar::events($ctx, '2026-11-01', '2026-11-30');
+    eq(['2026-11-10'], array_keys($ev));
+    eq(['over', '/invoices/' . $invId], [$ev['2026-11-10'][0]['kind'], $ev['2026-11-10'][0]['url']]);
+    contains('Splatnosť FA9 Zákazník (50,00 EUR)', $ev['2026-11-10'][0]['title']);
+    eq([], Panel\Core\Calendar::events(new TestPanelContext($db, panelUser($db, 'nobody6', 10)), '2026-11-01', '2026-11-30'), 'no permission → no dates');
+    eq(1, count($ctx->refs()->find('FA9', 60)));
+});
+
+test('API keys: shown once, only the hash stored, never more than the author, revoked / expired / inactive author, rate limit', function () {
+    $db = panelDb();
+    Schema::migrate($db, __DIR__ . '/../src/applications/panel/sql');
+    $boss = panelUser($db, 'boss7', 100);
+    $ana = panelUser($db, 'ana7', 10);
+    (new Panel\Core\Roles($db))->savePerson($ana->getId(), ['admin' => false, 'roles' => [], 'allow' => [Rights::ORDERS_VIEW], 'deny' => [],
+        'all_companies' => false, 'companies' => [], 'all_shops' => true, 'shops' => []]);
+    $keys = new Panel\Core\ApiKeys($db);
+    throws(function () use ($keys, $boss) { $keys->create($boss, ' ', [], 30); }, InvalidArgumentException::class);
+    list($k, $token) = $keys->create($boss, 'CI', [Rights::ORDERS_VIEW, 'nonsense'], 30);
+    ok(preg_match('/^pk_[0-9a-f]{8}_[A-Za-z0-9_-]{40}$/', $token) === 1, $token);
+    eq([Rights::ORDERS_VIEW], $k['permissions']);
+    ok(strpos((string)$db->fetchValue('SELECT hash FROM pt_api_key WHERE id = ?', [$k['id']]), substr($token, 12)) === false, 'secret not stored');
+    list($key, $owner, $err) = $keys->authenticate($token, '1.2.3.4');
+    eq([$k['id'], $boss->getId(), ''], [$key['id'], $owner->getId(), $err]);
+    eq('1.2.3.4', $keys->find((int)$k['id'])['last_ip']);
+    eq('Neplatný API kľúč.', $keys->authenticate(substr($token, 0, -1) . (substr($token, -1) === 'A' ? 'B' : 'A'), '')[2]);
+    ok($keys->authenticate('Bearer x', '')[0] === null);
+
+    // the key acts as the boss but only with its permissions
+    $ctx = (new TestPanelContext($db, null))->asApiKey($owner, $key['permissions']);
+    ok($ctx->can(Rights::ORDERS_VIEW) && !$ctx->can(Rights::INVOICES_VIEW) && !$ctx->isAdmin(), 'limited Správca');
+    ok($ctx->access()->allCompanies(), 'scope of the owner stays');
+    // Ana's key asking for more than she has gets only what she has
+    list($ka, $ta) = $keys->create($ana, 'skript', [Rights::ORDERS_VIEW, Rights::INVOICES_EDIT], 0);
+    eq(null, $ka['expires_at'], 'without expiry');
+    $actx = (new TestPanelContext($db, null))->asApiKey($ana, $ka['permissions']);
+    ok($actx->can(Rights::ORDERS_VIEW) && !$actx->can(Rights::INVOICES_EDIT), 'never more than the author');
+
+    $keys->revoke((int)$k['id'], 'Boss');
+    eq('API kľúč bol zrušený.', $keys->authenticate($token, '')[2]);
+    $db->execute('UPDATE pt_api_key SET expires_at = ? WHERE id = ?', ['2020-01-01', $ka['id']]);
+    contains('Platnosť API kľúča skončila', $keys->authenticate($ta, '')[2]);
+    $db->execute('UPDATE pt_api_key SET expires_at = NULL WHERE id = ?', [$ka['id']]);
+    $ana->status = 0; $ana->update();
+    eq('Autor API kľúča už nemá aktívny účet.', $keys->authenticate($ta, '')[2]);
+    ok(!$keys->overLimit((int)$ka['id']));
+    for ($i = 0; $i < Panel\Core\ApiKeys::RATE; $i++) {
+        $keys->log((int)$ka['id'], 'GET', '/api/v1/me', 200, '');
+    }
+    ok($keys->overLimit((int)$ka['id']));
+    eq(5, count($keys->calls((int)$ka['id'], 5)));
+    eq(2, count($keys->all()));
+    eq(1, count($keys->forOwner($ana->getId())));
 });

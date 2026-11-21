@@ -42,6 +42,21 @@ class Request
                 $headers[str_replace('_', '-', $k)] = $v;
             }
         }
+        // Apache (CGI / FPM, often also mod_php) does not put "Authorization" into $_SERVER — API keys / JWT would be lost.
+        // The shared root .htaccess must not be changed, so take it from where PHP still has it.
+        if (!isset($headers['AUTHORIZATION'])) {
+            $auth = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
+            if ($auth === '' && function_exists('getallheaders')) {
+                foreach ((array)getallheaders() as $name => $value) {
+                    if (strcasecmp((string)$name, 'Authorization') === 0) {
+                        $auth = (string)$value;
+                    }
+                }
+            }
+            if ($auth !== '') {
+                $headers['AUTHORIZATION'] = $auth;
+            }
+        }
         $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
         // Method override is only honoured for POST (HTML forms / clients without PUT/DELETE).
         if (strtoupper($method) === 'POST') {
@@ -50,11 +65,24 @@ class Request
                 $method = strtoupper($override);
             }
         }
-        $uri = $_SERVER['REQUEST_URI'] ?? '/';
-        $path = parse_url($uri, PHP_URL_PATH);
+        $path = self::pathFromUri((string)($_SERVER['REQUEST_URI'] ?? '/'));
         $host = $_SERVER['HTTP_HOST'] ?? ($_SERVER['SERVER_NAME'] ?? 'localhost');
         $body = (string)file_get_contents('php://input');
-        return new self($method, $host, is_string($path) ? $path : '/', $_GET, $_POST, $headers, $_SERVER, $body, $_COOKIE, $_FILES);
+        return new self($method, $host, $path, $_GET, $_POST, $headers, $_SERVER, $body, $_COOKIE, $_FILES);
+    }
+
+    /**
+     * Path of a request URI without query and fragment. Not parse_url(): it returns false for paths whose last segment
+     * looks like "host:port" (e.g. /panel/r/invoice:7 — record short links), and the request would land on the wrong app.
+     * Absolute-form URIs (http://host/path, sent through some proxies) are accepted too.
+     */
+    public static function pathFromUri(string $uri): string
+    {
+        $path = explode('#', explode('?', $uri, 2)[0], 2)[0];
+        if (preg_match('#^[a-z][a-z0-9+.-]*://[^/]*(/.*)?$#i', $path, $m)) {
+            $path = $m[1] ?? '';
+        }
+        return $path === '' ? '/' : $path;
     }
 
     /** Copy of the request with the path of the app's mount point (e.g. '/panel') remembered. */
@@ -114,6 +142,29 @@ class Request
             return null;
         }
         return $f;
+    }
+
+    /**
+     * Several uploaded files from <input type="file" name="key[]" multiple> (or one from name="key"): list of
+     * ['name', 'type', 'tmp_name', 'error', 'size'], empty slots (UPLOAD_ERR_NO_FILE) left out.
+     */
+    public function files(string $key): array
+    {
+        $f = $this->files[$key] ?? null;
+        if (!is_array($f) || !isset($f['error'])) {
+            return [];
+        }
+        if (!is_array($f['error'])) {
+            return $f['error'] === UPLOAD_ERR_NO_FILE ? [] : [$f];
+        }
+        $out = [];
+        foreach ($f['error'] as $i => $err) {
+            if ($err !== UPLOAD_ERR_NO_FILE && !is_array($err)) {
+                $out[] = ['name' => (string)($f['name'][$i] ?? ''), 'type' => (string)($f['type'][$i] ?? ''), 'tmp_name' => (string)($f['tmp_name'][$i] ?? ''),
+                    'error' => (int)$err, 'size' => (int)($f['size'][$i] ?? 0)];
+            }
+        }
+        return $out;
     }
 
     /** Value from JSON body, form body or query string (in that order). */

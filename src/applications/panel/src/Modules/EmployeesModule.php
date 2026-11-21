@@ -50,4 +50,34 @@ class EmployeesModule implements Module
                 'label' => 'Nastavenia → Zamestnanci a roly — účty, roly, práva (len v rozsahu vlastných práv)'],
         ];
     }
+
+    public function recordTypes(): array
+    {
+        return [
+            ['type' => 'employee', 'label' => 'Zamestnanec',
+                'resolve' => function (PanelContext $ctx, array $ids): ?array {
+                    if (!$ctx->can(Rights::SETTINGS_EMPLOYEES)) {
+                        return null;
+                    }
+                    $name = $ctx->db()->fetchValue('SELECT name FROM ' . $ctx->db()->table('client') . ' WHERE id = ? AND type = 0', [$ids[0]]);
+                    return $name !== false && $name !== null ? ['title' => $name, 'url' => '/employees/' . $ids[0]] : null;
+                },
+                'lookup' => function (PanelContext $ctx, string $q): array {
+                    if (!$ctx->can(Rights::SETTINGS_EMPLOYEES)) {
+                        return [];
+                    }
+                    $like = '%' . addcslashes($q, '%_\\') . '%';
+                    return array_map(function ($id) { return 'employee:' . $id; }, array_column($ctx->db()->query('SELECT id FROM ' . $ctx->db()->table('client')
+                        . ' WHERE type = 0 AND (name LIKE ? OR identifier LIKE ?) ORDER BY name LIMIT 5', [$like, $like]), 'id'));
+                }],
+            ['type' => 'role', 'label' => 'Rola',
+                'resolve' => function (PanelContext $ctx, array $ids): ?array {
+                    if (!$ctx->can(Rights::SETTINGS_EMPLOYEES)) {
+                        return null;
+                    }
+                    $name = $ctx->db()->fetchValue('SELECT name FROM ' . $ctx->db()->table('role') . ' WHERE id = ?', [$ids[0]]);
+                    return $name !== false && $name !== null ? ['title' => 'Rola ' . $name, 'url' => '/employees/roles/' . $ids[0]] : null;
+                }],
+        ];
+    }
 }

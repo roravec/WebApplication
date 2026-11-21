@@ -46,4 +46,25 @@ class CompaniesModule implements Module
                 'label' => 'Firmy — zakladanie nových firiem'],
         ];
     }
+
+    public function recordTypes(): array
+    {
+        return [['type' => 'company', 'label' => 'Firma',
+            'resolve' => function (PanelContext $ctx, array $ids): ?array {
+                if (!$ctx->can(Rights::COMPANIES_MANAGE) || !$ctx->canCompany($ids[0])) {
+                    return null;
+                }
+                $name = $ctx->db()->fetchValue('SELECT name FROM ' . $ctx->db()->table('company') . ' WHERE id = ?', [$ids[0]]);
+                return $name ? ['title' => $name, 'url' => '/companies/' . $ids[0], 'company_id' => $ids[0]] : null;
+            },
+            'lookup' => function (PanelContext $ctx, string $q): array {
+                $ids = $ctx->companyIds();
+                if (!$ids || !$ctx->can(Rights::COMPANIES_MANAGE)) {
+                    return [];
+                }
+                return array_map(function ($id) { return 'company:' . $id; }, array_column($ctx->db()->query('SELECT id FROM ' . $ctx->db()->table('company')
+                    . ' WHERE (name LIKE ? OR ico = ?) AND id IN (' . implode(',', array_map('intval', $ids)) . ') LIMIT 5',
+                    ['%' . addcslashes($q, '%_\\') . '%', $q]), 'id'));
+            }]];
+    }
 }

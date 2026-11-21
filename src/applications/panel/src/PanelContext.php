@@ -26,6 +26,8 @@ class PanelContext
     /** @var array|null */ private $connections = null;
     /** @var OrderSource[]|null */ private $orderSources = null;
     /** @var \Panel\Core\Access|null */ private $access = null;
+    /** @var \Panel\Core\Refs|null */ private $refs = null;
+    /** @var Client|null|false person this context acts for; false = the logged-in one */ private $userOverride = false;
     /** @var Navigation|null */ private $navigation = null;
 
     public function __construct(Application $app, Request $request)
@@ -52,8 +54,59 @@ class PanelContext
 
     public function user(): ?Client
     {
+        return $this->userOverride !== false ? $this->userOverride : $this->authUser();
+    }
+
+    /** The person logged in through the framework (session / JWT). */
+    protected function authUser(): ?Client
+    {
         $auth = $this->app->getClientAuth();
         return $auth ? $auth->getClient() : null;
+    }
+
+    /**
+     * The same panel seen by another person (null = nobody — the scheduler, cron): access, record references and order
+     * sources are his. Used to check "may HE see it" (notifications) and to run jobs / API calls.
+     */
+    public function asUser(?Client $user): self
+    {
+        $c = clone $this;
+        $c->userOverride = $user;
+        $c->access = null;
+        $c->refs = null;
+        $c->shopOrders = null;
+        $c->orderSources = null;
+        return $c;
+    }
+
+    /** Context of the scheduler / cron: no person, no restrictions of a person (jobs check what they need). */
+    public function system(): self
+    {
+        return $this->asUser(null);
+    }
+
+    /** API call with a key: the key's owner, permissions limited to the key's (never more than the owner has now). */
+    public function asApiKey(Client $owner, array $permissions): self
+    {
+        $c = $this->asUser($owner);
+        $c->access()->limitTo($permissions);
+        return $c;
+    }
+
+    public function notifications(): \Panel\Core\Notifications
+    {
+        return new \Panel\Core\Notifications($this->db());
+    }
+
+    /** Unread notifications of the logged-in person (the bell in the layout). */
+    public function unreadNotifications(): int
+    {
+        $u = $this->user();
+        try {
+            return $u ? $this->notifications()->unreadCount($u->getId()) : 0;
+        } catch (\PDOException $e) {
+            return 0;   // before the migration ran
+        }
     }
 
     public function isLoggedIn(): bool
@@ -66,7 +119,7 @@ class PanelContext
     {
         if ($this->access === null) {
             $u = $this->user();
-            $this->access = new \Panel\Core\Access($this->app->getDatabase(), $u ? $u->getId() : 0, $u ? $u->getRights() : 0);
+            $this->access = new \Panel\Core\Access($this->db(), $u ? $u->getId() : 0, $u ? $u->getRights() : 0);
         }
         return $this->access;
     }
@@ -126,6 +179,53 @@ class PanelContext
             $source->restrictShops($this->access()->shopIdsFor($source->id()));
         }
         return $source;
+    }
+
+    // ------------------------------------------------------------------ core services (docs/panel-architektura.md ch. 4)
+
+    /** Record references of this person (resolve = title + URL only of what he may see; remembered per request). */
+    public function refs(): \Panel\Core\Refs
+    {
+        if ($this->refs === null) {
+            $this->refs = new \Panel\Core\Refs($this);
+        }
+        return $this->refs;
+    }
+
+    public function links(): \Panel\Core\Links
+    {
+        return new \Panel\Core\Links($this->db());
+    }
+
+    public function comments(): \Panel\Core\Comments
+    {
+        return new \Panel\Core\Comments($this->db());
+    }
+
+    public function activity(): \Panel\Core\Activity
+    {
+        return new \Panel\Core\Activity($this->db());
+    }
+
+    /**
+     * Everything the box "Komentáre · Prepojenia · História" of a record page needs (views/core/record.php); null when
+     * the person may not see the record.
+     */
+    public function recordPanel(string $ref): ?array
+    {
+        $record = $this->refs()->resolve($ref);
+        if ($record === null) {
+            return null;
+        }
+        $links = [];
+        foreach ($this->links()->forRef($ref) as $l) {
+            $other = $this->refs()->resolve($l['other']);
+            if ($other !== null) {   // links to records the person may not see are not shown at all
+                $links[] = $l + ['record' => $other];
+            }
+        }
+        return ['record' => $record, 'comments' => $this->comments()->forRef($ref), 'links' => $links,
+            'history' => $this->activity()->forRef($ref), 'people' => $this->comments()->people()];
     }
 
     public function companies(): Companies

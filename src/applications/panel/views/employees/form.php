@@ -1,8 +1,8 @@
-<?php use Panel\Audit; use WebApplication\Csrf;
+<?php use WebApplication\Csrf;
 /**
  * @var WebApplication\Entity\Client|null $client; array $values (identifier, name, status, access), $errors, $roles, $groups,
  * $companies (id => name), $shops (list of key, name, source), $shopErrors, $editorPerms, $readOnly (what he has beyond the
- * editor — read only), $effective, $history; bool $editorAdmin; int $minPassword
+ * editor — read only), $effective; bool $editorAdmin; int $minPassword
  */
 $err = function ($k) use ($errors, $e) { return isset($errors[$k]) ? '<span class="field-err">' . $e($errors[$k]) . '</span>' : ''; };
 $action = $client ? '/employees/' . $client->getId() : '/employees';
@@ -109,13 +109,4 @@ foreach ($shops as $s) {
   </fieldset>
 </form>
 
-<?php if ($history): ?>
-<h2>História</h2>
-<table class="grid compact">
-  <tbody>
-  <?php foreach (array_reverse($history) as $h): ?>
-    <tr><td><?= $e($f->dateTime($h['created_at'])) ?></td><td><?= $e($h['client_name']) ?></td><td><?= $e(Audit::label($h['action'])) ?> <?= $e($h['details']) ?></td></tr>
-  <?php endforeach ?>
-  </tbody>
-</table>
-<?php endif ?>
+<?php if ($client): ?><?= $view->partial('core/record', ['ref' => 'employee:' . $client->getId()]) ?><?php endif ?>

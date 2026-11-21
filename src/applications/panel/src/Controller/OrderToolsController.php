@@ -103,7 +103,7 @@ class OrderToolsController
     private function audit(int $src, OrderSource $source, array $o, string $action, string $details): void
     {
         Audit::log($this->ctx->db(), $this->ctx->user(), 'shop_order', (int)$o['id_order'], $action,
-            ($src ? $source->label() . ' ' : '') . $o['reference'] . ': ' . $details);
+            ($src ? $source->label() . ' ' : '') . $o['reference'] . ': ' . $details, 'order:' . $src . ':' . (int)$o['id_order']);
     }
 
     // ------------------------------------------------------------------ tracking number (+ state)
@@ -161,7 +161,7 @@ class OrderToolsController
             $this->log()->addNote($src, (int)$o['id_order'], mb_substr($text, 0, 5000, 'UTF-8'), $this->ctx->user());
             Session::flash('msg', 'Poznámka pridaná.');
         }
-        return $this->back($src, $o, '#notes');
+        return $this->back($src, $o, '#comments');
     }
 
     // ------------------------------------------------------------------ message to the customer

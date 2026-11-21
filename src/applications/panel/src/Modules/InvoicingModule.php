@@ -4,13 +4,15 @@ namespace Panel\Modules;
 use Panel\Controller\AccountingController;
 use Panel\Controller\BankImportController;
 use Panel\Controller\InvoicesController;
+use Panel\Core\ProvidesJobs;
+use Panel\Core\ProvidesCalendar;
 use Panel\Module;
 use Panel\PanelContext;
 use Panel\Rights;
 use WebApplication\Http\Router;
 
 /** Faktúry: invoices and credit notes, payments (bank statement, Fio), for the accountant (package, Omega export). */
-class InvoicingModule implements Module
+class InvoicingModule implements Module, ProvidesJobs, ProvidesCalendar
 {
     public function routes(Router $r, callable $guard, PanelContext $ctx): void
     {
@@ -19,8 +21,6 @@ class InvoicingModule implements Module
         $bank = new BankImportController($ctx);
         $VIEW = Rights::INVOICES_VIEW;
         $EDIT = Rights::INVOICES_EDIT;
-        // automatic monthly package for the accountant without a logged-in employee (token in config; 404 without it)
-        $r->get('/cron/accounting', [$accounting, 'cron']);
 
         $r->get('/invoices', $guard($VIEW, [$invoices, 'index']));
         $r->get('/invoices/new', $guard($EDIT, [$invoices, 'create']));
@@ -86,5 +86,65 @@ class InvoicingModule implements Module
             ['key' => Rights::INVOICES_UNISSUE, 'group' => 'Faktúry', 'sensitive' => true,
                 'label' => 'Faktúry — vrátiť omylom vystavenú faktúru do konceptu'],
         ];
+    }
+
+    public function recordTypes(): array
+    {
+        return [['type' => 'invoice', 'label' => 'Faktúra',
+            'resolve' => function (PanelContext $ctx, array $ids): ?array {
+                if (!$ctx->can(Rights::INVOICES_VIEW)) {
+                    return null;
+                }
+                $r = $ctx->db()->fetchOne('SELECT id, company_id, doc_type, status, number FROM ' . $ctx->db()->table('invoice') . ' WHERE id = ?', [$ids[0]]);
+                if (!$r || !$ctx->canCompany((int)$r['company_id'])) {
+                    return null;
+                }
+                $kind = $r['doc_type'] === 'credit_note' ? 'Dobropis' : 'Faktúra';
+                return ['title' => $r['status'] === 'draft' ? $kind . ' — koncept #' . $r['id'] : $kind . ' ' . $r['number'], 'url' => '/invoices/' . $r['id'],
+                    'company_id' => (int)$r['company_id']];
+            },
+            'lookup' => function (PanelContext $ctx, string $q): array {
+                $ids = $ctx->companyIds();
+                if (!$ids || !$ctx->can(Rights::INVOICES_VIEW)) {
+                    return [];
+                }
+                return array_map(function ($id) { return 'invoice:' . $id; }, array_column($ctx->db()->query('SELECT id FROM ' . $ctx->db()->table('invoice')
+                    . ' WHERE number LIKE ? AND company_id IN (' . implode(',', array_map('intval', $ids)) . ') ORDER BY id DESC LIMIT 5',
+                    ['%' . addcslashes($q, '%_\\') . '%']), 'id'));
+            }]];
+    }
+
+    public function jobs(): array
+    {
+        return [['key' => 'accounting.package', 'label' => 'Mesačný balík pre účtovníka (firmy s automatickým odosielaním)', 'every' => 60,
+            'run' => function (PanelContext $sys): string {
+                $out = [];
+                foreach ($sys->accounting()->sendDue($sys->mailer()) as $r) {
+                    $out[] = ($r['ok'] ? '' : 'CHYBA ') . $r['message'];
+                }
+                return $out ? implode('; ', $out) : 'nič na odoslanie';
+            }]];
+    }
+
+    /** Due dates of issued, not fully paid invoices (overdue ones in red). */
+    public function calendar(PanelContext $ctx, string $from, string $to): array
+    {
+        $ids = $ctx->companyIds();
+        if (!$ids || !$ctx->can(Rights::INVOICES_VIEW)) {
+            return [];
+        }
+        $t = $ctx->db()->table('invoice');
+        $out = [];
+        foreach ($ctx->db()->query("SELECT i.id, i.number, i.due_date, i.total, i.currency, i.buyer_name,
+                (SELECT COALESCE(SUM(p.amount), 0) FROM " . $ctx->db()->table('invoice_payment') . " p WHERE p.invoice_id = i.id) AS paid
+                FROM $t i WHERE i.status = 'issued' AND i.doc_type = 'invoice' AND i.due_date BETWEEN ? AND ?
+                AND i.company_id IN (" . implode(',', array_map('intval', $ids)) . ')', [$from, $to]) as $r) {
+            $rest = (float)$r['total'] - (float)$r['paid'];
+            if ($rest > 0.005) {
+                $out[] = ['date' => $r['due_date'], 'title' => 'Splatnosť ' . $r['number'] . ' ' . $r['buyer_name'] . ' (' . number_format($rest, 2, ',', ' ') . ' ' . $r['currency'] . ')',
+                    'url' => '/invoices/' . $r['id'], 'kind' => $r['due_date'] < date('Y-m-d') ? 'over' : 'due'];
+            }
+        }
+        return $out;
     }
 }

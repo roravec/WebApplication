@@ -143,7 +143,6 @@ class InvoicesController
                 : [],
             'original' => $original,
             'creditNotes' => $inv['doc_type'] === 'invoice' ? $repo->creditNotesOf((int)$inv['id']) : [],
-            'audit' => Audit::forEntity($this->ctx->db(), 'invoice', (int)$inv['id']),
             'canEdit' => $this->ctx->can(Rights::INVOICES_EDIT),
             // administrators: an issued document issued by mistake can go back to a draft (null = not shown)
             'unissueErrors' => $inv['status'] === 'issued' && $this->ctx->can(\Panel\Rights::INVOICES_UNISSUE) ? $repo->unissueErrors($inv) : null,
@@ -192,6 +191,7 @@ class InvoicesController
             $num = $this->ctx->invoices()->issue($id, $this->ctx->user());
             // archive the PDF exactly as issued (10-year retention); a failure doesn't undo the issue
             $pdfError = $this->ctx->renderer()->archive($id);
+            \Panel\Core\Events::emit($this->ctx, 'invoice.issued', ['ref' => 'invoice:' . $id, 'actor' => $this->ctx->user(), 'number' => $num['number']]);
             Session::flash('msg', 'Doklad vystavený pod číslom ' . $num['number'] . '.'
                 . ($pdfError ? ' PDF sa zatiaľ nepodarilo uložiť (' . $pdfError . ') — vytvorí sa pri prvom otvorení.' : ''));
         } catch (\RuntimeException $e) {

@@ -2,6 +2,7 @@
 namespace Panel\Modules;
 
 use Panel\Controller\ReportsController;
+use Panel\Core\ProvidesJobs;
 use Panel\Module;
 use Panel\PanelContext;
 use Panel\Rights;
@@ -10,7 +11,7 @@ use WebApplication\Http\Response;
 use WebApplication\Http\Router;
 
 /** Výsledky (company result, money, sales and margin, purchase prices); the order cost rules are in Nastavenia. */
-class ReportsModule implements Module
+class ReportsModule implements Module, ProvidesJobs
 {
     public function routes(Router $r, callable $guard, PanelContext $ctx): void
     {
@@ -49,5 +50,22 @@ class ReportsModule implements Module
             ['key' => Rights::REPORTS_VIEW, 'group' => 'Výsledky', 'sensitive' => true,
                 'label' => 'Výsledky — predaje, marža, nákupné ceny, výsledok firmy a peniaze'],
         ];
+    }
+
+    public function recordTypes(): array
+    {
+        return [];
+    }
+
+    public function jobs(): array
+    {
+        return [['key' => 'reports.monthly_summary', 'label' => 'Mesačný súhrn firmy e-mailom', 'every' => 60,
+            'run' => function (PanelContext $sys): string {
+                $out = [];
+                foreach ((new \Panel\Reports\MonthlySummary($sys))->sendDue($sys->mailer()) as $r) {
+                    $out[] = ($r['ok'] ? '' : 'CHYBA ') . $r['message'];
+                }
+                return $out ? implode('; ', $out) : 'nič na odoslanie';
+            }]];
     }
 }

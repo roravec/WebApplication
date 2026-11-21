@@ -91,4 +91,9 @@ class HelpModule implements Module
     {
         return [];
     }
+
+    public function recordTypes(): array
+    {
+        return [];
+    }
 }

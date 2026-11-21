@@ -23,6 +23,17 @@ class Mailer
         return class_exists(PHPMailer::class) && (($this->cfg['transport'] ?? '') === 'mail' || !empty($this->cfg['host']));
     }
 
+    /** Sender for system e-mails (notifications): config 'from', else the SMTP user if it is an address; '' = none. */
+    public function defaultFrom(): string
+    {
+        foreach ([(string)($this->cfg['from'] ?? ''), (string)($this->cfg['user'] ?? '')] as $a) {
+            if (filter_var($a, FILTER_VALIDATE_EMAIL)) {
+                return $a;
+            }
+        }
+        return '';
+    }
+
     /**
      * @param array $m from, from_name, reply_to, to (string[]), cc (string[]), bcc (string[]), subject, text,
      *                 attachments: list of [filename, bytes, mime]; optional html (+ text as the plain alternative)

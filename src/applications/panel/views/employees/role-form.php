@@ -1,7 +1,7 @@
-<?php use Panel\Audit; use WebApplication\Csrf;
+<?php use WebApplication\Csrf;
 /**
  * @var array|null $role; array $values (name, description, permissions), $errors, $groups, $editorPerms, $readOnly (permissions
- * of the role the editor lacks — read only), $holders (Client[]), $history; bool $editorAdmin
+ * of the role the editor lacks — read only), $holders (Client[]); bool $editorAdmin
  */
 $err = function ($k) use ($errors, $e) { return isset($errors[$k]) ? '<span class="field-err">' . $e($errors[$k]) . '</span>' : ''; };
 ?>
@@ -42,12 +42,5 @@ $err = function ($k) use ($errors, $e) { return isset($errors[$k]) ? '<span clas
     <?= Csrf::field() ?><button class="danger">Zmazať rolu</button>
   </form>
   <?php endif ?>
-  <?php if ($history): ?>
-  <h2>História</h2>
-  <table class="grid compact"><tbody>
-    <?php foreach (array_reverse($history) as $h): ?>
-      <tr><td><?= $e($f->dateTime($h['created_at'])) ?></td><td><?= $e($h['client_name']) ?></td><td><?= $e(Audit::label($h['action'])) ?> <?= $e($h['details']) ?></td></tr>
-    <?php endforeach ?>
-  </tbody></table>
-  <?php endif ?>
+  <?= $view->partial('core/record', ['ref' => 'role:' . $role['id']]) ?>
 <?php endif ?>

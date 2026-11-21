@@ -27,6 +27,8 @@ class Rights
     const SETTINGS_ESHOPS = 'settings.eshops';
     const SETTINGS_LEGAL = 'settings.legal';
     const SETTINGS_EMPLOYEES = 'settings.employees';
+    const SETTINGS_SYSTEM = 'settings.system';
+    const API_KEYS = 'api.keys';
 
     /** Pseudo-permission: Správca only (things no role may give). */
     const ADMIN_ONLY = 'admin';

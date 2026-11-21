@@ -19,30 +19,40 @@ class OrderLog
         return $this->db->table($name);
     }
 
+    /**
+     * Internal notes = comments of the order (Core\Comments, reference order:<source>:<id>) since 2026-11-21 — the old
+     * order_note rows were copied there by migration 020. @return array not deleted comments: text, client_name, created_at
+     */
     public function notes(int $source, int $orderId): array
     {
-        return $this->db->query("SELECT * FROM {$this->t('order_note')} WHERE source = ? AND order_id = ? ORDER BY id", [$source, $orderId]);
+        $out = [];
+        foreach ((new \Panel\Core\Comments($this->db))->forRef(self::ref($source, $orderId)) as $c) {
+            if ($c['deleted_at'] === null) {
+                $out[] = $c + ['text' => $c['body']];
+            }
+        }
+        return $out;
     }
 
     public function addNote(int $source, int $orderId, string $text, ?Client $user): void
     {
-        $this->db->execute("INSERT INTO {$this->t('order_note')} (source, order_id, text, client_id, client_name, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            [$source, $orderId, $text, $user ? $user->getId() : null, $user ? $user->getName() : '', date('Y-m-d H:i:s')]);
+        (new \Panel\Core\Comments($this->db))->add(self::ref($source, $orderId), $text, $user);
     }
 
-    /** @return array order_id => number of notes, for a list of orders */
+    /** @return array order_id => number of comments, for a list of orders */
     public function noteCounts(int $source, array $orderIds): array
     {
         $ids = array_values(array_filter(array_map('intval', $orderIds)));
-        if (!$ids) {
-            return [];
-        }
         $out = [];
-        foreach ($this->db->query("SELECT order_id, COUNT(*) AS n FROM {$this->t('order_note')} WHERE source = ? AND order_id IN (" . implode(',', $ids) . ')
-                GROUP BY order_id', [$source]) as $r) {
-            $out[(int)$r['order_id']] = (int)$r['n'];
+        foreach ((new \Panel\Core\Comments($this->db))->counts(array_map(function ($id) use ($source) { return self::ref($source, $id); }, $ids)) as $ref => $n) {
+            $out[(int)substr($ref, strrpos($ref, ':') + 1)] = $n;
         }
         return $out;
+    }
+
+    public static function ref(int $source, int $orderId): string
+    {
+        return 'order:' . $source . ':' . $orderId;
     }
 
     public function messages(int $source, int $orderId): array

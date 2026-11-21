@@ -1,5 +1,5 @@
-<?php use Panel\Audit; use Panel\Expenses\Expenses; use WebApplication\Csrf;
-/** @var array $exp, $company, $history, $shops; array|null $package, $recurring; bool $canEdit */
+<?php use Panel\Expenses\Expenses; use WebApplication\Csrf;
+/** @var array $exp, $company, $shops; array|null $package, $recurring; bool $canEdit */
 $cur = $exp['currency'];
 $overdue = $exp['status'] === 'open' && $exp['due_date'] && $exp['due_date'] < date('Y-m-d');
 $preview = null;
@@ -133,11 +133,4 @@ $fileUrl = function ($file, $download = false) use ($ctx, $exp) {
 </section>
 <?php endif ?>
 
-<section class="card">
-  <h2>História</h2>
-  <table class="grid">
-    <?php foreach ($history as $a): ?>
-      <tr><td><?= $e($f->dateTime($a['created_at'])) ?></td><td><?= $e($a['client_name']) ?></td><td><?= $e(Audit::label($a['action'])) ?> <span class="muted small"><?= $e($a['details']) ?></span></td></tr>
-    <?php endforeach ?>
-  </table>
-</section>
+<?= $view->partial('core/record', ['ref' => 'expense:' . (int)$exp['id']]) ?>

@@ -1,4 +1,4 @@
-<?php /** @var bool $canOrders, $shopAvailable; array|null $stats, $drafts, $overdue; array $latest, $shopErrors, $business, $todo */
+<?php /** @var bool $canOrders, $shopAvailable; array|null $stats, $drafts, $overdue; array $latest, $shopErrors, $business, $todo, $feed */
 $levelClass = ['ok' => 'pay-paid', 'warn' => 'pay-unpaid', 'over' => 'pay-overdue', 'over_immediate' => 'pay-overdue'];
 ?>
 <?php foreach ($shopErrors as $err): ?><p class="flash err">E-shop neodpovedá — <?= $e($err) ?></p><?php endforeach ?>
@@ -71,4 +71,14 @@ $levelClass = ['ok' => 'pay-paid', 'warn' => 'pay-unpaid', 'over' => 'pay-overdu
   <h2>Najnovšie objednávky</h2>
   <?= $view->partial('orders/table', ['rows' => $latest]) ?>
   <p><a href="<?= $e($ctx->url('/orders')) ?>">Všetky objednávky →</a></p>
+<?php endif ?>
+<?php if ($feed): ?>
+  <h2>Čo sa deje</h2>
+  <table class="grid compact"><tbody>
+  <?php foreach ($feed as $a): ?>
+    <tr><td><?= $e($f->dateTime($a['created_at'])) ?></td><td><?= $e($a['client_name']) ?></td>
+      <td><?= $e(Panel\Audit::label($a['action'])) ?> — <a href="<?= $e($ctx->url($a['record']['url'])) ?>"><?= $e($a['record']['label'] . ' ' . $a['record']['title']) ?></a></td></tr>
+  <?php endforeach ?>
+  </tbody></table>
+  <p><a href="<?= $e($ctx->url('/activity')) ?>">Všetko, čo sa deje →</a></p>
 <?php endif ?>

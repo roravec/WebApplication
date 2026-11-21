@@ -14,13 +14,21 @@ class Audit
         'accounting' => 'poslal doklady účtovníkovi', 'accounting_failed' => 'neodoslal doklady účtovníkovi (chyba)',
         'paid' => 'označil ako uhradený', 'unpaid' => 'zrušil úhradu', 'cancel' => 'stornoval', 'file' => 'priložil súbor', 'save' => 'uložil', 'summary' => 'poslal mesačný súhrn',
         'unissue' => 'vrátil do konceptu (omylom vystavený)', 'lines' => 'upravil položky objednávky v e-shope',
+        'comment' => 'pridal komentár', 'file_delete' => 'zmazal súbor', 'share' => 'vytvoril zdieľací odkaz', 'unshare' => 'zrušil zdieľací odkaz',
+        'api_key' => 'vytvoril API kľúč', 'api_key_revoke' => 'zrušil API kľúč', 'link' => 'prepojil so záznamom', 'unlink' => 'zrušil prepojenie so záznamom',
     ];
 
-    public static function log(Database $db, ?Client $user, string $entity, int $entityId, string $action, string $details = ''): void
+    /**
+     * @param string|null $ref the record (Core\Refs, e.g. "order:0:2481"); null = derived for the simple types (entity
+     *                         name = record type: invoice, expense, company …) — it puts the row into the record's history
+     *                         and the feed "Čo sa deje"
+     */
+    public static function log(Database $db, ?Client $user, string $entity, int $entityId, string $action, string $details = '', ?string $ref = null): void
     {
-        $db->execute('INSERT INTO ' . $db->table('audit') . ' (created_at, client_id, client_name, entity, entity_id, action, details)
-                      VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [date('Y-m-d H:i:s'), $user ? $user->getId() : 0, $user ? $user->getName() : '', $entity, $entityId, $action, $details]);
+        $db->execute('INSERT INTO ' . $db->table('audit') . ' (created_at, client_id, client_name, entity, entity_id, action, details, ref)
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [date('Y-m-d H:i:s'), $user ? $user->getId() : 0, $user ? $user->getName() : '', $entity, $entityId, $action, $details,
+             $ref ?? \Panel\Core\Refs::fromEntity($entity, $entityId)]);
     }
 
     public static function forEntity(Database $db, string $entity, int $entityId): array

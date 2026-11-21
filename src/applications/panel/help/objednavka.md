@@ -48,6 +48,8 @@ Produkty, množstvá, ceny a súčty. Tlačidlo **Upraviť položky, dopravu a z
 
 - **Expedícia**: zapíšte **číslo zásielky**, voliteľne zmeňte stav (napr. na odoslaný) a pošlite e-mail s odkazom
   na sledovanie → **Uložiť do e-shopu**.
-- **Interné poznámky** — vidia ich len zamestnanci, zákazník nie (napr. „volal, pošleme v piatok“).
+- **Komentáre** (predtým interné poznámky) — vidia ich len zamestnanci, zákazník nie (napr. „volal, pošleme v piatok“);
+  **@Meno** upozorní kolegu. Pod nimi **Prepojenia** (napr. s dokladom za dopravu) a **História** —
+  [Komentáre, prepojenia, história](help:komentare-a-prepojenia).
 - **E-maily zákazníkovi** — všetko, čo zákazník dostal: z e-shopu aj z panela. Prejdením myšou nad predmetom
   uvidíte celý predmet.

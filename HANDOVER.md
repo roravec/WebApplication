@@ -552,6 +552,82 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
    - **Deploy: upload the whole `applications/panel/` folder** (new `src/Core/`, changed modules, controllers, views,
      `css/panel.css`, `js/panel.js`, help, `sql/019_roles.sql` — runs by itself on the first request). After deploy:
      open Nastavenia → Zamestnanci a roly, check "Kto čo smie" (everyone must have the same access as before).
+40. **Phase 1 step b — records DONE** (2026-11-21, docs/panel-architektura.md chapter 4 "Stav — krok 1b"):
+   - `src/Core/Refs.php` — reference `type:id`; `Module::recordTypes()` (new interface method, all modules) registers
+     type, label, parts, `resolve` (title + URL, null = missing OR not allowed — access check inside), `lookup`. Types:
+     invoice, order (`order:<source>:<id>`, via new `OrderSource::brief()`), expense, customer, company, stock_item,
+     stock_doc, warehouse, employee, role. `Refs::find()` for linking (reference, short link, lookups).
+   - `src/Core/Links.php` (table `link`, kinds relates / blocks / verifies / derived / replaces, label per side),
+     `src/Core/Comments.php` (table `comment` + `comment_mention`; @mention = "@Full Name" of an active employee,
+     references in the text become links only for readers who may see them, author / Správca edit, soft delete),
+     `src/Core/Activity.php` (history per record + feed, filtered by `resolve`). `Audit::log(..., ?string $ref)` — derived
+     for simple types, passed for orders; new actions comment / link / unlink.
+   - `RecordsModule` + `RecordsController`: `/r/{ref}` (redirect), `/r/{ref}/qr` (SVG), `/r/{ref}/label` (printable
+     label), `/comments` (+ edit / delete), `/links` (+ delete), `/links/lookup` (JSON), `/activity` (feed). Dashboard
+     card "Čo sa deje". `PanelContext::refs() / links() / comments() / activity() / recordPanel()`.
+   - Shared box `views/core/record.php` (Komentáre · Prepojenia · História + short link + QR label) on order, invoice,
+     expense, stock item, stock doc, customer, company, employee, role pages (replaced their own history tables).
+     `js/panel.js`: @mention suggestions, "Prepojiť" lookup. Order notes → comments (`OrderLog` keeps its API).
+   - Migration `020_records.sql`: `audit.ref` (+ backfill; shop_order rows of a connection matched by its name, others
+     = source 0), `link`, `comment`, `comment_mention`, old `order_note` rows copied into comments.
+   - **Framework fix**: `Request::fromGlobals()` used `parse_url()`, which returns false for `/panel/r/invoice:7`
+     (looks like host:port) → the request fell to the default app (erma). New `Request::pathFromUri()` + test.
+   - Guides: new `help/komentare-a-prepojenia.md`, `help/co-sa-deje.md` (group "Všade"), objednavka, faktura-detail,
+     prehlad, slovnik updated. Developer guide `docs/framework/panel-modules.md` chapter 4 "Records"; README common
+     mistakes (parse_url, `{}` in router patterns).
+   - Verified on dev (PHP 8.5): tests 76/76; e2e over HTTP (35 checks: comment with mention + reference link, link
+     order ↔ invoice shown on both sides + history, duplicate refused, short link / QR / label, feed + dashboard,
+     record box on expense / customer / stock pages; restricted colleague: sees the comment on her shop's order but
+     not the invoice link (reference stays text), 404 on invoice short link / QR / foreign order, lookup finds no
+     invoices, can't link an invisible invoice, can't edit someone else's comment, deletes her own, feed without the
+     invoice); 14 detail pages without PHP warnings. Test data removed from the dev DB.
+   - **Deploy: upload `framework/Http/Request.php` and the whole `applications/panel/` folder** (migration 020 runs by
+     itself). Steps 1a + 1b can go together.
+41. **Phase 1 steps c–f DONE — phase 1 (core) complete** (2026-11-21, docs/panel-architektura.md ch. 4 "Stav — kroky 1c–1f"):
+   - **1c** `src/Core/Events.php` + optional module interface `ProvidesListeners`; emits: comment.added / comment.edited
+     (RecordsController + API), link.added, invoice.issued, order.state_changed. `src/Core/Notifications.php` (table
+     `notification`, `notify_pref`; notify() checks the recipient may see the record via `PanelContext::asUser`),
+     listener in `SystemModule` (mentions + earlier participants of the discussion). Bell in the layout (count polled
+     every minute, `/notifications`, open = mark read), e-mail mode in Môj účet (immediate / daily digest 7:00 / off).
+     `src/Core/Scheduler.php` + interface `ProvidesJobs` (table `job_run`, lock, last result); jobs: notifications.email
+     (every minute), notifications.digest, accounting.package + reports.monthly_summary (hourly; they decide what is
+     due), expenses.recurring (daily 5:00). Triggers: `/cron?token=` (+ old `/cron/accounting`; AccountingController::cron
+     removed) and the quiet tick `POST /cron/tick` from `js/panel.js` (≤ once a minute). Nastavenia → **Systém** (new
+     permission `settings.system`): Plánovač · Integrácie · API kľúče. `Mailer::defaultFrom()`.
+   - **1d** `src/Core/Integrations.php` (table `integration`, secrets via Panel\Secret, status), `src/Core/Nextcloud.php`
+     (WebDAV + OCS shares; transport injectable for tests), `src/Core/Files.php` (`record_folder`, `file_share`; folder
+     `Panel/<company>/<type label>/<type-id>`, upload / download / delete through the panel, share links: read or
+     **upload-only file drop** — permissions verified after creation, a link with more rights is deleted again;
+     found by the e2e: `publicUpload=true` had made the "upload" link readable for everyone). "Súbory" part of the
+     record box loaded by JS (`/files/{ref}`). Resolvers return `company_id`.
+   - **1e** `src/Core/Documents.php` + interface `ProvidesDocumentTypes` (series for module documents —
+     `Numbering::allTypes()/tableFor()` include them; `Documents::allocate()`; company look PDF `views/pdf/document.php`),
+     `src/Core/Calendar.php` + interface `ProvidesCalendar` (Invoicing: due dates of unpaid invoices; Expenses: due
+     dates + recurring costs) → menu Práca → **Kalendár** (`/calendar`), **search field** on every page (`/search`,
+     lookups + companies + employees).
+   - **1f** `src/Core/ApiKeys.php` (tables `api_key`, `api_log`; `pk_<prefix>_<secret>`, SHA-256 only, expiry, revoke,
+     120 calls/min), `ApiController` (`/api/v1/me`, `/search`, `/activity`, `/records/{ref}`, `/records/{ref}/comments`
+     GET + POST; Bearer or X-Api-Key), `Access::limitTo()` + `PanelContext::asApiKey()` (never more than the author has
+     at the moment). Own keys in Môj účet (permission `api.keys`), all keys in Nastavenia → Systém → API kľúče.
+   - **Framework**: `Request::files()` (multiple uploads), Authorization header recovered from
+     `REDIRECT_HTTP_AUTHORIZATION` / `getallheaders()` (Apache hid it → every API call was 401 in the e2e) + tests.
+   - Migrations `021_notifications_jobs.sql`, `022_integrations_files.sql`, `023_api_keys.sql`.
+   - Guides: `upozornenia`, `hladanie`, `kalendar`, `subory`, `nastavenia-system`, `api-kluce` (new), moj-ucet, nastavenia,
+     prve-kroky, komentare-a-prepojenia updated. Developer guide `docs/framework/panel-modules.md` chapter 5 "Core
+     services"; framework README (Request). Deploy doc: cron + Nextcloud setup.
+   - Verified on dev (PHP 8.5): tests 83/83; e2e over HTTP 40/40 (scheduler page + run now + tick + cron 404; mention →
+     bell 1 → open → read; e-mail job → Mailpit got exactly the unread one; preference; 403 for a key without
+     api.keys; search + calendar; **real Nextcloud 31** in a temporary container on the dev Docker network: connect,
+     upload 2 files (č in the name), list, download, duplicate → (2), upload link with password, revoke, delete, all in
+     the history, 404 for an invisible record; API key: /me, record, out-of-scope 404, comment 201 + read back, search,
+     bad key 401, overview with calls, revoked 401). Customer side of the links checked with curl: file-drop link =
+     PUT 201, GET/DELETE 405, empty listing; read link = GET 200, PUT/DELETE 403; wrong password 401. Smoke 41 pages
+     (Správca) + 41 (restricted: 17×200, 24×403) without PHP warnings. Temporary Nextcloud container + image and all
+     test data removed.
+   - **Deploy: upload `framework/Http/Request.php` and the whole `applications/panel/` folder** (migrations 019–023
+     run by themselves; 1a–1f can go together). **Owner after deploy:** (1) cron on the hosting → URL from Nastavenia →
+     Systém; (2) Nextcloud user `erma-panel` + app password → Nastavenia → Systém → Integrácie; (3) give `api.keys`
+     only to people who need keys.
 
 ### Dev environment (home server)
 - **Without the home server** (owner away, 2026-11-21): a temporary setup on the owner's PC in the Claude session's
@@ -576,6 +652,7 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
 - Sync after local edits: `cd C:\Users\orras\git\WebApplication && tar --exclude=.git -czf - . | ssh … 'cd ~/webapplication-dev && tar -xzf - && <strip CR from php/yml/sh/css/.htaccess>'`.
 
 ### Waiting for the owner
+- After deploying phase 1: cron URL on the hosting, Nextcloud user `erma-panel` + app password (item 41).
 - Commit of everything after `dce2116` (owner commits himself).
 - Final path of the employee section (now `/panel`); whether invoices are e-mailed to customers.
 - NOT waiting (owner 2026-11-19): OR registration, first invoice number and series format are settings — the owner fills
@@ -654,8 +731,10 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
    **TODO later: off-site copy of the Nextcloud data** (owner: not now, "keď sa rozrastieme" — RAID only until then).
    Open questions:
    chapter 8 of the plan (each only for its phase). Phase 0 done (item 38), **phase 1 step a (permissions) done
-   (item 39) → next: step 1b** (record references `Ref` + QR short links `/r/<ref>`, generic links between records,
-   activity per record extending `audit`, comments with @mentions — order notes become comments).
+   (item 39), step 1b (item 40), **steps 1c–1f done (item 41) — phase 1 complete. Next: phase 2** (tasks and projects:
+   list, kanban, Moje úlohy, comments, attachments, links, notifications; time sheets; commits at tasks via webhook /
+   post-receive — needs owner's answer to open question 9 "where are the git repos") — the order of phases 2–14 is
+   open question 5.
    Older notes (2026-11-19): **Task management in the panel** ("like Asana / Trello").
    Design notes so earlier work does not block it: projects (board) → columns/states → tasks (title, description,
    assignee(s), due date, priority, labels, checklist, comments, attachments, watchers); views list + kanban (drag &

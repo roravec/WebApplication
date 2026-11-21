@@ -51,4 +51,47 @@ class StockModule implements Module
                 'label' => 'Sklad — príjemky, výdajky, prevodky, inventúra, karty a sklady; produkty a sklad v e-shope'],
         ];
     }
+
+    public function recordTypes(): array
+    {
+        $row = function (PanelContext $ctx, string $table, string $cols, int $id): ?array {
+            if (!$ctx->can(Rights::STOCK_VIEW)) {
+                return null;
+            }
+            $r = $ctx->db()->fetchOne("SELECT id, company_id, $cols FROM " . $ctx->db()->table($table) . ' WHERE id = ?', [$id]);
+            return $r && $ctx->canCompany((int)$r['company_id']) ? $r : null;
+        };
+        $lookup = function (string $type, string $table, string $where) {
+            return function (PanelContext $ctx, string $q) use ($type, $table, $where): array {
+                $ids = $ctx->companyIds();
+                if (!$ids || !$ctx->can(Rights::STOCK_VIEW)) {
+                    return [];
+                }
+                $like = '%' . addcslashes($q, '%_\\') . '%';
+                return array_map(function ($id) use ($type) { return $type . ':' . $id; }, array_column($ctx->db()->query('SELECT id FROM ' . $ctx->db()->table($table)
+                    . " WHERE $where AND company_id IN (" . implode(',', array_map('intval', $ids)) . ') ORDER BY id DESC LIMIT 5',
+                    array_fill(0, substr_count($where, '?'), $like)), 'id'));
+            };
+        };
+        return [
+            ['type' => 'stock_item', 'label' => 'Skladová karta',
+                'resolve' => function (PanelContext $ctx, array $ids) use ($row): ?array {
+                    $r = $row($ctx, 'stock_item', 'sku, name', $ids[0]);
+                    return $r ? ['title' => $r['sku'] . ' ' . $r['name'], 'url' => '/stock/items/' . $r['id'], 'company_id' => (int)$r['company_id']] : null;
+                },
+                'lookup' => $lookup('stock_item', 'stock_item', '(sku LIKE ? OR name LIKE ?)')],
+            ['type' => 'stock_doc', 'label' => 'Skladový doklad',
+                'resolve' => function (PanelContext $ctx, array $ids) use ($row): ?array {
+                    $r = $row($ctx, 'stock_doc', 'number', $ids[0]);
+                    return $r ? ['title' => 'Doklad ' . $r['number'], 'url' => '/stock/docs/' . $r['id'], 'company_id' => (int)$r['company_id']] : null;
+                },
+                'lookup' => $lookup('stock_doc', 'stock_doc', 'number LIKE ?')],
+            ['type' => 'warehouse', 'label' => 'Sklad',
+                'resolve' => function (PanelContext $ctx, array $ids) use ($row): ?array {
+                    $r = $row($ctx, 'warehouse', 'code, name', $ids[0]);
+                    return $r ? ['title' => 'Sklad ' . $r['name'], 'url' => $ctx->can(Rights::STOCK_EDIT) ? '/stock/warehouses/' . $r['id'] : '/stock/warehouses',
+                        'company_id' => (int)$r['company_id']] : null;
+                }],
+        ];
+    }
 }

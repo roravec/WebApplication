@@ -30,3 +30,5 @@ $q = function ($v) use ($f) { return rtrim(rtrim($f->number($v, 3), '0'), ','); 
   <?php endforeach ?>
   </tbody>
 </table>
+
+<?= $view->partial('core/record', ['ref' => 'stock_doc:' . (int)$d['id']]) ?>

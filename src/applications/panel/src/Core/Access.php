@@ -20,6 +20,7 @@ class Access
     /** @var array|null */ private $person = null;
     /** @var string[]|null */ private $permissions = null;
     /** @var int[]|null */ private $companies = null;
+    /** @var string[]|null API key: only these permissions (intersection with the person's own) */ private $limit = null;
 
     public function __construct(Database $db, int $clientId, int $rights)
     {
@@ -30,7 +31,14 @@ class Access
 
     public function isAdmin(): bool
     {
-        return $this->clientId > 0 && $this->rights >= Rights::ADMIN;
+        return $this->clientId > 0 && $this->rights >= Rights::ADMIN && $this->limit === null;
+    }
+
+    /** API key: from now on only these permissions — and only those the person has himself (never more than the author). */
+    public function limitTo(array $permissions): void
+    {
+        $this->limit = array_values(array_map('strval', $permissions));
+        $this->permissions = null;
     }
 
     /** Stored access (roles, exceptions, scope) — Roles::person(). */
@@ -57,6 +65,9 @@ class Access
     {
         if ($this->permissions === null) {
             $this->permissions = $this->clientId > 0 ? (new Roles($this->db))->effective($this->person()) : [];
+            if ($this->limit !== null) {
+                $this->permissions = array_values(array_intersect($this->permissions, $this->limit));
+            }
         }
         return $this->permissions;
     }
@@ -66,7 +77,7 @@ class Access
     /** All companies, also the ones created later (and data without a company, e.g. an e-shop not assigned to any). */
     public function allCompanies(): bool
     {
-        return $this->isAdmin() || $this->person()['all_companies'];
+        return ($this->clientId > 0 && $this->rights >= Rights::ADMIN) || $this->person()['all_companies'];
     }
 
     /** @return int[] */
@@ -89,7 +100,7 @@ class Access
 
     public function allShops(): bool
     {
-        return $this->isAdmin() || $this->person()['all_shops'];
+        return ($this->clientId > 0 && $this->rights >= Rights::ADMIN) || $this->person()['all_shops'];
     }
 
     /** @param int $source order source: 0 = e-shops in this database, N = shop connection N */

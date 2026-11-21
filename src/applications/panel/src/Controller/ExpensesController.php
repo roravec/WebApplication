@@ -276,7 +276,7 @@ class ExpensesController
                 [(int)$exp['accounting_package_id']]) ?: null;
         }
         $recurring = $exp['recurring_id'] ? $this->x()->recurring((int)$exp['recurring_id']) : null;
-        return $this->ctx->page('expenses/show', ['exp' => $exp, 'company' => $company, 'history' => $this->x()->history((int)$exp['id']),
+        return $this->ctx->page('expenses/show', ['exp' => $exp, 'company' => $company,
             'recurring' => $recurring,
             'shops' => $this->shops(), 'package' => $package, 'canEdit' => $this->ctx->can(Rights::EXPENSES_EDIT)],
             'Doklad ' . ($exp['document_number'] ?: '#' . $exp['id']) . ' — ' . $exp['supplier_name'], 'expenses');

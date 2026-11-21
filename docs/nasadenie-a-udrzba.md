@@ -266,8 +266,22 @@ stanú funkciami panela namiesto samostatných skriptov — práca navyše teda 
 | raz za štvrťrok | aktualizácie knižníc (dompdf, PHPMailer, QR — `composer audit`), kontrola zmien zákonov (`docs/legislativa.md`, Web_store `docs/pravne-nalezitosti.md`) | Claude |
 | 1. 1. a pri zmene zákona | sadzby DPH a zákonné texty — mení sa v paneli (Legislatíva), nie v kóde | ty / Claude |
 
+**Panel — automatické úlohy a súbory (od fázy 1 panela, 21. 11. 2026):**
+- **Cron (odporúčané):** v správe hostingu cron každých 5–15 minút na adresu z panela **Nastavenia → Systém →
+  Plánovač** (`https://erma.sk/panel/cron?token=…`, kľúč = `apps.panel.cron_token` v config.php). Bez cronu úlohy
+  bežia, keď niekto pracuje v paneli (tichý „tik“ najviac raz za minútu) — ranný súhrn upozornení a balík pre
+  účtovníčku by sa vtedy oneskorili. Stará adresa `/panel/cron/accounting` funguje ďalej (spúšťa všetky úlohy).
+- **Nextcloud pre súbory záznamov** (`https://home.ermagroup.net`): raz vytvoriť v Nextcloude používateľa
+  `erma-panel`, jeho **heslo aplikácie** (Nastavenia → Zabezpečenie) zadať v paneli Nastavenia → Systém → Integrácie
+  → „Uložiť a overiť pripojenie“. Panel zakladá priečinky `Panel/<firma>/<druh>/<záznam>` a zdieľacie odkazy
+  (na stiahnutie / len na nahratie). Konfiguráciu Nextcloudu panel nemení. Keď je domáci server vypnutý, panel píše
+  „súbory sú dočasne nedostupné“, ostatné funguje. Faktúry a doklady nákladov ostávajú v databáze hostingu.
+- **E-maily upozornení** idú cez rovnakú poštu ako faktúry (`apps.panel.mail`); odosielateľ = `mail.from`, inak
+  `mail.user`, inak e-mail prvej firmy.
+
 **Čo nikdy nemeniť bez prípravy:**
-- `jwtSecret` v `config.php` — šifrujú sa ním prístupy do banky (Fio token) a podpisujú prihlásenia; po zmene treba
-  token Fio zadať znova a všetci sa prihlásia znova.
+- `jwtSecret` v `config.php` — šifrujú sa ním prístupy do banky (Fio token), kľúče e-shopov, heslo Nextcloudu
+  a podpisujú prihlásenia; po zmene treba tieto prístupy zadať znova a všetci sa prihlásia znova (API kľúče platia
+  ďalej — sú uložené ako hash).
 - Koreňový `.htaccess` — spoločný pre e-shopy a zariadenia.
 - Vystavené faktúry a ich archívne PDF — systém ich nedovolí meniť; opravuje sa dobropisom.

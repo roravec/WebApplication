@@ -1,5 +1,5 @@
 <?php /** @var array $o order with lines, address_invoice, address_delivery, payments, history, src; Panel\Shop\OrderSource $source;
-    array|null $invoice; int $invoiceCompany; bool $canInvoice, $canSeeInvoice, $canChangeState, $canEdit; array $states, $notes, $messages, $returns */
+    array|null $invoice; int $invoiceCompany; bool $canInvoice, $canSeeInvoice, $canChangeState, $canEdit; array $states, $messages, $returns */
 $src = (int)$o['src'];
 $addr = function ($a) use ($e) {
     if (!$a) {
@@ -184,18 +184,8 @@ $cur = (string)$o['currency'];
     </form>
   </section>
   <?php endif ?>
-  <section class="card" id="notes">
-    <h2>Interné poznámky</h2>
-    <?php foreach ($notes as $n): ?>
-      <p><small class="muted"><?= $e($f->dateTime($n['created_at'])) ?> · <?= $e($n['client_name']) ?></small><br><?= nl2br($e($n['text'])) ?></p>
-    <?php endforeach ?>
-    <?php if (!$notes): ?><p class="muted">Zatiaľ žiadne. Vidia ich len zamestnanci, zákazník nie.</p><?php endif ?>
-    <form method="post" action="<?= $e($ctx->orderUrl($src, (int)$o['id_order'], '/note')) ?>">
-      <?= WebApplication\Csrf::field() ?>
-      <textarea name="text" rows="2" style="width: 100%" placeholder="napr. zákazník volal, pošleme v piatok" required></textarea>
-      <p><button>Pridať poznámku</button></p>
-    </form>
-  </section>
+  <div id="notes"></div>
+  <?= $view->partial('core/record', ['ref' => 'order:' . $src . ':' . (int)$o['id_order']]) ?>
   <?php if ($returns): ?>
   <section class="card">
     <h2>Vrátenia</h2>

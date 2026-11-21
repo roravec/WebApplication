@@ -100,7 +100,9 @@ Errors: `ErrorHandler` logs everything to `src/var/log/` and shows a plain error
 `method()`, `host()`, `path()`, `appPath()` (path inside the app), `segments()`, `appSegments()`,
 `query($key, $default)` (GET), `post($key, $default)` (form fields; without a key = all), `input($key)` (GET or POST),
 `json()` (JSON body or null), `rawBody()`, `file($key)` (uploaded file array or null — check `error` and
-`is_uploaded_file`), `header($name)`, `headers()`, `cookie($name)`, `bearerToken()`, `isHttps()`, `ip()`.
+`is_uploaded_file`), `files($key)` (list of uploads from `<input name="key[]" multiple>`), `header($name)`, `headers()`,
+`cookie($name)`, `bearerToken()` (the `Authorization` header is recovered also where Apache hides it from `$_SERVER` —
+`REDIRECT_HTTP_AUTHORIZATION` / `getallheaders()`, since 2026-11-21), `isHttps()`, `ip()`, `Request::pathFromUri()`.
 
 ### Response
 
@@ -243,3 +245,7 @@ After a deploy: open the changed pages; the panel's guides tell users what chang
 - Hard-coding a company value (VAT rate, number format, accountant code) — they are settings or legal data.
 - A new route that conflicts with an existing pattern (routes are matched in order: specific before generic).
 - Adding a page without a user guide (the test catches it) or changing a feature without updating its guide.
+- `parse_url()` on a request path: it returns `false` for a last segment like `invoice:7` (looks like host:port) —
+  use `Request::pathFromUri()` (the framework does since 2026-11-21; the panel's short links `/r/invoice:7` need it).
+- A router pattern with `{…}` inside a parameter regex (`{id:\d{1,5}}`) — the placeholder ends at the first `}`;
+  use `+` / `*` and validate the value in the handler.

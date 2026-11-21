@@ -17,7 +17,8 @@
 - **Úhrady** — zapíšte platbu ručne (dátum, suma, spôsob) alebo ju spáruje import výpisu. Stav úhrady je hore
   (uhradená, čiastočne, neuhradená, po splatnosti).
 - **E-maily** — kedy a komu bola faktúra poslaná.
-- **História** — kto čo kedy s dokladom urobil.
+- **Komentáre**, **Prepojenia** (napr. dobropis ↔ faktúra, faktúra ↔ objednávka) a **História** — kto čo kedy s dokladom
+  urobil: [Komentáre, prepojenia, história](help:komentare-a-prepojenia).
 
 ## Omylom vystavená faktúra (právo „vrátiť omylom vystavenú faktúru“)
 

@@ -31,3 +31,4 @@ $action = $customer ? '/customers/' . $customer['id'] : '/customers';
   <label class="wide">Poznámka <textarea name="note" rows="2"><?= $e($v('note')) ?></textarea></label>
   <p class="wide"><button class="primary">Uložiť</button></p>
 </form>
+<?php if ($customer): ?><?= $view->partial('core/record', ['ref' => 'customer:' . (int)$customer['id']]) ?><?php endif ?>

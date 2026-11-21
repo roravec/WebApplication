@@ -33,4 +33,13 @@ interface Module
      * irreversible steps)]. Every guard / check of the module uses only these keys (test "permissions …").
      */
     public function permissions(): array;
+
+    /**
+     * Record types of the module (Core\Refs — references "type:id", short links /r/<ref>, links, comments, activity):
+     * list of ['type' (= the audit entity name for simple types), 'label' (Slovak, "Faktúra"), 'parts' (ids in the
+     * reference, default 1), 'resolve' => fn(PanelContext $ctx, int[] $ids): ?array ['title', 'url', 'company_id'] — null when the
+     * record does not exist OR the person may not see it (check permission + company / e-shop here!),
+     * optional 'lookup' => fn(PanelContext $ctx, string $q): string[] references matching a number / name (max ~5)].
+     */
+    public function recordTypes(): array;
 }

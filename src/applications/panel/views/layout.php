@@ -20,7 +20,7 @@ $helpUrl = $ctx->url('/help/for') . '?' . http_build_query(['page' => (string)($
   <script src="<?= $e($app->asset('js/theme.js') . '?v=' . @filemtime(dirname(__DIR__) . '/js/theme.js')) ?>" defer></script>
   <script src="<?= $e($app->asset('js/panel.js') . '?v=' . @filemtime(dirname(__DIR__) . '/js/panel.js')) ?>" defer></script>
 </head>
-<body>
+<body data-tick="<?= $e($ctx->url('/cron/tick')) ?>">
 <div class="shell">
   <aside class="side">
     <a class="brand" href="<?= $e($ctx->url('/')) ?>"><img src="<?= $e($app->asset('img/mark.png')) ?>" alt="" width="32" height="32"><span>ERMA <b>panel</b></span></a>
@@ -35,12 +35,19 @@ $helpUrl = $ctx->url('/help/for') . '?' . http_build_query(['page' => (string)($
     <div class="me">
       <a href="<?= $e($ctx->url('/account')) ?>" class="<?= $section === 'account' ? 'active' : '' ?>"><?= $e($user->getName()) ?></a>
       <small><?= $e($ctx->access()->roleLabel()) ?></small>
+      <?php $unread = $ctx->unreadNotifications(); ?>
+      <a href="<?= $e($ctx->url('/notifications')) ?>" class="bell<?= $section === 'notifications' ? ' active' : '' ?>" title="Upozornenia"
+         data-bell="<?= $e($ctx->url('/notifications/count')) ?>">🔔 Upozornenia <span class="badge bell-count"<?= $unread ? '' : ' hidden' ?>><?= (int)$unread ?></span></a>
       <a href="<?= $e($ctx->url('/help')) ?>" class="<?= $section === 'help' ? 'active' : '' ?>">? Pomocník — návody</a>
       <button type="button" class="link theme-toggle" data-theme-toggle title="Prepnúť farebný režim"><span class="to-light">☀ Denný režim</span><span class="to-dark">☾ Tmavý režim</span></button>
       <form method="post" action="<?= $e($ctx->url('/logout')) ?>"><?= Csrf::field() ?><button class="link">Odhlásiť</button></form>
     </div>
   </aside>
   <main class="content">
+    <form class="search" method="get" action="<?= $e($ctx->url('/search')) ?>" role="search">
+      <input type="search" name="q" placeholder="Hľadať — číslo faktúry, objednávky, dokladu, názov…" aria-label="Hľadať v paneli"
+        value="<?= $e($section === 'search' ? (string)$ctx->request->query('q', '') : '') ?>">
+    </form>
     <div class="page-head"><h1><?= $e($title) ?></h1>
       <a class="help-link" href="<?= $e($helpUrl) ?>" target="_blank" rel="noopener" title="Návod k tejto stránke (otvorí sa na novej karte)">? Pomocník</a></div>
     <?php if ($tabs): ?><nav class="tabs"><?php foreach ($tabs as $t): ?><a href="<?= $e($ctx->url($t['path'])) ?>" class="<?= $t['active'] ? 'active' : '' ?>"><?= $e($t['label']) ?></a><?php endforeach ?></nav><?php endif ?>

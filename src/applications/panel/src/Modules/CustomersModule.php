@@ -39,4 +39,26 @@ class CustomersModule implements Module
     {
         return [];   // uses the permissions of other modules
     }
+
+    public function recordTypes(): array
+    {
+        return [['type' => 'customer', 'label' => 'Odberateľ',
+            'resolve' => function (PanelContext $ctx, array $ids): ?array {
+                if (!$ctx->can(Rights::INVOICES_VIEW)) {
+                    return null;
+                }
+                $r = $ctx->db()->fetchOne('SELECT id, company_id, name FROM ' . $ctx->db()->table('customer') . ' WHERE id = ?', [$ids[0]]);
+                return $r && $ctx->canCompany((int)$r['company_id']) ? ['title' => $r['name'], 'url' => '/customers/' . $r['id'], 'company_id' => (int)$r['company_id']] : null;
+            },
+            'lookup' => function (PanelContext $ctx, string $q): array {
+                $ids = $ctx->companyIds();
+                if (!$ids || !$ctx->can(Rights::INVOICES_VIEW)) {
+                    return [];
+                }
+                $like = '%' . addcslashes($q, '%_\\') . '%';
+                return array_map(function ($id) { return 'customer:' . $id; }, array_column($ctx->db()->query('SELECT id FROM ' . $ctx->db()->table('customer')
+                    . ' WHERE (name LIKE ? OR ico = ?) AND company_id IN (' . implode(',', array_map('intval', $ids)) . ') ORDER BY name LIMIT 5',
+                    [$like, $q]), 'id'));
+            }]];
+    }
 }

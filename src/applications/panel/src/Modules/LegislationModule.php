@@ -35,4 +35,9 @@ class LegislationModule implements Module
                 'label' => 'Nastavenia → Legislatíva — sadzby DPH a zákonné texty'],
         ];
     }
+
+    public function recordTypes(): array
+    {
+        return [];
+    }
 }

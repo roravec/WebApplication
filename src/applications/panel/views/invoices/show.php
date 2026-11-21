@@ -1,5 +1,5 @@
-<?php use Panel\Audit; use Panel\Invoicing\Calculator; use Panel\Invoicing\Invoices; use Panel\Rights; use WebApplication\Csrf;
-/** @var array $inv, $company, $issueErrors, $issueWarnings, $creditNotes, $audit, $payments, $emails; array|null $original, $archived;
+<?php use Panel\Invoicing\Calculator; use Panel\Invoicing\Invoices; use Panel\Rights; use WebApplication\Csrf;
+/** @var array $inv, $company, $issueErrors, $issueWarnings, $creditNotes, $payments, $emails; array|null $original, $archived;
     bool $canEdit; float $paid; string $paymentState; array $ublErrors */
 $cur = $inv['currency'];
 $draft = $inv['status'] === 'draft';
@@ -168,11 +168,4 @@ $num = function ($v) { $s = number_format((float)$v, 3, ',', ' '); return rtrim(
 </details>
 <?php endif ?>
 
-<h2>História</h2>
-<table class="grid compact">
-  <tbody>
-  <?php foreach ($audit as $a): ?>
-    <tr><td><?= $e($f->dateTime($a['created_at'])) ?></td><td><?= $e($a['client_name']) ?></td><td><?= $e(Audit::label($a['action'])) ?> <?= $e($a['details']) ?></td></tr>
-  <?php endforeach ?>
-  </tbody>
-</table>
+<?= $view->partial('core/record', ['ref' => 'invoice:' . (int)$inv['id']]) ?>

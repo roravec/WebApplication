@@ -4,7 +4,8 @@ For developers adding a part to the employee section (`src/applications/panel`).
 `docs/panel-architektura.md` (rule 5: a module plugs itself in; chapter 5: permissions). Framework basics:
 [README.md](README.md).
 
-Contents: 1 what a module is · 2 step by step · 3 permissions · 4 checklist.
+Contents: 1 what a module is · 2 step by step · 3 permissions · 4 records (references, comments, links, activity) ·
+5 core services (events, jobs, calendar, documents, files, API) · 6 checklist.
 
 ## 1. What a module is
 
@@ -17,6 +18,7 @@ A class in `src/Modules/<Name>Module.php` implementing `Panel\Module`, listed on
 | `nav()` | items of the left menu (`key`, `group` from `Navigation::GROUPS`, `path`, `label`, `permission`, `order`, optional `tabs`) |
 | `settingsTabs()` | tabs of Nastavenia (`key`, `path`, `label`, `permission`, `order`); pages use the section `settings:<key>` |
 | `permissions()` | its permissions: `key` (`module.action`), `label` (Slovak, what it allows), `group` (heading on the forms), `sensitive` |
+| `recordTypes()` | its record types for references `type:id` (short links, QR, links, comments, activity) — see [4](#records) |
 
 Business logic lives in its own classes (repository / service, e.g. `src/Expenses/Expenses.php`), HTTP in a controller
 (`src/Controller/…`), HTML in `views/…`, tables in a migration `sql/NNN_name.sql`, the user guide in
@@ -115,10 +117,61 @@ others = permissions of their roles (`{p}role`, `{p}role_permission`, `{p}client
 `allow` 1 / 0) within their companies (`{p}company_access` or `{p}client_scope.all_companies`) and e-shops
 (`{p}shop_access` or `all_shops`). Editing is in `EmployeesController` with the rule "nobody gives more than he has".
 
-## 4. Checklist
+## 4. Records
+
+Every record a person works with (task, quote, job, unit …) gets the core services for free when the module registers
+its type (`Panel\Core\Refs`):
+
+```php
+public function recordTypes(): array
+{
+    return [['type' => 'task', 'label' => 'Úloha',
+        'resolve' => function (PanelContext $ctx, array $ids): ?array {
+            if (!$ctx->can(Rights::TASKS_VIEW)) {
+                return null;
+            }
+            $t = $ctx->db()->fetchOne('SELECT id, company_id, number, title FROM ' . $ctx->db()->table('task') . ' WHERE id = ?', [$ids[0]]);
+            return $t && $ctx->canCompany((int)$t['company_id']) ? ['title' => $t['number'] . ' ' . $t['title'], 'url' => '/tasks/' . $t['id']] : null;
+        },
+        'lookup' => function (PanelContext $ctx, string $q): array { /* refs matching a number / name, max ~5 */ return []; }]];
+}
+```
+
+- `resolve` returns `null` both for "does not exist" and "may not see" — **the access check lives here**, everything
+  else (short link `/r/task:7`, QR label, links, comment references, feed) relies on it. Keep it cheap (one query):
+  it runs for every row of the feed and every link. `parts` > 1 for composite ids (`order:<source>:<id>`).
+- `type` = the audit entity name → `Audit::log($db, $user, 'task', $id, 'update', '…')` puts the row into the record's
+  history automatically; for composite ids pass the reference as the last argument.
+- On the record page: `<?= $view->partial('core/record', ['ref' => 'task:' . $t['id']]) ?>` — comments with @mentions,
+  links, history, short link + QR label. Don't build your own notes / history tables.
+- Lists: `$ctx->comments()->counts($refs)` for a "has comments" marker.
+
+## 5. Core services
+
+Optional interfaces in `src/Core/` — a module implements what it needs (`class TasksModule implements Module,
+ProvidesJobs, ProvidesCalendar`):
+
+| Interface | Method | Use |
+|---|---|---|
+| `ProvidesListeners` | `listeners(): [[event, fn($ctx, $data)], …]` | react to other modules (`Events::emit($ctx, 'task.done', ['ref' => …, 'actor' => …])`); never call another module directly |
+| `ProvidesJobs` | `jobs(): [['key', 'label', 'every' (min), 'hour'?, 'run' => fn($system): string], …]` | scheduled work — must be re-runnable and quick; runs as `$ctx->system()` (no person) |
+| `ProvidesCalendar` | `calendar($ctx, $from, $to): [['date', 'title', 'url', 'kind'], …]` | dates on the shared calendar — only what `$ctx` may see |
+| `ProvidesDocumentTypes` | `documentTypes(): [type => ['label', 'table', 'format']]` | number series per company (`Documents::allocate($db, $companyId, $type, $date)` inside the storing transaction) |
+
+Other services through `PanelContext`: `notifications()->notify($ctx, $clientId, $ref, $event, $text)` (checks that the
+person may see the record), `asUser($client)` / `system()` (the panel seen by another person / nobody),
+`Core\Documents::pdf($ctx, $companyId, $title, $number, $bodyHtml, $meta)` (company look), `new Core\Files($ctx)`
+(the record's Nextcloud folder — normally just the record box), `Core\Integrations` (settings of a new external
+service: add it to `Integrations::TYPES`, secrets encrypted). API endpoints of a module: register them with
+`$api->guard(fn(PanelContext $ctx, Request $req, array $params, array $key))` like `SystemModule` does — the context is
+the key's owner limited to the key's permissions.
+
+## 6. Checklist
 
 - [ ] migration works on an empty database; records have `company_id`
 - [ ] constants in `Rights`, `permissions()` with clear Slovak labels, sensitive ones marked
+- [ ] `recordTypes()` with a cheap `resolve` that checks access; record pages include `core/record`
+- [ ] events emitted for important changes; scheduled work as jobs (not on page views); dates on the calendar
 - [ ] every route guarded, every list filtered by company / e-shop in SQL, foreign records → 404
 - [ ] CSRF on every POST, `Audit::log` on every change, messages say what to do
 - [ ] guide in `help/` + `_index.php`; developer notes here / in docs if the module adds a pattern

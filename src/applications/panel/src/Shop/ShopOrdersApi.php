@@ -57,6 +57,7 @@ class ShopOrdersApi implements OrderSource
     public function restrictShops(?array $shopIds): void
     {
         $this->allowed = $shopIds === null ? null : array_values(array_unique(array_map('intval', $shopIds)));
+        $this->memo = [];   // remembered results belong to the previous scope
     }
 
     /** Shops the person may see (find, search, stats and the shop filter use only these). */
@@ -116,6 +117,17 @@ class ShopOrdersApi implements OrderSource
         };
         // the unfiltered first pages (order list, overview) are cached a minute; cleared after a change from the panel
         return $plain && $page <= 2 ? $this->cached('orders:' . $page . ':' . $perPage . $this->scopeKey(), self::DEFAULT_LIST_TTL, $load) : $load();
+    }
+
+    /** Through the detail (the Webservice has no cheaper way across shops); remembered for the request. */
+    public function brief(int $id): ?array
+    {
+        $key = 'brief:' . $id;
+        if (!array_key_exists($key, $this->memo)) {
+            $o = $this->find($id);
+            $this->memo[$key] = $o ? ['id_order' => (int)$o['id_order'], 'reference' => (string)$o['reference'], 'id_shop' => (int)$o['id_shop']] : null;
+        }
+        return $this->memo[$key];
     }
 
     public function find(int $id): ?array

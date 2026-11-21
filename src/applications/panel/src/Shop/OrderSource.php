@@ -31,6 +31,9 @@ interface OrderSource
     /** One order with lines, address_invoice, address_delivery, payments, history; null if it does not exist. */
     public function find(int $id): ?array;
 
+    /** Only id_order, reference, id_shop — cheap (record references, links); null = does not exist / foreign e-shop. */
+    public function brief(int $id): ?array;
+
     /** today, week, month, month_total, per_shop [name, orders, total] (last 30 days). */
     public function stats(): array;
 
