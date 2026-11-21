@@ -40,6 +40,7 @@ rovnako ako predtým — všetko v `applications/`.
 
 - **Poradie nasadenia, zálohy, preklopenie databáz, údržba: `nasadenie-a-udrzba.md`.**
 - Aktuálny stav práce a ďalšie úlohy: `../HANDOVER.md` (framework, panel, weby), Web_store `HANDOVER.md` (e-shopy).
+- Panel — štruktúra, budúce moduly (úlohy, projekty podľa V-modelu, dokumenty, API) a práva: `panel-architektura.md`.
 - Čo čaká na majiteľa: Web_store `TODO-majitel.md`.
 - Pravidlá pre prácu (aj pre Clauda): `../CLAUDE.md`, Web_store `CLAUDE.md`.
 

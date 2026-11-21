@@ -7,6 +7,12 @@
 > Current state of work / next tasks: see **HANDOVER.md**. Invoicing requirements: **docs/fakturacia-specifikacia.md**;
 > where every legal rule lives and how it is changed: **docs/legislativa.md**.
 > Deploy order + maintenance: **docs/nasadenie-a-udrzba.md**.
+> **Panel structure + future modules** (navigation, modules + shared core, permissions, tasks / V-model projects / documents,
+> API, order of work): **docs/panel-architektura.md** — follow it for every new panel feature (owner 2026-11-21: "nech
+> nerobíme špagety", "poriadna správa práv pre všetko").
+> **No panel feature without a user guide** (owner 2026-11-21: "všetko bude musieť byť dôkladne popísané, aby v tom
+> vedel robiť aj idiot"): every change ships with its help page in simple Slovak, step by step (panel Pomocník,
+> `docs/pomocnik/`, plan chapter 7), field hints on screen and error messages that say what to do.
 > Keep these files up to date — the owner wants everything written down so a new session loses nothing.
 
 ## What this is
@@ -41,8 +47,12 @@ VS Code workspace with all related repos: `C:\Users\orras\git\ERMA.code-workspac
   `~/webstore/shop.git` was created and committed by Claude on 2026-11-18 before this rule was stated.)
 - Global rule: after editing files in a git repo run `python -X utf8 ~/.claude/tools/to_checkout_eol.py <repo>` (CRLF
   checkout; `.gitattributes` keeps Dockerfile/*.sh LF).
-- Home server (dev): `ssh -i ~/.ssh/id_ed25519_homeserver rasto@192.168.0.11` (Ubuntu, Docker, LAN only, standing
+- Home server (dev): `ssh -i ~/.ssh/id_ed25519_homeserver rasto@192.168.0.11` (Ubuntu, Docker, SSH / dev ports LAN only, standing
   permission for these projects). Don't touch the owner's other services there (Nextcloud :80, Minecraft, messenger, camstream…).
+  The **Nextcloud is reachable from the internet** at `https://home.ermagroup.net` (behind Cloudflare; 35.0.3 on
+  2026-11-21) — it will hold the panel's **large files** (plan docs/panel-architektura.md 4.1: panel = metadata +
+  permissions, files in Nextcloud via WebDAV / share API, uploads > 100 MB chunked because of Cloudflare). Use its API
+  only; changing its configuration needs the owner's OK.
   Framework dev copy: `~/webapplication-dev` (copied by tar over ssh, not a git clone), web on **:8090**, tests via
   `cd ~/webapplication-dev/dev && COMPOSE_PROJECT_NAME=webapplication docker compose run --rm test` (PHP 8.5 = hosting; dev web :8090 runs 8.5 too).
   Disks (2026-11-20): system SSD `/` 437 GB (extended by the owner); **RAID1 2× 1 TB at `/mnt/storage`** — backups of
@@ -90,7 +100,8 @@ Apps in their own repos (owner 2026-11-20): listed in **`apps.json`**; `python d
   PAY by square, exports, e-mail) — current focus → 4) port hbkpravotice, bnhl ✅ (2026-11-20, on dev; goes live with
   the framework deploy) → later the real erma.sk site.
 - Employee section (panel): **dark theme by default**, user can switch to light ("denný režim"); all pages use the colour
-  tokens. **Task management (Asana/Trello-like) will be added later** — keep it in mind (generic links between records,
+  tokens. **Task management (Asana-like: kanban, timeline), V-model projects with a test-results API, shared documents
+  and a proper permission system** are planned — docs/panel-architektura.md. Keep it in mind (generic links between records,
   shared activity log, per-module permissions). See HANDOVER.md.
 - Invoicing is done **only** in the ERMA system, centrally, for all e-shops; PrestaShop stops issuing invoices
   (`add_faktura` removed). Built **from scratch** — do not investigate or repair the old shop invoicing/numbering.

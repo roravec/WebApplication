@@ -573,7 +573,31 @@ Read CLAUDE.md first (standing facts), then this file. Update this file whenever
    Also at deploy: Webservice key for the panel in the shop (permissions as in the connection form), connection in
    Sklad → E-shopy with "this database" checked.
 5. Real erma.sk website (later, owner will decide content/design).
-6. **Task management in the panel** (owner 2026-11-19: wanted in the future, "like Asana / Trello"; not started).
+6. **Panel restructure + future modules — plan: docs/panel-architektura.md** (owner 2026-11-21: tasks like Asana with
+   kanban + timeline, projects by the V-model with an API for test results, shared documents / collaborative writing,
+   "poriadna správa práv pre všetko", "nech nerobíme špagety"; then "ultimate firemný nástroj" — electronics
+   development, e-shops, maybe rental: parts + BOM from KiCad, purchasing, production + serial numbers, firmware,
+   service / complaints, quotes + contracts + time tracking, rental, assets + calibration, automation, mobile scanning,
+   git commits shown at tasks like codeBeamer). Shared master data: contacts, item catalog, units (serial numbers),
+   numbering + PDF templates, calendar. Phases 0 restructure → 1 core (permissions …) → 2 tasks (+ commits) → 3 timeline
+   → 4 documents → 5 V-model + test API → 6 contacts, quotes, simple complaints → 7 parts / BOM / purchasing →
+   8 production + units → 9 service, firmware → 10 rental → 11 automation, mobile → 12 live co-editing. Added later the
+   same day: **custom jobs (3D printing, engraving) as one container** ("Zákazka": customer files incl. from e-shop
+   uploads and a customer upload link, proof approval, machine queue, price calculator — phase 6) and **user guides
+   for everything** (Pomocník in the panel, `docs/pomocnik/`, part of every phase; phase 0 writes guides for all
+   existing features). Then also: **Pošta** (company mailboxes via IMAP in pure PHP, mails auto-linked to orders /
+   jobs / complaints), **Platby** (GoPay link on invoices, supplier payment orders via Fio API — confirmed in the bank,
+   cash-flow forecast), **Povinnosti a termíny** (legal + company deadlines, GDPR requests, domains / SSL / licences /
+   certifications), **Obsah produktov** (content once for all shops, languages, feeds); backlog chapter 10 (AI
+   assistant waits for the decision on customer data). **Large files off the shared hosting**: S3-compatible object
+   storage with presigned direct browser upload / download, panel keeps metadata + permissions + share links, daily
+   copy to the home server RAID — superseded the same day: **files go to the owner's Nextcloud**
+   (`https://home.ermagroup.net`, internet-facing behind Cloudflare: WebDAV, share API incl. upload-only links,
+   chunked uploads > 100 MB; plan 4.1). Home upload 150 Mbit/s (can be raised); Office in Nextcloud not required;
+   **TODO later: off-site copy of the Nextcloud data** (owner: not now, "keď sa rozrastieme" — RAID only until then).
+   Open questions:
+   chapter 8 of the plan (each only for its phase). Next: phase 0 when the owner says go.
+   Older notes (2026-11-19): **Task management in the panel** ("like Asana / Trello").
    Design notes so earlier work does not block it: projects (board) → columns/states → tasks (title, description,
    assignee(s), due date, priority, labels, checklist, comments, attachments, watchers); views list + kanban (drag &
    drop in plain JS) + "my tasks"; tasks linkable to other records (shop order, invoice, customer, company) via one
